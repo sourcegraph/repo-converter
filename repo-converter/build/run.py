@@ -676,7 +676,7 @@ def clone_svn_repo(repo_key):
     # Running this inside of this function instead of breaking it out into its own function
     # due to the number of parameters which would have to be passed
     max_tries = 2
-    for i in range(max_tries):
+    for i in range(1, max_tries + 1):
         try:
 
             # Get running processes, both as a list and string
@@ -749,7 +749,7 @@ def clone_svn_repo(repo_key):
 
         except Exception as exception:
 
-            log(f"{repo_key}; Failed check {i} of {max_tries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
+            log(f"{repo_key}; Failed check {i+1} of {max_tries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
 
             stack = traceback.extract_stack()
             (filename, line, procname, text) = stack[-1]
