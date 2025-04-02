@@ -328,11 +328,13 @@ def get_subprocess_run_time(process_dict):
 
             run_time = datetime.now() - process_dict["start_time"]
 
+    else:
+
+        log(f"process_dict is missing a start_time: {process_dict}", "debug")
+
     if run_time:
 
-        run_time = timedelta(seconds=run_time.total_seconds())
-
-    return run_time
+        process_dict["run_time"] = timedelta(seconds=run_time.total_seconds())
 
 
 def status_update_and_cleanup_zombie_processes():
@@ -1309,10 +1311,10 @@ def subprocess_run(args, password=None, echo_password=None, quiet=False):
             # Change the log_level to debug so the failed process doesn't log an error in print_process_status()
             log_level = "debug"
 
-    process_dict["end_time"] = datetime.now()
-    process_dict["run_time"] = get_subprocess_run_time(process_dict)
-
     print_process_status(process_dict, status_message, str(truncated_subprocess_output_to_log), log_level)
+
+    return_dict["end_time"] = datetime.now()
+    get_subprocess_run_time(return_dict)
 
     return return_dict
 
