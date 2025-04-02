@@ -14,5 +14,5 @@ services:
       - ../../../sg/src-serve-root/:/sourcegraph/src-serve-root
     restart: always
     environment:
-      - REPO_CONVERTER_INTERVAL_SECONDS=900
+      - REPO_CONVERTER_INTERVAL_SECONDS=60
       # - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
