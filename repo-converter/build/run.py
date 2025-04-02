@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
-# Python 3.12.1
+# Python 3.13.2
 
 ### TODO:
 
-    # Add doc strings for each function?
-        # https://www.dataquest.io/blog/documenting-in-python-with-docstrings
-
-    # Rewrite in Go?
-    # Rewrite in object oriented fashion?
-
-    # TFVC
-        # Convert tfs-to-git Bash script to Python and add it here
-        # Test tfs-to-git with username and password authentication for the self hosted TFVC repo to see if it works with read only permissions
-        # Branches and tags
+    # Config file
+        # Rewrite as a list of servers
+            # Server
+                # Name key
+                # URL
+                # Repo type
+                # Username
+                # Password
+                # Access token
+                # SSH key path
+                # List of repos
+                    # If blank, try and parse the list from the server?
 
     # SVN
+
+        # Add command execution time to log output, so we can see what's taking longer, the svn log or fetch
+
+        # Try to add the batch size to the svn log command to speed it up
+
         # SVN commands hanging
             # Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
 
@@ -45,12 +52,22 @@
 
     # Other
 
+        # Perms
+            # src serve-git and repo-converter both run as root, which is not ideal
+            # Need to create a new user on the host, add it to the host's sourcegraph group, get the UID, and configure the runas user for the containers with this UID
+
+        # Debug log the list of servers and repos found in config file at the start of each run?
+
+        # Make repo name a key-value instead of just a key, if repos need non-YAML-safe characters
+
         # Read environment variables from repos-to-convert.yaml, so the values can be changed without restarting the container
 
         # Parallelism
-            # Add a max concurrent repos environment variable
+            # Config per server
+            # Limit per server
 
         # Add a fetch-interval-seconds config to repos-to-convert.yaml file
+            # under the server config
             # convert_svn_repos loop
                 # Try and read it
                         # next_fetch_time = repo_key.get(next-fetch-time, None)
@@ -77,6 +94,13 @@
             # use communicate() with a timeout and read the stdout from the return value,
             # catch the timeout exception
             # May require tracking process objects in a dict, which would prevent processes from getting auto-cleaned, resulting in higher zombie numbers
+
+
+    # Add doc strings for each function?
+        # https://www.dataquest.io/blog/documenting-in-python-with-docstrings
+
+    # Rewrite in Go?
+    # Rewrite in object oriented fashion?
 
 ### Notes:
 
@@ -126,6 +150,8 @@ script_run_number = 0
 def register_signal_handler():
 
     try:
+
+        log(f"Registering signal handler","debug")
 
         signal.signal(signal.SIGINT, signal_handler)
 
@@ -647,83 +673,92 @@ def clone_svn_repo(repo_key):
     ## Check if we're in the Running state
 
     # Check if a fetch or log process is currently running for this repo
-    try:
+    # Running this inside of this function instead of breaking it out into its own function
+    # due to the number of parameters which would have to be passed
+    max_tries = 2
+    for i in range(max_tries):
+        try:
 
-        # Get running processes, both as a list and string
-        ps_command = ["ps", "--no-headers", "-e", "--format", "pid,args"]
-        running_processes = subprocess_run(ps_command)["output"]
-        running_processes_string        = " ".join(running_processes)
+            # Get running processes, both as a list and string
+            ps_command = ["ps", "--no-headers", "-e", "--format", "pid,args"]
+            running_processes = subprocess_run(ps_command)["output"]
+            running_processes_string        = " ".join(running_processes)
 
-        # Define the list of strings we're looking for in the running processes' commands
-        cmd_git_svn_fetch_string            = " ".join(cmd_git_svn_fetch)
-        cmd_git_garbage_collection_string   = " ".join(cmd_git_garbage_collection)
-        cmd_svn_log_string                  = " ".join(cmd_svn_log)
-        process_name                        = f"clone_svn_repo_{repo_key}"
-        log_failure_message                 = ""
+            # Define the list of strings we're looking for in the running processes' commands
+            cmd_git_svn_fetch_string            = " ".join(cmd_git_svn_fetch)
+            cmd_git_garbage_collection_string   = " ".join(cmd_git_garbage_collection)
+            cmd_svn_log_string                  = " ".join(cmd_svn_log)
+            process_name                        = f"clone_svn_repo_{repo_key}"
+            log_failure_message                 = ""
 
-        # In priority order
-        concurrency_error_strings_and_messages = [
-            (process_name,                      "Previous process still"                ),
-            (cmd_git_svn_fetch_string,          "Previous fetching process still"       ),
-            (cmd_svn_log_string,                "Previous svn log process still"        ),
-            (cmd_git_garbage_collection_string, "Git garbage collection process still"  ),
-            (local_repo_path,                   "Local repo path in process"            ), # Problem: if one repo's name is a substring of another repo's name
-        ]
+            # In priority order
+            concurrency_error_strings_and_messages = [
+                (process_name,                      "Previous process still"                ),
+                (cmd_git_svn_fetch_string,          "Previous fetching process still"       ),
+                (cmd_svn_log_string,                "Previous svn log process still"        ),
+                (cmd_git_garbage_collection_string, "Git garbage collection process still"  ),
+                (local_repo_path,                   "Local repo path in process"            ), # Problem: if one repo's name is a substring of another repo's name
+            ]
 
-        # Loop through the list of strings we're looking for, to check the running processes for each of them
-        for concurrency_error_string_and_message in concurrency_error_strings_and_messages:
+            # Loop through the list of strings we're looking for, to check the running processes for each of them
+            for concurrency_error_string_and_message in concurrency_error_strings_and_messages:
 
-            # If this string we're looking for is found
-            if concurrency_error_string_and_message[0] in running_processes_string:
+                # If this string we're looking for is found
+                if concurrency_error_string_and_message[0] in running_processes_string:
 
-                # Find which process it's in
-                for i in range(len(running_processes)):
+                    # Find which process it's in
+                    for i in range(len(running_processes)):
 
-                    running_process = running_processes[i]
-                    pid, args = running_process.lstrip().split(" ", 1)
+                        running_process = running_processes[i]
+                        pid, args = running_process.lstrip().split(" ", 1)
 
-                    # If it's this process, and this process hasn't already matched one of the previous concurrency errors
-                    if (
-                        concurrency_error_string_and_message[0] in args and
-                        pid not in log_failure_message
-                    ):
+                        # If it's this process, and this process hasn't already matched one of the previous concurrency errors
+                        if (
+                            concurrency_error_string_and_message[0] in args and
+                            pid not in log_failure_message
+                        ):
 
-                        # Add its message to the string
-                        log_failure_message += f"{concurrency_error_string_and_message[1]} running in pid {pid}; "
+                            # Add its message to the string
+                            log_failure_message += f"{concurrency_error_string_and_message[1]} running in pid {pid}; "
 
-                        # Calculate its running time
-                        # Quite often, processes will complete when get_process_uptime() checks them; if this is the case, then try this check again
-                        process_running_time = get_process_uptime(pid)
-                        if process_running_time:
+                            # Calculate its running time
+                            # Quite often, processes will complete when get_process_uptime() checks them; if this is the case, then try this check again
+                            process_running_time = get_process_uptime(pid)
+                            if process_running_time:
 
-                            log_failure_message += f"running for {process_running_time}; "
+                                log_failure_message += f"running for {process_running_time}; "
 
-                        else:
+                            else:
 
-                            # Check the process again to see if it's still running
-                            log(f"{repo_key}; pid {pid} with command {args} completed while checking for concurrency collisions, will try checking again", "debug")
-                            i -= 1
+                                # Check the process again to see if it's still running
+                                log(f"{repo_key}; pid {pid} with command {args} completed while checking for concurrency collisions, will try checking again", "debug")
+                                i -= 1
 
-                        log_failure_message += f"with command: {args}; "
+                            log_failure_message += f"with command: {args}; "
 
-        if log_failure_message:
+            if log_failure_message:
 
-            log_failure_message = f"{repo_key}; {log_failure_message}skipping"
-            log(log_failure_message, "info")
-            return
+                log_failure_message = f"{repo_key}; {log_failure_message}skipping"
+                log(log_failure_message, "info")
+                return
 
-    except Exception as exception:
+            else:
 
-        # repo-converter  | 2024-03-14 10:46:41; run.py; WARNING; ant; Failed to check if fetching process is already running, will try to start it.
-        # Exception: <class 'FileNotFoundError'>, (2, 'No such file or directory'), [Errno 2] No such file or directory: '/proc/16/cwd'
-        log(f"{repo_key}; Failed to check if fetching process is already running, will try to start it. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
+                # If we got here, then there isn't another process running, and no Exceptions, so we can break out of the loop
+                break
 
-        stack = traceback.extract_stack()
-        (filename, line, procname, text) = stack[-1]
+        except Exception as exception:
 
-        log(f"filename, line, procname, text: {filename, line, procname, text}", "warning")
+            log(f"{repo_key}; Failed check {i} of {max_tries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
 
-        raise exception
+            stack = traceback.extract_stack()
+            (filename, line, procname, text) = stack[-1]
+
+            log(f"filename, line, procname, text: {filename, line, procname, text}", "debug")
+
+            # Raising this exception kills the multiprocessing process, so it doesn't try to run this cycle
+            #raise exception
+
 
     ## Check if we're in the Update state
     # Check if the git repo already exists and has the correct settings in the config file
@@ -813,7 +848,7 @@ def clone_svn_repo(repo_key):
 
         if previous_batch_end_revision == last_changed_rev:
 
-            log(f"{repo_key}; up to date, skipping; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}", "info")
+            log(f"{repo_key}; up to date; skipping; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}", "info")
 
             # Run git garbage collection and cleanup branches, even if repo is already up to date
             subprocess_run(cmd_git_garbage_collection)
@@ -1177,6 +1212,9 @@ def subprocess_run(args, password=None, echo_password=None, quiet=False):
             if not quiet:
                 log_level = "error"
 
+    # Catching the CalledProcessError exception,
+    # only to catch in case that the subprocess' proc _itself_ raised an exception
+    # not necessarily any below processes the subprocess created
     except subprocess.CalledProcessError as exception:
 
             status_message = f"raised an exception: {type(exception)}, {exception.args}, {exception}"
@@ -1360,10 +1398,21 @@ def main():
 
         load_config_from_repos_to_convert_file()
 
+        # If logging level read from the repos_to_convert_file != current logging level
+        load_config_from_environment_variables()
+        configure_logging()
+
         # Calculate uptime
         uptime = get_process_uptime()
 
-        log(f"Starting {script_name} run {script_run_number} with args: {str(environment_variables_dict)}; container ID: {os.uname().nodename}; uptime: {uptime}; running since {start_datetime}; using multiprocessing start method: {multiprocessing_start_method}", "info")
+        # Try to get the run as user
+        run_as_user = "unknown"
+        try:
+            run_as_user = os.getlogin()
+        except Exception:
+            log(f"Failed to get run as user via os.getlogin()", "debug")
+
+        log(f"Starting {script_name} run {script_run_number} with args: {str(environment_variables_dict)}; container ID: {os.uname().nodename}; uptime: {uptime}; running since {start_datetime}; using multiprocessing start method: {multiprocessing_start_method}; running as user: {run_as_user}", "info")
 
         status_update_and_cleanup_zombie_processes()
         git_config_safe_directory()
@@ -1376,7 +1425,7 @@ def main():
         # Calculate uptime
         uptime = get_process_uptime()
 
-        log(f"Finishing {script_name} run {script_run_number} with args: {str(environment_variables_dict)}; container ID: {os.uname().nodename}; uptime: {uptime}; running since {start_datetime}; using multiprocessing start method: {multiprocessing_start_method}", "info")
+        log(f"Finishing {script_name} run {script_run_number} with args: {str(environment_variables_dict)}; container ID: {os.uname().nodename}; uptime: {uptime}; running since {start_datetime}; using multiprocessing start method: {multiprocessing_start_method}; running as user: {run_as_user}", "info")
 
         # Sleep the configured interval
         log(f"Sleeping main loop for REPO_CONVERTER_INTERVAL_SECONDS={environment_variables_dict['REPO_CONVERTER_INTERVAL_SECONDS']} seconds", "info")
