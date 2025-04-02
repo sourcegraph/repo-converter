@@ -1084,11 +1084,11 @@ def clone_svn_repo(repo_key):
         cmd_git_set_batch_end_revision.append(str(batch_end_revision))
         subprocess_run(cmd_git_set_batch_end_revision)
 
-        log(f"{repo_key}; git fetch complete; run time {git_svn_fetch_result['runtime']}", "info")
+        log(f"{repo_key}; git fetch complete; run time {git_svn_fetch_result['run_time']}", "info")
 
     else:
 
-        log(f"{repo_key}; git fetch failed; run time {git_svn_fetch_result['runtime']}", "error")
+        log(f"{repo_key}; git fetch failed; run time {git_svn_fetch_result['run_time']}", "error")
 
     # Run Git garbage collection before handing off to cleanup branches and tags
     subprocess_run(cmd_git_garbage_collection)
