@@ -596,21 +596,21 @@ def deduplicate_git_config_file(git_config_file_path):
     with open(git_config_file_path, "r+") as config_file:
 
         # Read the whole file's contents into memory
-        config_file_data = config_file.read()
+        config_file_data = config_file.readlines()
 
-        log(f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data.splitlines())}", "debug")
+        log(f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data)}", "debug")
 
         # Move the file pointer back to the beginning of the file to start overwriting from there
         config_file.seek(0)
 
         # Iterate through the lines in their existing order
-        for line in config_file_data.splitlines():
+        for line in config_file_data:
 
             # If we haven't seen this line before / isn't a duplicate
             if line not in lines_seen:
 
-                # Write it back to the config file
-                config_file.write(line)
+                # Write it back to the config file, with a newline
+                config_file.write(line + "\n")
 
                 # Add it to the set of lines we've seen
                 lines_seen.add(line)
