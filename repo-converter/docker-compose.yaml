@@ -15,4 +15,4 @@ services:
     restart: always
     environment:
       - REPO_CONVERTER_INTERVAL_SECONDS=60
-      # - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
+      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
