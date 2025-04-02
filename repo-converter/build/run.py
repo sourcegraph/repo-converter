@@ -295,9 +295,9 @@ def redact_password(input):
     return input_without_password
 
 
-def get_process_uptime(pid:int = 1):
+def get_pid_uptime(pid:int = 1):
 
-    formatted_timedelta = None
+    pid_uptime = None
 
     try:
 
@@ -306,12 +306,33 @@ def get_process_uptime(pid:int = 1):
         pid_start_datetime      = datetime.fromtimestamp(pid_create_time)
         pid_uptime_timedelta    = datetime.now() - pid_start_datetime
         pid_uptime_seconds      = pid_uptime_timedelta.total_seconds()
-        formatted_timedelta     = timedelta(seconds=pid_uptime_seconds)
+        pid_uptime              = timedelta(seconds=pid_uptime_seconds)
 
     except psutil.NoSuchProcess:
         pass
 
-    return formatted_timedelta
+    return pid_uptime
+
+
+def get_subprocess_run_time(process_dict):
+
+    run_time = None
+
+    if "start_time" in process_dict:
+
+        if "end_time" in process_dict:
+
+            run_time = process_dict["end_time"] - process_dict["start_time"]
+
+        else:
+
+            run_time = datetime.now() - process_dict["start_time"]
+
+    if run_time:
+
+        run_time = timedelta(seconds=run_time.total_seconds())
+
+    return run_time
 
 
 def status_update_and_cleanup_zombie_processes():
@@ -559,6 +580,45 @@ def sanitize_inputs(input_value, input_key="", recursed=False):
     return output
 
 
+def deduplicate_git_config_file(git_config_file_path):
+
+    log(f"deduplicate_git_config_file; git_config_file_path: {git_config_file_path}", "debug")
+
+    # Use a set to store lines already seen
+    # as it deduplicates lines automatically
+    # however, don't write the set back to the file,
+    # because it's unordered
+    lines_seen = set()
+
+    # Open the config file, in read/write mode, so we can overwrite its contents
+    with open(git_config_file_path, "r+") as config_file:
+
+        # Read the whole file's contents into memory
+        config_file_data = config_file.read()
+
+        log(f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data.splitlines())}", "debug")
+
+        # Move the file pointer back to the beginning of the file to start overwriting from there
+        config_file.seek(0)
+
+        # Iterate through the lines in their existing order
+        for line in config_file_data.splitlines():
+
+            # If we haven't seen this line before / isn't a duplicate
+            if line not in lines_seen:
+
+                # Write it back to the config file
+                config_file.write(line)
+
+                # Add it to the set of lines we've seen
+                lines_seen.add(line)
+
+        # Delete the rest of the file's contents
+        config_file.truncate()
+
+        log(f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
+
+
 def clone_svn_repos():
 
     # Loop through the repos_dict, find the type: SVN repos, then fork off a process to clone them
@@ -566,7 +626,7 @@ def clone_svn_repos():
 
         repo_type = repos_dict[repo_key].get("type","").lower()
 
-        if "svn" in repo_type or "subversion" in repo_type:
+        if repo_type in ("svn", "subversion"):
 
             multiprocessing.Process(target=clone_svn_repo, name=f"clone_svn_repo_{repo_key}", args=(repo_key,)).start()
 
@@ -600,6 +660,7 @@ def clone_svn_repo(repo_key):
         # git_repo_name             = parquet
         # git repo root             = site              # arbitrary path inside the repo where contributors decided to start storing /trunk /branches /tags and other files to be included in the repo
     local_repo_path = f"{environment_variables_dict['SRC_SERVE_ROOT']}/{code_host_name}/{git_org_name}/{git_repo_name}"
+    git_config_file_path = f"{local_repo_path}/.git/config"
 
     ## Define common command args
     arg_batch_end_revision          =           [ f"{git_config_namespace}.batch-end-revision"  ]
@@ -722,11 +783,11 @@ def clone_svn_repo(repo_key):
                             log_failure_message += f"{concurrency_error_string_and_message[1]} running in pid {pid}; "
 
                             # Calculate its running time
-                            # Quite often, processes will complete when get_process_uptime() checks them; if this is the case, then try this check again
-                            process_running_time = get_process_uptime(pid)
-                            if process_running_time:
+                            # Quite often, processes will complete when get_pid_uptime() checks them; if this is the case, then try this check again
+                            pid_uptime = get_pid_uptime(pid)
+                            if pid_uptime:
 
-                                log_failure_message += f"running for {process_running_time}; "
+                                log_failure_message += f"running for {pid_uptime}; "
 
                             else:
 
@@ -744,12 +805,12 @@ def clone_svn_repo(repo_key):
 
             else:
 
-                # If we got here, then there isn't another process running, and no Exceptions, so we can break out of the loop
+                # If we got here, then there isn't another process running, and no Exceptions, so we can break out of the for loop
                 break
 
         except Exception as exception:
 
-            log(f"{repo_key}; Failed check {i+1} of {max_tries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
+            log(f"{repo_key}; Failed check {i} of {max_tries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
 
             stack = traceback.extract_stack()
             (filename, line, procname, text) = stack[-1]
@@ -858,11 +919,16 @@ def clone_svn_repo(repo_key):
 
         else:
 
+            # Write and run the command
             cmd_svn_log_remaining_revs = cmd_svn_log + ["--revision", f"{previous_batch_end_revision}:HEAD"]
-            svn_log_remaining_revs = subprocess_run(cmd_svn_log_remaining_revs, password, arg_svn_echo_password)["output"]
-            svn_log_remaining_revs_string = " ".join(svn_log_remaining_revs)
-            remaining_revs = svn_log_remaining_revs_string.count("revision=")
-            log(f"{repo_key}; out of date; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}, {remaining_revs} revs remaining to catch up, fetching next batch of {min(remaining_revs,fetch_batch_size)} revisions", "info")
+            svn_log = subprocess_run(cmd_svn_log_remaining_revs, password, arg_svn_echo_password)
+
+            # Parse the output to get the number of remaining revisions
+            svn_log_output_string = " ".join(svn_log["output"])
+            remaining_revs_count = svn_log_output_string.count("revision=")
+
+            # Log the results
+            log(f"{repo_key}; out of date; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}, {remaining_revs_count} revs remaining to catch up, fetching next batch of {min(remaining_revs_count,fetch_batch_size)} revisions; svn log command run time {svn_log['run_time']}", "info")
 
 
     if repo_state == "create":
@@ -1000,6 +1066,10 @@ def clone_svn_repo(repo_key):
         log(f"{repo_key}; failed to get batch start or end revision for batch size {fetch_batch_size}; skipping this run to retry next run; exception: {type(exception)}, {exception.args}, {exception}", "warning")
         return
 
+    # Delete duplicate lines from the git config file, before the fetch
+    # hoping that it increases our chances of a successful fetch
+    deduplicate_git_config_file(git_config_file_path)
+
     # Start the fetch
     cmd_git_svn_fetch_string_may_have_batch_range = " ".join(cmd_git_svn_fetch)
     log(f"{repo_key}; fetching with {cmd_git_svn_fetch_string_may_have_batch_range}", "info")
@@ -1011,6 +1081,12 @@ def clone_svn_repo(repo_key):
         # Store the ending revision number
         cmd_git_set_batch_end_revision.append(str(batch_end_revision))
         subprocess_run(cmd_git_set_batch_end_revision)
+
+        log(f"{repo_key}; git fetch complete; run time {git_svn_fetch_result['runtime']}", "info")
+
+    else:
+
+        log(f"{repo_key}; git fetch failed; run time {git_svn_fetch_result['runtime']}", "error")
 
     # Run Git garbage collection before handing off to cleanup branches and tags
     subprocess_run(cmd_git_garbage_collection)
@@ -1162,6 +1238,7 @@ def subprocess_run(args, password=None, echo_password=None, quiet=False):
     return_dict                         = {}
     return_dict["returncode"]           = 1
     return_dict["output"]               = None
+    return_dict["start_time"]           = datetime.now()
     truncated_subprocess_output_to_log  = None
     log_level                           = "debug"
 
@@ -1231,6 +1308,9 @@ def subprocess_run(args, password=None, echo_password=None, quiet=False):
 
             # Change the log_level to debug so the failed process doesn't log an error in print_process_status()
             log_level = "debug"
+
+    process_dict["end_time"] = datetime.now()
+    process_dict["run_time"] = get_subprocess_run_time(process_dict)
 
     print_process_status(process_dict, status_message, str(truncated_subprocess_output_to_log), log_level)
 
@@ -1325,6 +1405,9 @@ def print_process_status(process_dict = {}, status_message = "", std_out = "", l
         "connections_count",
         "connections",
         "open_files",
+        "start_time",
+        "end_time",
+        "run_time",
     ]
 
     pid = process_dict['pid']
@@ -1343,10 +1426,10 @@ def print_process_status(process_dict = {}, status_message = "", std_out = "", l
             log_message += f"{status_message}; "
 
             # Calculate its running time
-            process_running_time = get_process_uptime(pid)
+            pid_uptime = get_pid_uptime(pid)
 
-            if process_running_time:
-                log_message += f"running for {process_running_time}; "
+            if pid_uptime:
+                log_message += f"running for {pid_uptime}; "
 
         # Pick the interesting bits out of the connections list
         # connections is usually in the dict, as a zero-length list of "pconn"-type objects, (named tuples of tuples)
@@ -1403,7 +1486,7 @@ def main():
         configure_logging()
 
         # Calculate uptime
-        uptime = get_process_uptime()
+        uptime = get_pid_uptime()
 
         # Try to get the run as user
         run_as_user = "unknown"
@@ -1423,7 +1506,7 @@ def main():
         status_update_and_cleanup_zombie_processes()
 
         # Calculate uptime
-        uptime = get_process_uptime()
+        uptime = get_pid_uptime()
 
         log(f"Finishing {script_name} run {script_run_number} with args: {str(environment_variables_dict)}; container ID: {os.uname().nodename}; uptime: {uptime}; running since {start_datetime}; using multiprocessing start method: {multiprocessing_start_method}; running as user: {run_as_user}", "info")
 
