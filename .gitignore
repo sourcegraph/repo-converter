@@ -8,6 +8,7 @@ src-serve-root
 svn-repo-stats/*.csv
 svn-repo-stats/repos.txt
 svn-repo-stats/tmp-repo-metadata/
+*.code-workspace
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

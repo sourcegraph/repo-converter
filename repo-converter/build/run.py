@@ -738,7 +738,7 @@ def clone_svn_repo(repo_key):
     # Check if a fetch or log process is currently running for this repo
     # Running this inside of this function instead of breaking it out into its own function
     # due to the number of parameters which would have to be passed
-    max_tries = 2
+    max_tries = 3
     for i in range(1, max_tries + 1):
         try:
 
