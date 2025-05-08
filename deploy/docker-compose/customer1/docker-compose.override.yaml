@@ -12,7 +12,7 @@ services:
       - ../config/toprc:/root/.config/procps/toprc
       - ../../../../sg/src-serve-root/:/sourcegraph/src-serve-root
     environment:
-      - REPO_CONVERTER_INTERVAL_SECONDS=60
+      - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
 
   src-serve-git:

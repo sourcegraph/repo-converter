@@ -22,7 +22,7 @@ services:
       - ../../src-serve-root/:/sourcegraph/src-serve-root
     restart: always
     # environment:
-      # - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 900 seconds (15 minutes)
+      # - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
       # - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
 
   src-serve-git:
