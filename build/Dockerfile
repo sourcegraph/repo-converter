@@ -59,5 +59,5 @@ WORKDIR /src
 COPY repo-converter/* .
 
 # Start the container
-#CMD ["/usr/bin/python3", "/src/run.py"]
-CMD ["/usr/bin/python3", "/src/main.py"]
+#CMD ["/usr/bin/python3", "/src/repo-converter/run.py"]
+CMD ["/usr/bin/python3", "/src/repo-converter/main.py"]
