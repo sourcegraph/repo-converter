@@ -1,7 +1,7 @@
 #!/bin/bash
 
 REQUIREMENTS_FILE="../requirements.txt"
-APPLICATION_CODE_DIR="../repo-converter/"
+APPLICATION_CODE_DIR="../src/"
 
 # Exit on error
 set -o errexit
