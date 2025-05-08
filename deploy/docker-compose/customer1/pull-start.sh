@@ -6,27 +6,18 @@
 # and the Docker image tagged latest in GitHub packages
 
 # crontab -e
-# */30 * * * * bash /sg/implementation-bridges/repo-converter/pull-start.sh
+# */30 * * * * bash /sg/implementation-bridges/deploy/docker-compose/customer1/pull-start.sh
 
-# What do I want the input to be?
-# Path to docker-compose.yaml, be it repo-converter, or host-wsl
-# Default to repo-converter
 
 repo_dir="/sg/implementation-bridges"
-repo_converter_dir="$repo_dir/repo-converter"
+docker_compose_dir="deploy/docker-compose/customer1"
 docker_compose_file_name="docker-compose.yaml"
+docker_compose_full_file_path="$repo_dir/$docker_compose_dir/$docker_compose_file_name"
 
+log_file="$repo_dir/$docker_compose_dir/pull-start.log"
 
-if [[ -n "$1" && -f "$repo_dir/$1/$docker_compose_file_name" ]]; then
-    docker_compose_file_dir="$repo_dir/$1"
-else
-    docker_compose_file_dir="$repo_converter_dir"
-fi
+docker_cmd="docker compose -f $docker_compose_full_file_path"
 
-docker_compose_file_path="$docker_compose_file_dir/$docker_compose_file_name"
-
-log_file="$docker_compose_file_dir/pull-start.log"
-docker_cmd="docker compose -f $docker_compose_file_path"
 docker_up_sleep_seconds=10
 
 git_cmd="git -C $repo_dir"
@@ -40,9 +31,9 @@ function log() {
 exec > >(tee -a "$log_file") 2>&1
 
 log "Script starting"
-log "Running as user: $USER"
+log "Running as user: $(whoami)"
 log "On branch before git pull: $($git_cmd branch -v)"
-log "Docker compose file: $docker_compose_file_path"
+log "Docker compose file: $docker_compose_full_file_path"
 
 log "docker ps before:"
 $docker_cmd ps

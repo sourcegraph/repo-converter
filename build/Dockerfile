@@ -46,17 +46,17 @@ RUN apt-get update && \
 # into this layer
 # Install requirements
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=requirements.txt,target=requirements.txt \
+    --mount=type=bind,source=../requirements.txt,target=requirements.txt \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install -r requirements.txt
 
-# # Create sourcegraph user
+# Create sourcegraph user
 # RUN useradd sourcegraph
 # USER sourcegraph
 
 # Copy the source code into the container
 WORKDIR /sourcegraph
-COPY run.py .
+COPY repo-converter/run.py .
 
 # Start the container
 CMD ["/usr/bin/python3", "/sourcegraph/run.py"]

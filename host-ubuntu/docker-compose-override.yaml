@@ -1,5 +1,0 @@
-services:
-
-  src-serve-git:
-    # Uses a valid hostname as container_name, to trick the cloud agent and code host config into finding this container on the Docker network
-    container_name: src-serve-git-ubuntu.local

@@ -1,4 +1,0 @@
-include:
-  - path:
-    - ../config/docker-compose-common-services.yaml
-    - docker-compose-override.yaml

@@ -1,0 +1,7 @@
+# See Docker Compose docs for why a separate override file is required
+# https://docs.docker.com/compose/how-tos/multiple-compose-files/include/#include-and-overrides
+
+include:
+  - path:
+    - ../deploy/docker-compose/docker-compose.yaml
+    - ./docker-compose.override.yaml
