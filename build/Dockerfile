@@ -55,9 +55,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # USER sourcegraph
 
 # Copy the source code into the container
-WORKDIR /src
-COPY repo-converter/* .
+WORKDIR /repo-converter
+COPY src/repo-converter/* .
 
 # Start the container
-#CMD ["/usr/bin/python3", "/src/repo-converter/run.py"]
-CMD ["/usr/bin/python3", "/src/repo-converter/main.py"]
+CMD ["/usr/bin/python3", "/repo-converter/main.py"]
