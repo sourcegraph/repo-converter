@@ -13,13 +13,16 @@ from dotenv import load_dotenv # https://pypi.org/project/python-dotenv/
 def load_env_vars():
     """Load config from environment variables"""
 
-    # Read the contents of ./.env into env vars
+    # Read the contents of the ./.env file (built into Docker image) into env vars
+    # Do not overwrite any existing env vars with the same name,
+    # so that env vars provided at container start time take precedence
     load_dotenv()
 
     env_vars = {}
 
     # Try to read the variables from the Docker container's environment
-    # Set defaults in case they're not defined
+    # Set defaults in case they're not defined, where appropriate
+    # Handle type casting here, instead of throughout the code
 
     # DEBUG INFO WARNING ERROR CRITICAL
     env_vars["LOG_LEVEL"]                               = str(environ.get("LOG_LEVEL"                               , "INFO" ))

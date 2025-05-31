@@ -32,7 +32,7 @@ def git_config_safe_directory(ctx: Context) -> None:
 
     cmd_git_safe_directory = ["git", "config", "--system", "--replace-all", "safe.directory", "\"*\""]
 
-    cmd.run(ctx, cmd_git_safe_directory)
+    cmd.subprocess_run(ctx, cmd_git_safe_directory)
 
 
 def get_config(repo, key):

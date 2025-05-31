@@ -17,12 +17,6 @@ import textwrap
 import psutil
 
 
-def run(ctx: Context, command, cwd=None):
-    """Run a shell command and return the output."""
-
-    log(ctx, f"Running command: {str(command)}", "DEBUG")
-
-
 def get_pid_uptime(pid:int = 1) -> timedelta | None:
     """Get the uptime of a process by PID."""
 
@@ -45,8 +39,8 @@ def get_pid_uptime(pid:int = 1) -> timedelta | None:
 def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=False):
 
     return_dict                         = {}
-    return_dict["returncode"]           = 1
     return_dict["output"]               = None
+    return_dict["returncode"]           = 1
     return_dict["start_time"]           = datetime.now()
     truncated_subprocess_output_to_log  = None
     log_level                           = "debug"

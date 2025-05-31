@@ -2,8 +2,9 @@
 
 ## Rearchitect
 
-    # Get it compiling / working
-        # Object-oriented design where it makes sense
+    # Get GitHub action builds working
+
+    # Test build in customer environment
 
     # Parallelism
         # Re-evaluate use of os.fork, if multi-processing has a better way to spawn child procs, clean up zombies, etc.
