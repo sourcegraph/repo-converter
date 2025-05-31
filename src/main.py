@@ -12,7 +12,7 @@ from utils.logger import log
 import time
 
 
-def main() -> int:
+def main():
     """Main entry point for the repo-converter container"""
 
     # Load environment variables from the container's running environment into env_vars dict
@@ -79,8 +79,9 @@ def main() -> int:
     uptime = cmd.get_pid_uptime()
     log(ctx, f"Stopping container; container uptime: {uptime}; {run_log_string}", "warning")
 
+    # TODO: Wait till all child procs are finished before exiting
     # Exit the container
-    return 0
+    # return
 
 if __name__ == "__main__":
     main()

@@ -23,9 +23,7 @@ from utils.logger import log
 from utils import cmd, git, lock
 
 # Import Python standard modules
-import multiprocessing
 import traceback # https://docs.python.org/3/library/traceback.html
-
 
 
 def clone_svn_repo(ctx: Context, repo_key: str) -> None:
