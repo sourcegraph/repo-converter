@@ -11,18 +11,12 @@ services:
     volumes:
       - ../dev/toprc:/root/.config/procps/toprc # Add `top` config file
     environment:
-
-      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
+      #- LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
+      - MAX_CYCLES=1
       - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
       # - REPOS_TO_CONVERT="/sourcegraph/repos-to-convert.yaml" # Path inside the container to find this file, only change to match if the right side of the volume mapping changes
       # - SRC_SERVE_ROOT="/sourcegraph/src-serve-root" # Path inside the container to find this directory, only change to match if the right side of the volume mapping changes
-
-      # Pass in build-time env vars, declared in ./build.sh
-      - BUILD_BRANCH
-      - BUILD_COMMIT
-      - BUILD_DATE
-      - BUILD_DIRTY
-      - BUILD_TAG
+    restart: no
 
   src-serve-git:
     container_name: src-serve-git-wsl.local # Override hostname

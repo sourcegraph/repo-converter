@@ -47,10 +47,15 @@ def main():
 
         # Increment the run count, and update the uptime for this process (PID 1)
         run_count += 1
+
+        if env_vars['MAX_CYCLES'] != "" and run_count > int(env_vars['MAX_CYCLES']):
+            log(f"Reached MAX_CYCLES={env_vars['MAX_CYCLES']}, exiting loop","WARNING")
+            break
+
         uptime = cmd.get_pid_uptime()
 
         # Log the start of the run
-        log(f"Starting run {run_count}; container uptime: {uptime}; {run_log_string}", "info")
+        log(f"Starting run {run_count}; container uptime: {uptime}", "info")
 
         # Load the repos to convert from file
         repos_to_convert_dict = repos_to_convert.load_from_file(env_vars)
@@ -72,16 +77,15 @@ def main():
 
         # Log the end of the run
         uptime = cmd.get_pid_uptime()
-        log(f"Finishing run {run_count}; container uptime: {uptime}; {run_log_string}", "info")
+        log(f"Finishing run {run_count}; container uptime: {uptime}", "info")
 
         # Sleep the configured interval
         log(f"Sleeping main loop for REPO_CONVERTER_INTERVAL_SECONDS={env_vars['REPO_CONVERTER_INTERVAL_SECONDS']} seconds", "info")
         time.sleep(env_vars["REPO_CONVERTER_INTERVAL_SECONDS"])
 
     # Log the exit event
-    # This should never be reached
     uptime = cmd.get_pid_uptime()
-    log(f"Stopping container; container uptime: {uptime}; {run_log_string}", "ERROR")
+    log(f"Stopping container; container uptime: {uptime}; {run_log_string}", "WARNING")
 
 if __name__ == "__main__":
     main()

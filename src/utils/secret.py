@@ -6,7 +6,7 @@ secrets_set = set()
 
 def get_secrets_from_repos_to_convert(repos_to_convert_dict):
     secrets = set()
-    return secrets
+    return frozenset(secrets)
 
 def add(secret):
     """Add a secret to the set of secrets, as a string"""
@@ -80,7 +80,7 @@ def redact(input):
 
         # Moving the import statement here, to avoid a circular import error
         #  ImportError: cannot import name 'log' from partially initialized module 'utils.logging' (most likely due to a circular import) (/sourcegraph/repo-converter/utils/logging.py
-        from utils.logging import log
+        from utils.logger import log
         log(f"redact() doesn't handle input of type {type(input)}","error")
 
         # Set it to None to just break the code instead of leak the secret
