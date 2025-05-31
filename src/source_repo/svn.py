@@ -20,9 +20,13 @@
 # Import repo-converter modules
 from utils.context import Context
 from utils.logger import log
-from utils import cmd, git, lock
+from utils import cmd, git
 
 # Import Python standard modules
+import os
+import random
+import shutil
+import time
 import traceback # https://docs.python.org/3/library/traceback.html
 
 
@@ -30,6 +34,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
     repos_dict = ctx.repos
     env_vars = ctx.env_vars
+    max_retries = env_vars["MAX_RETRIES"]
 
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
     git_repo_name               = repo_key
@@ -57,7 +62,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
         # git_org_name              = asf
         # git_repo_name             = parquet
         # git repo root             = site              # arbitrary path inside the repo where contributors decided to start storing /trunk /branches /tags and other files to be included in the repo
-    local_repo_path = f"{env_vars['SRC_SERVE_ROOT']}/{code_host_name}/{git_org_name}/{git_repo_name}"
+    local_repo_path = f"{env_vars["SRC_SERVE_ROOT"]}/{code_host_name}/{git_org_name}/{git_repo_name}"
     git_config_file_path = f"{local_repo_path}/.git/config"
 
     ## Define common command args
@@ -134,8 +139,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     # Check if a fetch or log process is currently running for this repo
     # Running this inside of this function instead of breaking it out into its own function
     # due to the number of parameters which would have to be passed
-    max_tries = 3
-    for i in range(1, max_tries + 1):
+    for i in range(1, max_retries + 1):
         try:
 
             # Get running processes, both as a list and string
@@ -182,7 +186,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
                             # Calculate its running time
                             # Quite often, processes will complete when get_pid_uptime() checks them; if this is the case, then try this check again
-                            pid_uptime = cmd.get_pid_uptime(pid)
+                            pid_uptime = cmd.get_pid_uptime(int(pid))
                             if pid_uptime:
 
                                 log_failure_message += f"running for {pid_uptime}; "
@@ -208,7 +212,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
         except Exception as exception:
 
-            log(ctx, f"{repo_key}; Failed check {i} of {max_tries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
+            log(ctx, f"{repo_key}; Failed check {i} of {max_retries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
 
             stack = traceback.extract_stack()
             (filename, line, procname, text) = stack[-1]
@@ -216,7 +220,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
             log(ctx, f"filename, line, procname, text: {filename, line, procname, text}", "debug")
 
             # Raising this exception kills the multiprocessing process, so it doesn't try to run this cycle
-            #raise exception
+            # raise exception
 
 
     ## Check if we're in the Update state
@@ -243,32 +247,19 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
     if svn_info["returncode"] != 0:
 
-        # The clone_svn_repo function runs in its own process, get this process' start time
-        # Check for current time < start time + REPO_CONVERTER_INTERVAL_SECONDS, to ensure that this retry is not extending beyond the interval
-        process_create_time = psutil.Process(os.getpid()).create_time()
-
-        # Let it retry up top 80% of the time remaining until the next REPO_CONVERTER_INTERVAL_SECONDS, so this process doesn't overrun the current interval
-        retry_time_limit = process_create_time + int(env_vars["REPO_CONVERTER_INTERVAL_SECONDS"] * 0.8)
-
-        # Set a maximum retry delay of one third of REPO_CONVERTER_INTERVAL_SECONDS, so it can retry 2-3 times, or 60 seconds, whichever is shorter
-        retry_delay_range = min(int(env_vars["REPO_CONVERTER_INTERVAL_SECONDS"] / 3), 60)
-
-        # Set a maximum number of retries per script run
-        retry_attempts_max  = 3
-        retries_attempted   = 0
+        retries_attempted = 0
 
         svn_connection_failure_message_to_check_for = "Unable to connect to a repository at"
 
         while (
             svn_connection_failure_message_to_check_for in svn_info_output_string and
-            time.time() < retry_time_limit and
-            retries_attempted < retry_attempts_max
+            retries_attempted < max_retries
         ):
 
             retries_attempted += 1
-            retry_delay_seconds = random.randrange(1, retry_delay_range)
+            retry_delay_seconds = random.randrange(1, 10)
 
-            log(ctx, f"{repo_key}; Failed to connect to repo remote, retrying {retries_attempted} of max {retry_attempts_max} times, with a semi-random delay of {retry_delay_seconds} seconds", "warning")
+            log(ctx, f"{repo_key}; Failed to connect to repo remote, retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "warning")
 
             time.sleep(retry_delay_seconds)
 
@@ -279,11 +270,8 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
             log_failure_message = ""
 
-            if retries_attempted == retry_attempts_max:
-                log_failure_message = f"hit retry count limit {retry_attempts_max} for this run"
-
-            elif not time.time() < retry_time_limit:
-                log_failure_message = f"hit retry time limit for this run"
+            if retries_attempted == max_retries:
+                log_failure_message = f"hit retry count limit {max_retries} for this run"
 
             log(ctx, f"{repo_key}; Failed to connect to repo remote, {log_failure_message}, skipping", "error")
             return

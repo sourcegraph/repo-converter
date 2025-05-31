@@ -13,9 +13,10 @@ import logging
 
 def configure_logging(ctx: Context) -> None:
 
-    ctx.env_vars['LOG_LEVEL']
+    level_name = ctx.env_vars["LOG_LEVEL"]
 
-    level_name:str = "INFO"
+    if level_name not in ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]:
+        level_name = "INFO"
 
     logging.basicConfig(
         stream      = stdout,

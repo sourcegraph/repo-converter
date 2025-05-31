@@ -33,8 +33,8 @@ def main():
 
     # Extract the env vars used repeatedly, to keep this DRY
     # These values are only used in the main function
-    interval = ctx.env_vars['REPO_CONVERTER_INTERVAL_SECONDS']
-    max_cycles = ctx.env_vars['MAX_CYCLES']
+    interval = ctx.env_vars["REPO_CONVERTER_INTERVAL_SECONDS"]
+    max_cycles = ctx.env_vars["MAX_CYCLES"]
 
     # Application main loop
     while True:
