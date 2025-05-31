@@ -7,7 +7,7 @@ services:
     build:
       context: ../
       dockerfile: build/Dockerfile
-    image: sourcegraph/implementation-bridge-repo-converter:build
+    image: sourcegraph/repo-converter:build
     volumes:
       - ../dev/toprc:/root/.config/procps/toprc # Add `top` config file
     environment:

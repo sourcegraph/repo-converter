@@ -4,6 +4,9 @@
 # Store the set of secrets as a global variable in this module
 secrets_set = set()
 
+def get_secrets_from_repos_to_convert(repos_to_convert_dict):
+    secrets = set()
+    return secrets
 
 def add(secret):
     """Add a secret to the set of secrets, as a string"""

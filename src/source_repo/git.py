@@ -16,3 +16,7 @@ class GitRepo(Repo):
     def update(self):
         """Update a Git repository."""
         pass
+
+
+def clone_git_repos():
+    log("Cloning Git repos function not implemented yet", "warning")

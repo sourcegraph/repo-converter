@@ -2,7 +2,17 @@
 
 ## Rearchitect
 
-    # Object-oriented design
+    # Get it compiling / working
+        # Imports
+        # repos_to_convert.py rethink how sanitization / secrets are added to set
+        # Take Amp's suggestion of making better use of Python-native logging
+        # Object-oriented design where it makes sense
+
+    # Parallelism
+        # Re-evaluate use of os.fork, if multi-processing has a better way to spawn child procs, clean up zombies, etc.
+        # Read config per server
+        # Enforce limit per server
+
 
 ## Config file
 
@@ -57,10 +67,6 @@
 
 
 # Other
-
-    # Parallelism
-        # Config per server
-        # Limit per server
 
     # Add a fetch-interval-seconds config to repos-to-convert.yaml file
         # under the server config

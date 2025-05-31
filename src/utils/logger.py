@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # Custom logging functionality
 
+# Import repo-converter modules
+from utils import secret
+
+# Import Python standard modules
 from datetime import datetime
 from sys import stdout
 import logging
-from utils import secrets
+
 
 def configure_logging(level_name:str = "INFO"):
 
@@ -15,6 +19,7 @@ def configure_logging(level_name:str = "INFO"):
         format      = f"%(message)s",
         level       = level_name
     )
+
 
 def log(message, level_name:str = "DEBUG"):
 
@@ -29,7 +34,7 @@ def log(message, level_name:str = "DEBUG"):
     date_string = datetime.now().date().isoformat()
     time_string = datetime.now().time().isoformat()
     run_string  = ""# f"run {str(script_run_number)}"
-    message     = secrets.redact(message)
+    message     = secret.redact(message)
     log_message = f"{date_string}; {time_string}; {run_string}; {level_name}; {str(message)}"
 
     logging.log(level_int, log_message)

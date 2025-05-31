@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-# YAML configuration file parsing
+# Parse YAML configuration file
 
+# Import repo-converter modules
 import yaml
-from utils.logging import log
-from utils import secrets
+from utils.logger import log
+from utils import secret
+
+# Import Python standard modules
 from sys import exit
 
-def parse_repos_to_convert_file(repos_to_convert_file_path):
-    """Load and parse YAML configuration file."""
+# Import third party modules
+import yaml # https://pyyaml.org/wiki/PyYAMLDocumentation
+
+def load_from_file(env_vars):
+    """Load and parse YAML configuration file"""
+
+    repos_to_convert_file_path = env_vars["REPOS_TO_CONVERT"]
 
     repos_to_convert_dict = {}
 
-    # Parse the repos-to-convert.yaml file
+    # Parse the file
     try:
 
         # Open the file
@@ -22,7 +30,7 @@ def parse_repos_to_convert_file(repos_to_convert_file_path):
 
     except FileNotFoundError:
 
-        log(f"repos-to-convert.yaml file not found at {repos_to_convert_file_path}", "error")
+        log(f"File not found at {repos_to_convert_file_path}", "error")
         exit(1)
 
     except (AttributeError, yaml.scanner.ScannerError) as exception:
@@ -152,7 +160,7 @@ def sanitize_repos_to_convert(input_value, input_key="", recursed=False):
             if input_key == "password":
 
                 # Add the password value to the passwords set, to be redacted from logs later
-                secrets.add(input_value)
+                secret.add(input_value)
 
         else:
 

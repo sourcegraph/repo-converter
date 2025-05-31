@@ -7,6 +7,10 @@
 # Using Ubuntu LTS
 FROM ubuntu:22.04 AS base
 
+# Using Python Slim base
+# https://hub.docker.com/layers/library/python/slim/images/sha256-747576ffc7523e2cc620ae304eb7304cedc8abff915adc77f3ce53a33ad1730d
+#FROM python:slim
+
 # Avoid stuck build due to user prompt
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -45,18 +49,46 @@ RUN apt-get update && \
 # Leverage a bind mount to requirements.txt to avoid having to copy them into
 # into this layer
 # Install requirements
+# RUN --mount=type=cache,target=/root/.cache/pip \
+#     --mount=type=bind,source=../requirements.txt,target=./requirements.txt \
+#     python3 -m pip install --upgrade pip && \
+#     python3 -m pip install -r requirements.txt
+
+
+# Switching to podman compose build
+
+# Failed builds leave buildah containers dangling in an invalid state
+# See these containers with
+# podman ps --all --external
+# Clear these buildah containers with
+# podman rmi --force --all
+
+# This step seems to be failing on podman build, seems to require ',z' option on the bind mount as per
+# https://github.com/containers/podman/issues/15423#issuecomment-1223594100
+
+# This step is also failing due to the directory mismatch, had to remove '../' in the source bind mapping
+# RUN --mount=type=cache,target=/root/.cache/pip \
+#     --mount=type=bind,source=requirements.txt,target=requirements.txt,z \
+#     python3 -m pip install --upgrade pip && \
+#     python3 -m pip install -r requirements.txt
+
+# Switching to podman build
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=../requirements.txt,target=requirements.txt \
+    --mount=type=bind,source=build/requirements.txt,target=requirements.txt,z \
     python3 -m pip install --upgrade pip && \
-    python3 -m pip install -r requirements.txt
+    python3 -m pip install --root-user-action=ignore -r requirements.txt
 
 # Create sourcegraph user
+# https://github.com/containers/podman/issues/4016
 # RUN useradd sourcegraph
 # USER sourcegraph
 
-# Copy the source code into the container
+# Copy the source code into the image
 WORKDIR /sourcegraph/repo-converter
-COPY src/repo-converter/ .
+COPY src/ .
+
+# Copy the dotenv file into the image
+COPY build/.env .
 
 # Start the container
 CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/main.py"]

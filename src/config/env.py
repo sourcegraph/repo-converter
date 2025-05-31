@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 # Environment variable handling
 
+# Import Python standard modules
 from os import environ
 
+# Import third party modules
+from dotenv import load_dotenv # https://pypi.org/project/python-dotenv/
+
+
 def load_env_vars():
-    """Load config from environment variables."""
+    """Load config from environment variables"""
+
+    # Read the contents of ./.env into env vars
+    load_dotenv()
 
     env_vars = {}
 
@@ -27,5 +35,15 @@ def load_env_vars():
     env_vars["BUILD_DATE"]                              = str(environ.get("BUILD_DATE"                              , "" ))
     env_vars["BUILD_DIRTY"]                             = str(environ.get("BUILD_DIRTY"                             , "" ))
     env_vars["BUILD_TAG"]                               = str(environ.get("BUILD_TAG"                               , "" ))
+
+
+# def load_config_from_repos_to_convert_file():
+#     # Try to load the environment variables from the REPOS_TO_CONVERT file
+
+
+#     # Check if the default config file exists
+#     # If yes, read configs from it
+#     # If no, use the environment variables
+#     pass
 
     return env_vars
