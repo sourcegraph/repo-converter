@@ -62,7 +62,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
         # git_org_name              = asf
         # git_repo_name             = parquet
         # git repo root             = site              # arbitrary path inside the repo where contributors decided to start storing /trunk /branches /tags and other files to be included in the repo
-    local_repo_path = f"{env_vars["SRC_SERVE_ROOT"]}/{code_host_name}/{git_org_name}/{git_repo_name}"
+    local_repo_path = f"{env_vars['SRC_SERVE_ROOT']}/{code_host_name}/{git_org_name}/{git_repo_name}"
     git_config_file_path = f"{local_repo_path}/.git/config"
 
     ## Define common command args
