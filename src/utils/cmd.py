@@ -113,7 +113,7 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
 
         # There's a high chance it was caused by one of the lock files
         # If check_lock_files successfully cleared a lock file,
-        if lock.check_lock_files(args, process_dict):
+        if lock.check_lock_files(ctx, args, process_dict):
 
             # Change the log_level to debug so the failed process doesn't log an error in print_process_status()
             log_level = "debug"
@@ -121,7 +121,7 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
     print_process_status(ctx, process_dict, status_message, str(truncated_subprocess_output_to_log), log_level)
 
     return_dict["end_time"] = datetime.now()
-    get_subprocess_run_time(return_dict)
+    get_subprocess_run_time(ctx, return_dict)
 
     return return_dict
 

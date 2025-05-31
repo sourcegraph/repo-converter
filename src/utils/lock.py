@@ -48,7 +48,7 @@ def check_lock_files(ctx: Context, args, process_dict):
                 log(ctx, f"pid {pid} failed; {process} failed to start due to finding a lock file in the repo at {lock_file_path}, but no other process is running with {process_command}; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
                 cmd_rm_lock_file = ["rm", "-f", lock_file_path]
-                cmd.subprocess_run(cmd_rm_lock_file)
+                cmd.subprocess_run(ctx, cmd_rm_lock_file)
 
                 return_value = True
 

@@ -32,28 +32,29 @@ def load_from_file(ctx: Context) -> None:
         log(ctx, f"File not found at {repos_to_convert_file_path}", "error")
         exit(1)
 
-    except (AttributeError, yaml.scanner.ScannerError) as exception:
+    except (AttributeError, yaml.scanner.ScannerError) as exception: # type: ignore
 
         log(ctx, f"Invalid YAML file format in {repos_to_convert_file_path}, please check the structure matches the format in the README.md. Exception: {type(exception)}, {exception.args}, {exception}", "error")
         exit(2)
 
-    ctx.repos = sanitize_repos_dict(ctx)
+    sanitize_repos_dict(ctx)
 
     log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
     log(ctx, f"Repos to convert: {ctx.repos}", "debug")
 
 
-def sanitize_repos_dict(ctx: Context) -> dict:
+def sanitize_repos_dict(ctx: Context) -> None:
+    """Middle layer function to abstract return type ambiguity"""
 
     repos = {}
     repos = sanitize_repos_to_convert(ctx, ctx.repos)
 
     # sanitize_repos_to_convert() uses recursion and can return many different types, but ends with a dict
-    return repos # type: ignore
+    ctx.repos = repos # type: ignore
 
 
 def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=False):
-    """Sanitize inputs to ensure they are the correct type."""
+    """Recursive function to sanitize inputs of arbitrary types, to ensure they are returned as the correct type."""
 
     # Uses recursion to depth-first-search through the repos_dict dictionary, with arbitrary depths, keys, and value types    # Take in the repos_dict
     # DFS traverse the dictionary

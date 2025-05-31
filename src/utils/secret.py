@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 # Secrets handling
 
-
 # Import repo-converter modules
 from utils.context import Context
 from utils.logger import log
 
 
-def get_secrets_from_repos_to_convert(repos_to_convert_dict):
-    secrets = set()
-    return frozenset(secrets)
-
-def add(ctx: Context, secret):
+def add(ctx: Context, secret) -> None:
     """Add a secret to the set of secrets, as a string"""
 
     ctx.secrets.add(str(secret))

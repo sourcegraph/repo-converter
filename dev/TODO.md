@@ -3,8 +3,6 @@
 ## Rearchitect
 
     # Get it compiling / working
-        # repos_to_convert.py rethink how sanitization / secrets are added to set
-        # Take Amp's suggestion of making better use of Python-native logging
         # Object-oriented design where it makes sense
 
     # Parallelism
@@ -17,6 +15,8 @@
                 # Then start a new child process
             # Smart way
                 # Queue?
+
+    # Timeouts
 
 
 ## Config file

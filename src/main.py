@@ -49,13 +49,10 @@ def main() -> int:
         # Load the repos to convert from file, in case the file has been changed while the container is running
         repos.load_from_file(ctx)
 
-        # # Add the secrets from the repos to convert file to the secrets set
-        # secrets.add(secret.get_secrets_from_repos_to_convert(repos_to_convert_dict))
-
         # Tidy up zombie processes from the previous run through this loop
         cmd.status_update_and_cleanup_zombie_processes(ctx)
 
-        # Disable git safe directory, to workaround "dubious ownership" errors
+        # Disable git safe directory, to work around "dubious ownership" errors
         git.git_config_safe_directory(ctx)
 
         # Run the main application logic

@@ -1,4 +1,3 @@
-
 allura:
   type: SVN
   svn-repo-code-root: https://svn.apache.org/repos/asf/allura
@@ -98,6 +97,7 @@ falcon:
   svn-repo-code-root: https://svn.apache.org/repos/asf/falcon
   code-host-name: svn.apache.org
   git-org-name: asf
+  layout: standard
 
 fundraising:
   type: SVN
@@ -260,6 +260,18 @@ xmlbeans:
   svn-repo-code-root: https://svn.apache.org/repos/asf/xmlbeans
   code-host-name: svn.apache.org
   git-org-name: asf
+  layout: standard
+  fetch-batch-size: 100
+
+xml-beans:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/xmlbeans
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+  fetch-batch-size: 2
+  username: test
+  password: "12345678"
 
 zest:
   type: SVN

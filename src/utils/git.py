@@ -200,4 +200,4 @@ def cleanup_branches_and_tags(ctx: Context, local_repo_path, cmd_git_default_bra
             packed_refs_file.write(f"{line}\n")
 
     # Reset the default branch
-    cmd.subprocess_run(cmd_git_default_branch)
+    cmd.subprocess_run(ctx, cmd_git_default_branch)
