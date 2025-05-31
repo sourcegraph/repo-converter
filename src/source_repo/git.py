@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # Handle repository operations for cloning Git repos
 
+# Import repo-converter modules
 from .base import Repo
+from utils.context import Context
+from utils.logger import log
+
 
 class GitRepo(Repo):
     """Class for Git repository operations."""
@@ -18,5 +22,5 @@ class GitRepo(Repo):
         pass
 
 
-def clone_git_repos():
-    log("Cloning Git repos function not implemented yet", "warning")
+def clone_git_repos(ctx: Context):
+    log(ctx, "Cloning Git repos function not implemented yet", "warning")

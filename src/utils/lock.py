@@ -1,5 +1,13 @@
+# Import repo-converter modules
+from utils.context import Context
+from utils.logger import log
+from utils import cmd
 
-def check_lock_files(args, process_dict):
+# Import Python standard modules
+import subprocess
+import os
+
+def check_lock_files(ctx: Context, args, process_dict):
 
     return_value                = False
     repo_path                   = args[2] # [ "git", "-C", local_repo_path, "gc" ]
@@ -37,14 +45,14 @@ def check_lock_files(args, process_dict):
                 except UnicodeDecodeError as exception:
                     lock_file_content = exception
 
-                log(f"pid {pid} failed; {process} failed to start due to finding a lock file in the repo at {lock_file_path}, but no other process is running with {process_command}; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
+                log(ctx, f"pid {pid} failed; {process} failed to start due to finding a lock file in the repo at {lock_file_path}, but no other process is running with {process_command}; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
                 cmd_rm_lock_file = ["rm", "-f", lock_file_path]
-                subprocess_run(cmd_rm_lock_file)
+                cmd.subprocess_run(cmd_rm_lock_file)
 
                 return_value = True
 
             except subprocess.CalledProcessError as exception:
-                log(f"Failed to rm -f lock file at {lock_file_path} with exception: {type(exception)}, {exception.args}, {exception}", "error")
+                log(ctx, f"Failed to rm -f lock file at {lock_file_path} with exception: {type(exception)}, {exception.args}, {exception}", "error")
 
     return return_value

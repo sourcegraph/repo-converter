@@ -3,20 +3,24 @@
 
 # Import repo-converter modules
 from utils.logger import log
+from utils.context import Context
+from utils import lock
 
 # Import Python standard modules
 from datetime import datetime, timedelta
 import os
+import signal
 import subprocess
+import textwrap
 
 # Import third party modules
 import psutil
 
 
-def run(command, cwd=None):
+def run(ctx: Context, command, cwd=None):
     """Run a shell command and return the output."""
 
-    log(f"Running command: {str(command)}", "DEBUG")
+    log(ctx, f"Running command: {str(command)}", "DEBUG")
 
 
 def get_pid_uptime(pid:int = 1) -> timedelta | None:
@@ -26,20 +30,19 @@ def get_pid_uptime(pid:int = 1) -> timedelta | None:
 
     try:
 
-        pid_int                 = int(pid)
-        pid_create_time         = psutil.Process(pid_int).create_time()
+        pid_create_time         = psutil.Process(pid).create_time()
         pid_start_datetime      = datetime.fromtimestamp(pid_create_time)
         pid_uptime_timedelta    = datetime.now() - pid_start_datetime
         pid_uptime_seconds      = pid_uptime_timedelta.total_seconds()
         pid_uptime              = timedelta(seconds=pid_uptime_seconds)
 
     except psutil.NoSuchProcess:
-        pass
+        return None
 
     return pid_uptime
 
 
-def subprocess_run(args, password=None, echo_password=None, quiet=False):
+def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=False):
 
     return_dict                         = {}
     return_dict["returncode"]           = 1
@@ -64,7 +67,7 @@ def subprocess_run(args, password=None, echo_password=None, quiet=False):
 
         # Log a starting message
         status_message = "started"
-        print_process_status(process_dict, status_message)
+        print_process_status(ctx, process_dict, status_message)
 
         # If password is provided to this function, feed it into the subprocess' stdin pipe
         # communicate() also waits for the process to finish
@@ -110,12 +113,12 @@ def subprocess_run(args, password=None, echo_password=None, quiet=False):
 
         # There's a high chance it was caused by one of the lock files
         # If check_lock_files successfully cleared a lock file,
-        if check_lock_files(args, process_dict):
+        if lock.check_lock_files(args, process_dict):
 
             # Change the log_level to debug so the failed process doesn't log an error in print_process_status()
             log_level = "debug"
 
-    print_process_status(process_dict, status_message, str(truncated_subprocess_output_to_log), log_level)
+    print_process_status(ctx, process_dict, status_message, str(truncated_subprocess_output_to_log), log_level)
 
     return_dict["end_time"] = datetime.now()
     get_subprocess_run_time(return_dict)
@@ -145,7 +148,7 @@ def truncate_subprocess_output(subprocess_output):
     return subprocess_output
 
 
-def print_process_status(process_dict = {}, status_message = "", std_out = "", log_level = "debug"):
+def print_process_status(ctx: Context, process_dict = {}, status_message = "", std_out = "", log_level = "debug"):
 
     log_message = ""
 
@@ -217,10 +220,10 @@ def print_process_status(process_dict = {}, status_message = "", std_out = "", l
     except psutil.NoSuchProcess:
         log_message = f"pid {pid}; finished on status check"
 
-    log(log_message, log_level)
+    log(ctx, log_message, log_level)
 
 
-def get_subprocess_run_time(process_dict):
+def get_subprocess_run_time(ctx: Context, process_dict) -> None:
 
     run_time = None
 
@@ -236,14 +239,14 @@ def get_subprocess_run_time(process_dict):
 
     else:
 
-        log(f"process_dict is missing a start_time: {process_dict}", "debug")
+        log(ctx, f"process_dict is missing a start_time: {process_dict}", "debug")
 
     if run_time:
 
         process_dict["run_time"] = timedelta(seconds=run_time.total_seconds())
 
 
-def status_update_and_cleanup_zombie_processes(child_procs):
+def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
 
     # The current approach should return the same list of processes as just ps -ef when a Docker container runs this script as the CMD (pid 1)
 
@@ -277,7 +280,7 @@ def status_update_and_cleanup_zombie_processes(child_procs):
 
         except psutil.NoSuchProcess as exception:
 
-            log(f"Caught an exception when listing parents of processes: {exception}", "debug")
+            log(ctx, f"Caught an exception when listing parents of processes: {exception}", "debug")
 
     # Remove this script's PID so it's not waiting on itself
     process_pids_to_wait_for.discard(os_this_pid)
@@ -324,29 +327,27 @@ def status_update_and_cleanup_zombie_processes(child_procs):
         if "pid" not in process_dict.keys():
             process_dict["pid"] = process_pid_to_wait_for
 
-        print_process_status(process_dict, status_message)
-
-    return child_procs
+        print_process_status(ctx, process_dict, status_message)
 
 
 # Signal handling
-def register_signal_handler():
+def register_signal_handler(ctx: Context):
 
     try:
 
-        log(f"Registering signal handler","debug")
+        log(ctx, f"Registering signal handler","debug")
 
         signal.signal(signal.SIGINT, signal_handler)
 
     except Exception as exception:
 
-        log(f"Registering signal handler failed with exception: {type(exception)}, {exception.args}, {exception}","error")
+        log(ctx, f"Registering signal handler failed with exception: {type(exception)}, {exception.args}, {exception}","error")
 
 
-def signal_handler(incoming_signal, frame):
+def signal_handler(ctx: Context, incoming_signal, frame):
 
-    log(f"Received signal: {incoming_signal} frame: {frame}","debug")
+    log(ctx, f"Received signal: {incoming_signal} frame: {frame}","debug")
 
     signal_name = signal.Signals(incoming_signal).name
 
-    log(f"Handled signal {signal_name}: {incoming_signal} frame: {frame}","debug")
+    log(ctx, f"Handled signal {signal_name}: {incoming_signal} frame: {frame}","debug")

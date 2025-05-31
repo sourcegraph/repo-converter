@@ -20,17 +20,20 @@
 
 # Import repo-converter modules
 from utils import cmd
+from utils.context import Context
 from utils.logger import log
 
 
 git_config_namespace = "repo-converter"
 
-def git_config_safe_directory():
+
+def git_config_safe_directory(ctx: Context) -> None:
     """Configure git to trust all directories."""
 
     cmd_git_safe_directory = ["git", "config", "--system", "--replace-all", "safe.directory", "\"*\""]
 
-    cmd.run(cmd_git_safe_directory)
+    cmd.run(ctx, cmd_git_safe_directory)
+
 
 def get_config(repo, key):
 
@@ -38,12 +41,14 @@ def get_config(repo, key):
 
     return value
 
+
 def set_config(repo, key, value):
     pass
 
-def deduplicate_git_config_file(git_config_file_path):
 
-    log(f"deduplicate_git_config_file; git_config_file_path: {git_config_file_path}", "debug")
+def deduplicate_git_config_file(ctx: Context, git_config_file_path) -> None:
+
+    log(ctx, f"deduplicate_git_config_file; git_config_file_path: {git_config_file_path}", "debug")
 
     # Use a set to store lines already seen
     # as it deduplicates lines automatically
@@ -57,7 +62,7 @@ def deduplicate_git_config_file(git_config_file_path):
         # Read the whole file's contents into memory
         config_file_data = config_file.readlines()
 
-        log(f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data)}", "debug")
+        log(ctx, f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data)}", "debug")
 
         # Move the file pointer back to the beginning of the file to start overwriting from there
         config_file.seek(0)
@@ -77,12 +82,12 @@ def deduplicate_git_config_file(git_config_file_path):
         # Delete the rest of the file's contents
         config_file.truncate()
 
-        log(f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
+        log(ctx, f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
 
 
 
 
-def cleanup_branches_and_tags(local_repo_path, cmd_git_default_branch, git_default_branch):
+def cleanup_branches_and_tags(ctx: Context, local_repo_path, cmd_git_default_branch, git_default_branch) -> None:
 
     # Git svn and git tfs both create converted branches as remote branches, so the Sourcegraph clone doesn't show them to users
     # Need to convert the remote branches to local branches, so Sourcegraph users can see them
@@ -122,7 +127,7 @@ def cleanup_branches_and_tags(local_repo_path, cmd_git_default_branch, git_defau
 
         except Exception as exception:
 
-            log(f"Exception while cleaning branches and tags: {exception}", "error")
+            log(ctx, f"Exception while cleaning branches and tags: {exception}", "error")
             continue
 
         # If the path is a local tag, then delete it
@@ -175,7 +180,7 @@ def cleanup_branches_and_tags(local_repo_path, cmd_git_default_branch, git_defau
 
         else:
 
-            log(f"Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
+            log(ctx, f"Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
             output_list_of_strings_and_line_number_tuples.append([str(input_lines[i]), i])
 
     # Sort by the path in the tuple
@@ -195,4 +200,4 @@ def cleanup_branches_and_tags(local_repo_path, cmd_git_default_branch, git_defau
             packed_refs_file.write(f"{line}\n")
 
     # Reset the default branch
-    subprocess_run(cmd_git_default_branch)
+    cmd.subprocess_run(cmd_git_default_branch)

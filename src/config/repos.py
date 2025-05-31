@@ -2,9 +2,9 @@
 # Parse YAML configuration file
 
 # Import repo-converter modules
-import yaml
-from utils.logger import log
 from utils import secret
+from utils.context import Context
+from utils.logger import log
 
 # Import Python standard modules
 from sys import exit
@@ -12,12 +12,11 @@ from sys import exit
 # Import third party modules
 import yaml # https://pyyaml.org/wiki/PyYAMLDocumentation
 
-def load_from_file(env_vars):
+
+def load_from_file(ctx: Context) -> None:
     """Load and parse YAML configuration file"""
 
-    repos_to_convert_file_path = env_vars["REPOS_TO_CONVERT"]
-
-    repos_to_convert_dict = {}
+    repos_to_convert_file_path = ctx.env_vars["REPOS_TO_CONVERT"]
 
     # Parse the file
     try:
@@ -26,35 +25,37 @@ def load_from_file(env_vars):
         with open(repos_to_convert_file_path, "r") as repos_to_convert_file:
 
             # This should return a dict
-            repos_to_convert_dict = yaml.safe_load(repos_to_convert_file)
+            ctx.repos = yaml.safe_load(repos_to_convert_file)
 
     except FileNotFoundError:
 
-        log(f"File not found at {repos_to_convert_file_path}", "error")
+        log(ctx, f"File not found at {repos_to_convert_file_path}", "error")
         exit(1)
 
     except (AttributeError, yaml.scanner.ScannerError) as exception:
 
-        log(f"Invalid YAML file format in {repos_to_convert_file_path}, please check the structure matches the format in the README.md. Exception: {type(exception)}, {exception.args}, {exception}", "error")
+        log(ctx, f"Invalid YAML file format in {repos_to_convert_file_path}, please check the structure matches the format in the README.md. Exception: {type(exception)}, {exception.args}, {exception}", "error")
         exit(2)
 
-    repos_to_convert_dict = sanitize_repos_to_convert(repos_to_convert_dict)
+    ctx.repos = sanitize_repos_dict(ctx)
 
-    log(f"Parsed {len(repos_to_convert_dict)} repos from {repos_to_convert_file_path}", "info")
-    log(f"Repos to convert: {repos_to_convert_dict}", "debug")
-
-
-    return repos_to_convert_dict
+    log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
+    log(ctx, f"Repos to convert: {ctx.repos}", "debug")
 
 
-def sanitize_repos_to_convert(input_value, input_key="", recursed=False):
+def sanitize_repos_dict(ctx: Context) -> dict:
+
+    repos = {}
+    repos = sanitize_repos_to_convert(ctx, ctx.repos)
+
+    # sanitize_repos_to_convert() uses recursion and can return many different types, but ends with a dict
+    return repos # type: ignore
+
+
+def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=False):
     """Sanitize inputs to ensure they are the correct type."""
 
-    # Uses recursion to depth-first-search through the repos_dict dictionary, with arbitrary depths, keys, and value types
-
-    # log(f"sanitize_repos_to_convert; starting; type(input_key): {type(input_key)}, input_key: {input_key}, type(input_value): {type(input_value)}, input_value: {input_value}, recursed: {recursed}", "info")
-
-    # Take in the repos_dict
+    # Uses recursion to depth-first-search through the repos_dict dictionary, with arbitrary depths, keys, and value types    # Take in the repos_dict
     # DFS traverse the dictionary
     # Get the key:value pairs
     # Convert the keys to strings
@@ -83,34 +84,25 @@ def sanitize_repos_to_convert(input_value, input_key="", recursed=False):
 
     if isinstance(input_value, dict):
 
-        # log(f"sanitize_repos_to_convert(): received dict with key: {input_key} and dict: {input_value}", "info")
-
         output = {}
 
         for input_value_key in input_value.keys():
-
-            # log(f"sanitize_repos_to_convert(): key   type: {type(input_key)}; key: {input_key}", "info")
-            # log(f"sanitize_repos_to_convert(): value type: {type(input[input_key])}; value: {input[input_key]}", "info")
 
             # Convert the key to a string
             output_key = str(input_value_key)
 
             # Recurse back into this function to handle the values of this dict
-            output[output_key] = sanitize_repos_to_convert(input_value[input_value_key], input_value_key, True)
+            output[output_key] = sanitize_repos_to_convert(ctx, input_value[input_value_key], input_value_key, True)
 
     # If this function was called with a list
     elif isinstance(input_value, list):
-
-        # log(f"sanitize_repos_to_convert(): received list with key: {input_key} and list: {input_value}", "info")
 
         output = []
 
         for input_list_item in input_value:
 
-            # log(f"sanitize_repos_to_convert(): type(input_list_item): {type(input_list_item)}; input_list_item: {input_list_item}", "info")
-
             # Recurse back into this function to handle the values of this list
-            output.append(sanitize_repos_to_convert(input_list_item, input_key, True))
+            output.append(sanitize_repos_to_convert(ctx, input_list_item, input_key, True))
 
     else:
 
@@ -141,7 +133,7 @@ def sanitize_repos_to_convert(input_value, input_key="", recursed=False):
                 type_warning_message += "will attempt to convert it"
 
                 # Log the warning message
-                log(type_warning_message, "warning")
+                log(ctx, type_warning_message, "warning")
 
                 # Cast the value to the correct type
                 # This one chokes pretty hard, need to add a try except block
@@ -154,18 +146,16 @@ def sanitize_repos_to_convert(input_value, input_key="", recursed=False):
 
                 else:
                     output = str(input_value)
-                    # log(f"output = str(input_value): {output}", "info")
 
             # Now that the keys and values are the correct type, check if it's a password
             if input_key == "password":
 
                 # Add the password value to the passwords set, to be redacted from logs later
-                secret.add(input_value)
+                secret.add(ctx, input_value)
 
         else:
 
-            log(f"No type check for {input_key}: {input_value} variable in REPOS_TO_CONVERT file", "warning")
+            log(ctx, f"No type check for {input_key}: {input_value} variable in REPOS_TO_CONVERT file", "warning")
             output = input_value
 
-    # log(f"sanitize_repos_to_convert; ending; type(output): {type(output)}, output: {output}", "info")
     return output

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # Environment variable handling
 
+# Note: This is called before the logger is instantiated
+
 # Import Python standard modules
 from os import environ
 

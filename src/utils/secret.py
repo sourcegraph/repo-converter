@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 # Secrets handling
 
-# Store the set of secrets as a global variable in this module
-secrets_set = set()
+
+# Import repo-converter modules
+from utils.context import Context
+from utils.logger import log
+
 
 def get_secrets_from_repos_to_convert(repos_to_convert_dict):
     secrets = set()
     return frozenset(secrets)
 
-def add(secret):
+def add(ctx: Context, secret):
     """Add a secret to the set of secrets, as a string"""
 
-    global secrets_set
-    secrets_set.add(str(secret))
+    ctx.secrets.add(str(secret))
 
 
-def redact(input):
+def redact(ctx: Context, input):
     """Redact secrets from an input."""
 
     # Handle different types
     # Return the same type this function was given
     # If input is a dict or list, uses recursion to depth-first-search through the values, with arbitrary depths, keys, and value types
 
-    global secrets_set
+    secrets_set = ctx.secrets
 
     # If the message is None, or the secrets_set is empty, or none of the secrets in the secrets set are in the input, then just return the input as is
     if (
@@ -81,7 +83,7 @@ def redact(input):
         # Moving the import statement here, to avoid a circular import error
         #  ImportError: cannot import name 'log' from partially initialized module 'utils.logging' (most likely due to a circular import) (/sourcegraph/repo-converter/utils/logging.py
         from utils.logger import log
-        log(f"redact() doesn't handle input of type {type(input)}","error")
+        log(ctx, f"redact() doesn't handle input of type {type(input)}","error")
 
         # Set it to None to just break the code instead of leak the secret
         redacted_input = None

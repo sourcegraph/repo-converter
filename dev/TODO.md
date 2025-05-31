@@ -3,7 +3,6 @@
 ## Rearchitect
 
     # Get it compiling / working
-        # Imports
         # repos_to_convert.py rethink how sanitization / secrets are added to set
         # Take Amp's suggestion of making better use of Python-native logging
         # Object-oriented design where it makes sense
@@ -12,6 +11,12 @@
         # Re-evaluate use of os.fork, if multi-processing has a better way to spawn child procs, clean up zombies, etc.
         # Read config per server
         # Enforce limit per server
+            # Dumb way
+                # Check the number of child procs every second
+                # If fewer than [limit] processes are running
+                # Then start a new child process
+            # Smart way
+                # Queue?
 
 
 ## Config file
