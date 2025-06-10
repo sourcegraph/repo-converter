@@ -1,0 +1,42 @@
+name: Podman build and push to GitHub Container Registry
+
+on:
+  workflow_dispatch: # Creates button in web UI to run the workflow manually
+  push: # All pushes
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - edited
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set env vars
+        run: |
+          BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          BUILD_COMMIT="$(git rev-parse --short HEAD)"
+          BUILD_DIRTY="$(git diff --quiet && echo 'False' || echo 'True')"
+          BUILD_DATE="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          BUILD_TAG="$(git tag --points-at HEAD)"
+          ENV_FILE="build/.env"
+          {
+              echo "BUILD_BRANCH=${BUILD_BRANCH}"
+              echo "BUILD_COMMIT=${BUILD_COMMIT}"
+              echo "BUILD_DATE=${BUILD_DATE}"
+              echo "BUILD_DIRTY=${BUILD_DIRTY}"
+              echo "BUILD_TAG=${BUILD_TAG}"
+          } > "$ENV_FILE"
+
+      - name: Log in to container registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u "${{ github.repository_owner }}" --password-stdin ghcr.io
+
+      - name: Build and push image
+        run: |
+          podman build -f build/Dockerfile --format docker --platform linux/amd64 -t ghcr.io/sourcegraph/repo-converter:latest .
+          podman push ghcr.io/sourcegraph/repo-converter:latest

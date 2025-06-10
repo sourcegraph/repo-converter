@@ -1,0 +1,28 @@
+# Overrides for customer1
+
+# See Docker Compose docs for why a separate override file is required
+# https://docs.docker.com/compose/how-tos/multiple-compose-files/include/#include-and-overrides
+
+services:
+
+  repo-converter:
+    image: ghcr.io/sourcegraph/repo-converter:latest
+    volumes:
+      - ../../../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
+      - ../../../dev/toprc:/root/.config/procps/toprc
+      - ../../../../src-serve-root/:/sourcegraph/src-serve-root
+    environment:
+      - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
+      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
+
+  src-serve-git:
+    container_name: src-serve-git-ubuntu.local
+    volumes:
+      - ../../../../src-serve-root/:/sourcegraph/src-serve-root:ro
+
+networks:
+  default:
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.20.2.0/27"

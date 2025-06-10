@@ -1,3 +1,0 @@
-GitPython>=3.1.44
-PyYAML>=6.0.2
-psutil>=7.0.0

@@ -1,0 +1,280 @@
+allura:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/allura
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+ambari:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/ambari
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+
+ant:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/ant
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+apr:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/apr
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+beam:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/beam
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+board:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/board
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+bugs:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/bugs
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+cocoon:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/cocoon
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+comdev:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/comdev
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+commons:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/commons
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+crunch:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/crunch/site
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+
+curator:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/curator/site
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+
+datafu:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/datafu/site
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+db:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/db
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+
+eagle:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/eagle
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+falcon:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/falcon
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+
+fundraising:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/fundraising
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+httpcomponents:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/httpcomponents
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+httpd:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/httpd
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+infrastructure:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/infrastructure
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+jackrabbit:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/jackrabbit
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+johnzon:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/johnzon
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+karaf:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/karaf
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+knox:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/knox
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+kylin:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/kylin
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+lens:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/lens
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+lucene:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/lucene
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+manifoldcf:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/manifoldcf
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+maven:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/maven
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+openoffice:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/openoffice
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+parquet:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/parquet/site
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+pdfbox:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/pdfbox
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+perl:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/perl
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+phoenix:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/phoenix
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+poi:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/poi
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+reef:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/reef/site
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+spamassassin:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/spamassassin
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+subversion:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/subversion
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+tomcat:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/tomcat
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+twill:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/twill
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+uima:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/uima
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+xerces:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/xerces
+  code-host-name: svn.apache.org
+  git-org-name: asf
+
+xmlbeans:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/xmlbeans
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+  fetch-batch-size: 100
+
+xml-beans:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/xmlbeans
+  code-host-name: svn.apache.org
+  git-org-name: asf
+  layout: standard
+  fetch-batch-size: 2
+  username: test
+  password: "12345678"
+
+zest:
+  type: SVN
+  svn-repo-code-root: https://svn.apache.org/repos/asf/zest/site
+  code-host-name: svn.apache.org
+  git-org-name: asf

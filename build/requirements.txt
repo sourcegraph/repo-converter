@@ -1,0 +1,4 @@
+GitPython
+PyYAML
+psutil
+python-dotenv

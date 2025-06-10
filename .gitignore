@@ -1,13 +1,13 @@
 # Sourcegraph
+*.code-workspace
 config/cloud-agent-config.yaml
 config/cloud-agent-service-account-key.json
 config/config.yaml
-config/service-account-key.json
 config/repos-to-convert.yaml
-src-serve-root
-svn-repo-stats/*.csv
-svn-repo-stats/repos.txt
-svn-repo-stats/tmp-repo-metadata/
+config/service-account-key.json
+dev/stats/repos.txt
+logs/
+src-serve-root/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -18,23 +18,23 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+.eggs/
+.installed.cfg
 .Python
+*.egg
+*.egg-info/
 develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
 lib/
 lib64/
+MANIFEST
 parts/
 sdist/
+share/python-wheels/
 var/
 wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -47,19 +47,19 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
+.cache
 .coverage
 .coverage.*
-.cache
-nosetests.xml
-coverage.xml
+.hypothesis/
+.nox/
+.pytest_cache/
+.tox/
 *.cover
 *.py,cover
-.hypothesis/
-.pytest_cache/
 cover/
+coverage.xml
+htmlcov/
+nosetests.xml
 
 # Translations
 *.mo
@@ -67,13 +67,13 @@ cover/
 
 # Django stuff:
 *.log
-local_settings.py
 db.sqlite3
 db.sqlite3-journal
+local_settings.py
 
 # Flask stuff:
-instance/
 .webassets-cache
+instance/
 
 # Scrapy stuff:
 .scrapy
@@ -132,11 +132,11 @@ celerybeat.pid
 # Environments
 .env
 .venv
-env/
-venv/
-ENV/
 env.bak/
+env/
+ENV/
 venv.bak/
+venv/
 
 # Spyder project settings
 .spyderproject

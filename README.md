@@ -41,6 +41,6 @@ Docker compose also allows for easier upgrades, troubleshooting, monitoring, log
     - There are docker-compose.yaml and override files in a few different directories in this repo, separated by use case, so that each use case only needs to run `docker compose up -d` in one directory, and not fuss around with `-f` paths.
     - The only difference between the docker-compose-override.yaml files in host-ubuntu vs host-wsl is the src-serve-git container's name, which is how we get a separate `dnsName` for each.
     - If you're using the repo-converter:
-        - If you're using the pre-built images, `cd ./repo-converter && docker compose up -d`
-        - If you're building the Docker images, `cd ./repo-converter/build && docker compose up -d --build`
+        - If you're using the pre-built images, `cd ./deploy && docker compose up -d`
+        - If you're building the Docker images, `cd ./build && docker compose up -d --build`
         - Either of these will start all 3 containers: cloud-agent, src-serve-git, and the repo-converter
