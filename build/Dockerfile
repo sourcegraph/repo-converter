@@ -86,7 +86,7 @@ COPY build/requirements.txt build/requirements.txt
 COPY src/ src/
 
 # Copy the dotenv file into the image
-# COPY build/.env build/.env
+COPY build/.env build/.env
 
 # Switching to podman build
 RUN --mount=type=cache,target=/root/.cache/pip \
