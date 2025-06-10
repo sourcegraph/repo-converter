@@ -22,5 +22,5 @@ jobs:
 
       - name: Build and push image
         run: |
-          podman build -f build/Dockerfile --format docker --platform linux/amd64,linux/arm64 -t ghcr.io/sourcegraph/repo-converter:latest .
+          podman build -f build/Dockerfile --format docker --platform linux/amd64 -t ghcr.io/sourcegraph/repo-converter:latest .
           podman push ghcr.io/sourcegraph/repo-converter:latest
