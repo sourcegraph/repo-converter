@@ -83,7 +83,7 @@ then
     podman compose up -d --remove-orphans
 
     # Clear the terminal
-    clear
+    # clear
 
     # Follow the container logs
     podman compose logs repo-converter -f
