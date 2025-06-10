@@ -70,7 +70,7 @@ def main():
         time.sleep(interval)
 
         # If MAX_CYCLES was defined, and if we've reached it, then exit
-        if max_cycles and ctx.run_count >= max_cycles:
+        if max_cycles > 0 and ctx.run_count >= max_cycles:
             log(ctx, f"Reached MAX_CYCLES={max_cycles}, exiting loop"," warning")
             break
 

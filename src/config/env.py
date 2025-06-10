@@ -29,7 +29,7 @@ def load_env_vars():
     env_vars["LOG_LEVEL"]                               = str(environ.get("LOG_LEVEL"                               , "INFO" ))
     env_vars["MAX_CONCURRENT_CONVERSIONS_TOTAL"]        = int(environ.get("MAX_CONCURRENT_CONVERSIONS_TOTAL"        , 10     ))
     env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]   = int(environ.get("MAX_CONCURRENT_CONVERSIONS_PER_SERVER"   , 10     ))
-    env_vars["MAX_CYCLES"]                              = int(environ.get("MAX_CYCLES"                              , ""     ))
+    env_vars["MAX_CYCLES"]                              = int(environ.get("MAX_CYCLES"                              , 0      ))
     env_vars["MAX_RETRIES"]                             = int(environ.get("MAX_RETRIES"                             , 3      ))
     env_vars["REPO_CONVERTER_INTERVAL_SECONDS"]         = int(environ.get("REPO_CONVERTER_INTERVAL_SECONDS"         , 3600   ))
     # Path inside the container to find this file, only change to match if the right side of the volume mapping changes
