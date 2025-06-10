@@ -2,12 +2,6 @@
 
 ## Rearchitect
 
-    # Get GitHub action builds working
-
-    # Test build in customer environment
-
-    # Add exceptions for `FileNotFoundError: [Errno 2] No such file or directory: '/proc/3772/cwd'`
-
     # Parallelism
         # Re-evaluate use of os.fork, if multi-processing has a better way to spawn child procs, clean up zombies, etc.
         # Read config per server

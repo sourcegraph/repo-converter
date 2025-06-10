@@ -38,6 +38,7 @@ def get_pid_uptime(pid:int = 1) -> timedelta | None:
 
 def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=False):
 
+    process_dict                        = {}
     return_dict                         = {}
     return_dict["output"]               = None
     return_dict["returncode"]           = 1
@@ -57,7 +58,13 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         )
 
         # Get the process attributes from the OS
-        process_dict = subprocess_to_run.as_dict()
+        try:
+            process_dict = subprocess_to_run.as_dict()
+
+        # If the process ran so quickly that the psutil object doesn't have time to grab the dict,
+        # it raises a FileNotFoundError exception
+        except FileNotFoundError as exception:
+            log(ctx, "Process finished before getting the psutil.dict", "debug")
 
         # Log a starting message
         status_message = "started"
