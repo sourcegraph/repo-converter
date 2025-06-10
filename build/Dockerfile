@@ -90,7 +90,7 @@ COPY . .
 # Switching to podman build
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m pip install --upgrade pip && \
-    python3 -m pip install --root-user-action=ignore -r requirements.txt
+    python3 -m pip install --root-user-action=ignore -r build/requirements.txt
 
 # Add OCI annotations to image
 LABEL org.opencontainers.image.authors="Sourcegraph" \

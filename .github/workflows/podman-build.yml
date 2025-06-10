@@ -10,7 +10,7 @@ on:
       - edited
 
 jobs:
-  buildx:
+  build:
     runs-on: ubuntu-latest
 
     steps:
