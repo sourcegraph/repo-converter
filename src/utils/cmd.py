@@ -39,7 +39,9 @@ def get_pid_uptime(pid:int = 1) -> timedelta | None:
 def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=False):
 
     process_dict                        = {}
+    process_dict["args"]                = args
     return_dict                         = {}
+    return_dict["args"]                 = args
     return_dict["output"]               = None
     return_dict["returncode"]           = 1
     return_dict["start_time"]           = datetime.now()
@@ -61,22 +63,22 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         try:
             process_dict = subprocess_to_run.as_dict()
 
+            # Log a starting message
+            status_message = "started"
+            print_process_status(ctx, process_dict, status_message)
+
+            # If password is provided to this function, feed it into the subprocess' stdin pipe
+            # communicate() also waits for the process to finish
+            if echo_password:
+                subprocess_output = subprocess_to_run.communicate(password)
+
+            else:
+                subprocess_output = subprocess_to_run.communicate()
+
         # If the process ran so quickly that the psutil object doesn't have time to grab the dict,
         # it raises a FileNotFoundError exception
         except FileNotFoundError as exception:
-            log(ctx, "Process finished before getting the psutil.dict", "debug")
-
-        # Log a starting message
-        status_message = "started"
-        print_process_status(ctx, process_dict, status_message)
-
-        # If password is provided to this function, feed it into the subprocess' stdin pipe
-        # communicate() also waits for the process to finish
-        if echo_password:
-            subprocess_output = subprocess_to_run.communicate(password)
-
-        else:
-            subprocess_output = subprocess_to_run.communicate()
+            log(ctx, f"Process finished before getting the psutil.dict; args: {args}", "debug")
 
         # Set the output to return
         subprocess_output = subprocess_output[0].splitlines()
