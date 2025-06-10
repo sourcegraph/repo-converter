@@ -72,24 +72,24 @@ RUN apt-get update && \
 #     python3 -m pip install --upgrade pip && \
 #     python3 -m pip install -r requirements.txt
 
-WORKDIR /sourcegraph/repo-converter
-COPY build/requirements.txt .
-
-# Switching to podman build
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install --upgrade pip && \
-    python3 -m pip install --root-user-action=ignore -r requirements.txt
-
 # Create sourcegraph user
 # https://github.com/containers/podman/issues/4016
 # RUN useradd sourcegraph
 # USER sourcegraph
+
+WORKDIR /sourcegraph/repo-converter
+COPY build/requirements.txt .
 
 # Copy the source code into the image
 COPY src/ .
 
 # Copy the dotenv file into the image
 COPY build/.env .
+
+# Switching to podman build
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install --upgrade pip && \
+    python3 -m pip install --root-user-action=ignore -r requirements.txt
 
 # Add OCI annotations to image
 LABEL org.opencontainers.image.authors="Sourcegraph" \
