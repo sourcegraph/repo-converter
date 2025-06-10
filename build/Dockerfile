@@ -78,14 +78,20 @@ RUN apt-get update && \
 # USER sourcegraph
 
 WORKDIR /sourcegraph/repo-converter
-COPY . .
-# COPY build/requirements.txt .
 
-# # Copy the source code into the image
-# COPY src/ .
+# Copy the requirements file into the image
+COPY build/requirements.txt build/requirements.txt
 
-# # Copy the dotenv file into the image
-# COPY build/.env .
+# Copy the source code into the image
+COPY src/ src/
+
+# Copy the dotenv file into the image
+COPY build/.env build/.env
+
+RUN whoami
+RUN pwd
+RUN ls -al
+RUN ls -al *
 
 # Switching to podman build
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -103,4 +109,4 @@ LABEL org.opencontainers.image.authors="Sourcegraph" \
       org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter"
 
 # Start the container
-CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/main.py"]
+CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]

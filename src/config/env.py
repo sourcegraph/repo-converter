@@ -16,7 +16,8 @@ def load_env_vars():
     # Read the contents of the ./.env file (built into Docker image) into env vars
     # Do not overwrite any existing env vars with the same name,
     # so that env vars provided at container start time take precedence
-    load_dotenv()
+    dot_file_path="/sourcegraph/repo-converter/build/.env"
+    load_dotenv(dot_file_path)
 
     env_vars = {}
 
