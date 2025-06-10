@@ -1,12 +1,8 @@
-name: Build and Push Docker Image to GitHub Container Registry
+name: Docker build and push to GitHub Container Registry
 
 on:
-  workflow_dispatch: # Creates button in web UI to run the workflow manually, shouldn't be needed
-  push:
-    tags:
-      - '**'
-    branches:
-      - main
+  workflow_dispatch: # Creates button in web UI to run the workflow manually
+  push: # All pushes
   pull_request:
     types:
       - opened

@@ -90,5 +90,15 @@ COPY src/ .
 # Copy the dotenv file into the image
 COPY build/.env .
 
+# Add OCI annotations to image
+LABEL org.opencontainers.image.authors="Sourcegraph" \
+      org.opencontainers.image.title="repo-converter" \
+      org.opencontainers.image.description="Container for converting non-Git repos to Git" \
+      org.opencontainers.image.documentation="https://github.com/sourcegraph/repo-converter" \
+      org.opencontainers.image.base.name="docker.io/library/ubuntu" \
+      org.opencontainers.image.source="https://github.com/sourcegraph/repo-converter" \
+      org.opencontainers.image.vendor="Sourcegraph" \
+      org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter"
+
 # Start the container
 CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/main.py"]
