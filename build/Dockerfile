@@ -78,13 +78,14 @@ RUN apt-get update && \
 # USER sourcegraph
 
 WORKDIR /sourcegraph/repo-converter
-COPY build/requirements.txt .
+COPY . .
+# COPY build/requirements.txt .
 
-# Copy the source code into the image
-COPY src/ .
+# # Copy the source code into the image
+# COPY src/ .
 
-# Copy the dotenv file into the image
-COPY build/.env .
+# # Copy the dotenv file into the image
+# COPY build/.env .
 
 # Switching to podman build
 RUN --mount=type=cache,target=/root/.cache/pip \
