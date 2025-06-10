@@ -17,6 +17,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set env vars
+        run: |
+          BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          BUILD_COMMIT="$(git rev-parse --short HEAD)"
+          BUILD_DATE="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          BUILD_TAG="$(git tag --points-at HEAD)"
+          ENV_FILE="build/.env"
+          {
+              echo "BUILD_BRANCH=${BUILD_BRANCH}"
+              echo "BUILD_COMMIT=${BUILD_COMMIT}"
+              echo "BUILD_DATE=${BUILD_DATE}"
+              echo "BUILD_TAG=${BUILD_TAG}"
+          } > "$ENV_FILE"
+
       - name: Log in to container registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u "${{ github.repository_owner }}" --password-stdin ghcr.io
 

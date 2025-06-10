@@ -25,7 +25,6 @@ LC_ALL=C sort -u -o "$REQUIREMENTS_FILE" "$REQUIREMENTS_FILE"
 BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 BUILD_COMMIT="$(git rev-parse --short HEAD)"
 BUILD_DATE="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-BUILD_DIRTY="$(git diff --quiet && echo 'False' || echo 'True')"
 BUILD_TAG="$(git tag --points-at HEAD)"
 
 # File path to dotenv file to be copied into the image
@@ -36,7 +35,6 @@ ENV_FILE=".env"
     echo "BUILD_BRANCH=${BUILD_BRANCH}"
     echo "BUILD_COMMIT=${BUILD_COMMIT}"
     echo "BUILD_DATE=${BUILD_DATE}"
-    echo "BUILD_DIRTY=${BUILD_DIRTY}"
     echo "BUILD_TAG=${BUILD_TAG}"
 } > "$ENV_FILE"
 
