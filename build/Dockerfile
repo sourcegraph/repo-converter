@@ -72,9 +72,11 @@ RUN apt-get update && \
 #     python3 -m pip install --upgrade pip && \
 #     python3 -m pip install -r requirements.txt
 
+WORKDIR /sourcegraph/repo-converter
+COPY build/requirements.txt .
+
 # Switching to podman build
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=build/requirements.txt,target=requirements.txt,z \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --root-user-action=ignore -r requirements.txt
 
@@ -84,7 +86,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # USER sourcegraph
 
 # Copy the source code into the image
-WORKDIR /sourcegraph/repo-converter
 COPY src/ .
 
 # Copy the dotenv file into the image
