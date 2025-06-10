@@ -6,11 +6,11 @@
 services:
 
   repo-converter:
-    image: ghcr.io/sourcegraph/implementation-bridge-repo-converter:marc-amp-refactor
+    image: ghcr.io/sourcegraph/repo-converter:latest
     volumes:
-      - ../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
-      - ../config/toprc:/root/.config/procps/toprc
-      - ../../../../sg/src-serve-root/:/sourcegraph/src-serve-root
+      - ../../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
+      - ../../dev/toprc:/root/.config/procps/toprc
+      - /sg/src-serve-root/:/sourcegraph/src-serve-root
     environment:
       - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
@@ -18,7 +18,7 @@ services:
   src-serve-git:
     container_name: src-serve-git-ubuntu.local
     volumes:
-      - ../../../../sg/src-serve-root/:/sourcegraph/src-serve-root:ro
+      - /sg/src-serve-root/:/sourcegraph/src-serve-root:ro
 
 networks:
   default:
