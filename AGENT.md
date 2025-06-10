@@ -1,10 +1,12 @@
 # Agent Guidelines for Implementation Bridges Codebase
+- The purpose of this project is to convert repos from Subversion to Git
+- It runs in a Docker container
+- src/main.py is the entrypoint for the container
+- The usage of this project is described to users in `repo-converter/README.md`
 
 ## Build/Test Commands
-- Build and start all containers: `cd repo-converter/build && docker compose up -d --build`
-- View repo-converter logs: `cd repo-converter/build && ./build.sh logs`
-- Update requirements: `cd repo-converter/build && pipreqs --force --mode gt .`
-- Run single test: No tests in codebase
+- Build and start all containers: `cd repo-converter/build && ./build.sh`
+- Build and start all containers, and view repo-converter logs: `cd repo-converter/build && ./build.sh logs`
 
 ## Code Style Guidelines
 - Python version: 3.13.2
@@ -13,13 +15,7 @@
 - Error handling: Use try/except blocks with specific exception types
 - Logging: Use the custom `log()` function with appropriate levels
 - Functions: Snake case for function names. Add docstrings (not yet implemented but mentioned in TODOs)
-- Security: Use `redact_password()` before logging, if the input contains a password
+- Security: the log function calls the `redact()` function before logging, to ensure no credentials are leaked in logs
 - Documentation: Use Python best practices for docstrings
 - Environment variables: Set defaults with `os.environ.get("VAR", "default")`
 - Comments: Use `#` for comments, and add lots of comments
-
-The purpose of this script is to convert repos from Subversion to Git
-`repo-converter/build/run.py` is the only file in this repo which runs application code
-It runs in a Docker container, and is the entrypoint for the container
-
-The usage of this product is described to users in `repo-converter/README.md`
