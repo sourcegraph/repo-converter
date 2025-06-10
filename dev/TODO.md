@@ -6,6 +6,8 @@
 
     # Test build in customer environment
 
+    # Add exceptions for `FileNotFoundError: [Errno 2] No such file or directory: '/proc/3772/cwd'`
+
     # Parallelism
         # Re-evaluate use of os.fork, if multi-processing has a better way to spawn child procs, clean up zombies, etc.
         # Read config per server
@@ -17,8 +19,13 @@
             # Smart way
                 # Queue?
 
-    # Timeouts
+    # Add timeouts
 
+    # Env var for a map of usernames, passwords, and servers
+
+    # Wolfi base image for Docker / podman build
+    # Add git-to-p4 converter
+    # Run it in MSP, to build up our Perforce test depots from public OSS repos
 
 ## Config file
 
