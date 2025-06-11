@@ -3,7 +3,13 @@
 ## Rearchitect
 
     # Parallelism
-        # Re-evaluate use of os.fork, if multi-processing has a better way to spawn child procs, clean up zombies, etc.
+        # Re-evaluate use of psutil.Popen
+            # Google how to manage a concurrency limit in Python
+            # If Python has a better way to spawn child procs, clean up zombies, etc.
+            # Through Amp, we can do all things
+            # Find a good example repo, get it on S2, and use Deep Search to explain it
+
+
         # Read config per server
         # Enforce limit per server
             # Dumb way
