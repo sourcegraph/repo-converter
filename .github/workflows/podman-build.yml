@@ -51,6 +51,6 @@ jobs:
             -t latest \
             .
           podman push latest ghcr.io/sourcegraph/repo-converter:latest
-          podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_BRANCH}
-          podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_COMMIT}
-          podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_DATE_TAG}
+          BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)" podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_BRANCH}
+          BUILD_COMMIT="$(git rev-parse --short HEAD)"      podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_COMMIT}
+          BUILD_DATE_TAG="$(date -u +'%Y-%m-%d-%H-%M-%S')"  podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_DATE_TAG}
