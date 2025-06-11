@@ -51,6 +51,12 @@ jobs:
             -t repo-converter \
             .
           podman push repo-converter ghcr.io/sourcegraph/repo-converter:latest
-          BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)" podman push repo-converter ghcr.io/sourcegraph/repo-converter:${BUILD_BRANCH}
-          BUILD_COMMIT="$(git rev-parse --short HEAD)"      podman push repo-converter ghcr.io/sourcegraph/repo-converter:${BUILD_COMMIT}
-          BUILD_DATE_TAG="$(date -u +'%Y-%m-%d-%H-%M-%S')"  podman push repo-converter ghcr.io/sourcegraph/repo-converter:${BUILD_DATE_TAG}
+          export BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          echo "BUILD_BRANCH=${BUILD_BRANCH}"
+          podman push repo-converter ghcr.io/sourcegraph/repo-converter:${BUILD_BRANCH}
+          export BUILD_COMMIT="$(git rev-parse --short HEAD)"
+          echo "BUILD_COMMIT=${BUILD_COMMIT}"
+          podman push repo-converter ghcr.io/sourcegraph/repo-converter:${BUILD_COMMIT}
+          export BUILD_DATE_TAG="$(date -u +'%Y-%m-%d-%H-%M-%S')"
+          echo "BUILD_DATE_TAG=${BUILD_DATE_TAG}"
+          podman push repo-converter ghcr.io/sourcegraph/repo-converter:${BUILD_DATE_TAG}
