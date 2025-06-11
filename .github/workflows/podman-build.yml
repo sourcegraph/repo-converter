@@ -48,9 +48,9 @@ jobs:
             -f build/Dockerfile \
             --format docker \
             --platform linux/amd64 \
-            -t ghcr.io/sourcegraph/repo-converter:latest \
+            -t latest \
             .
-          podman push ghcr.io/sourcegraph/repo-converter:latest
-          podman push ghcr.io/sourcegraph/repo-converter:latest ghcr.io/sourcegraph/repo-converter:${BUILD_BRANCH}
-          podman push ghcr.io/sourcegraph/repo-converter:latest ghcr.io/sourcegraph/repo-converter:${BUILD_COMMIT}
-          podman push ghcr.io/sourcegraph/repo-converter:latest ghcr.io/sourcegraph/repo-converter:${BUILD_DATE_TAG}
+          podman push latest ghcr.io/sourcegraph/repo-converter:latest
+          podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_BRANCH}
+          podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_COMMIT}
+          podman push latest ghcr.io/sourcegraph/repo-converter:${BUILD_DATE_TAG}
