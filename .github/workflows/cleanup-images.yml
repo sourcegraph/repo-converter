@@ -10,11 +10,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Delete old untagged packages
+      - name: Clean up old images for implementation-bridge-repo-converter
         uses: actions/delete-package-versions@v5
         with:
-          delete-only-untagged-versions: 'true'
-          # ignore-versions: '([v]?\d+\.\d+\.\d+|latest)'
-          min-versions-to-keep: 100
+          # delete-only-untagged-versions: 'true'
+          ignore-versions: '([v]?\d+\.\d+\.\d+|latest|main)'
+          min-versions-to-keep: 10
           package-name: implementation-bridge-repo-converter
           package-type: container
+
+      # - name: Clean up old images for repo-converter
+      #   uses: actions/delete-package-versions@v5
+      #   with:
+      #     delete-only-untagged-versions: 'true'
+      #     # ignore-versions: '([v]?\d+\.\d+\.\d+|latest)'
+      #     min-versions-to-keep: 100
+      #     package-name: implementation-bridge-repo-converter
+      #     package-type: container
+
+      # - name: Clean up old images for repo-converter/podman-build-cache
+      #   uses: actions/delete-package-versions@v5
+      #   with:
+      #     delete-only-untagged-versions: 'true'
+      #     # ignore-versions: '([v]?\d+\.\d+\.\d+|latest)'
+      #     min-versions-to-keep: 100
+      #     package-name: implementation-bridge-repo-converter
+      #     package-type: container
