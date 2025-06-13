@@ -1,9 +1,8 @@
 # Sourcegraph
 *.code-workspace
-config/cloud-agent-config.yaml
-config/cloud-agent-service-account-key.json
+config/cloud-agent*
 config/config.yaml
-config/repos-to-convert.yaml
+config/repos-to-convert*
 config/service-account-key.json
 dev/stats/repos.txt
 logs/

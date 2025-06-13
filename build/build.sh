@@ -79,6 +79,9 @@ podman build -f Dockerfile --tag sourcegraph/repo-converter:build ..
 if [ "$1" != "" ]
 then
 
+    # Pull the latest tags of the other images
+    podman compose pull
+
     # Start the compose deployment
     podman compose up -d --remove-orphans
 

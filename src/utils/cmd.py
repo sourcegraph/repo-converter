@@ -60,25 +60,19 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         )
 
         # Get the process attributes from the OS
-        try:
-            process_dict = subprocess_to_run.as_dict()
+        process_dict = subprocess_to_run.as_dict()
 
-            # Log a starting message
-            status_message = "started"
-            print_process_status(ctx, process_dict, status_message)
+        # Log a starting message
+        status_message = "started"
+        print_process_status(ctx, process_dict, status_message)
 
-            # If password is provided to this function, feed it into the subprocess' stdin pipe
-            # communicate() also waits for the process to finish
-            if echo_password:
-                subprocess_output = subprocess_to_run.communicate(password)
+        # If password is provided to this function, feed it into the subprocess' stdin pipe
+        # communicate() also waits for the process to finish
+        if echo_password:
+            subprocess_output = subprocess_to_run.communicate(password)
 
-            else:
-                subprocess_output = subprocess_to_run.communicate()
-
-        # If the process ran so quickly that the psutil object doesn't have time to grab the dict,
-        # it raises a FileNotFoundError exception
-        except FileNotFoundError as exception:
-            log(ctx, f"Process finished before getting the psutil.dict; args: {args}", "debug")
+        else:
+            subprocess_output = subprocess_to_run.communicate()
 
         # Set the output to return
         subprocess_output = subprocess_output[0].splitlines()
@@ -106,10 +100,17 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
     # not necessarily any below processes the subprocess created
     except subprocess.CalledProcessError as exception:
 
-            status_message = f"raised an exception: {type(exception)}, {exception.args}, {exception}"
+        status_message = f"raised an exception: {type(exception)}, {exception.args}, {exception}"
+        if not quiet:
+            log_level = "error"
 
-            if not quiet:
-                log_level = "error"
+    # If the process ran so quickly that the psutil object doesn't have time to grab the dict,
+    # it raises a FileNotFoundError exception
+    except FileNotFoundError as exception:
+
+        status_message = "finished before getting the psutil.dict"
+        if not quiet:
+            log_level = "error"
 
     # If the command fails
     if subprocess_to_run.returncode != 0:
