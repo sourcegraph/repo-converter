@@ -8,6 +8,16 @@ on:
         description: Package name
         default: implementation-bridge-repo-converter
         required: true
+      min-versions-to-keep:
+        type: number
+        description: Minimum number of versions to keep
+        default: 2
+        required: true
+      delete-only-untagged-versions:
+        type: boolean
+        description: Delete only untagged versions?
+        default: true
+        required: true
 
   # schedule:
   #   - cron: '0 0 * * 0' # Run on Sundays at 00:00 UTC every week
@@ -20,7 +30,7 @@ jobs:
       - name: Cleanup package versions
         uses: actions/delete-package-versions@v5
         with:
-          delete-only-untagged-versions: true
-          min-versions-to-keep: 2
+          delete-only-untagged-versions: ${{ github.event.inputs.delete-only-untagged-versions }}
+          min-versions-to-keep: ${{ github.event.inputs.min-versions-to-keep }}
           package-name: ${{ github.event.inputs.package-name }}
           package-type: container
