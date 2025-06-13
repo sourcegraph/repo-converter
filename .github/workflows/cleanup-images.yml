@@ -9,10 +9,12 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
+
       - name: Delete old untagged packages
         uses: actions/delete-package-versions@v5
         with:
+          delete-only-untagged-versions: 'true'
+          # ignore-versions: '([v]?\d+\.\d+\.\d+|latest)'
+          min-versions-to-keep: 100
           package-name: implementation-bridge-repo-converter
           package-type: container
-          delete-only-untagged-versions: 'true'
-          ignore-versions: '^v\d+\.\d+\.\d+$'

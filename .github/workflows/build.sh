@@ -73,10 +73,12 @@ cat "${dot_env_file}"
 # ls -al ./*
 # printenv | sort -u
 
+podman_build_cache_path="$image_registry_path/podman-build-cache"
+
 # Run the build
 podman build \
-    --cache-from    "$image_registry_path/cache" \
-    --cache-to      "$image_registry_path/cache" \
+    --cache-from    "$podman_build_cache_path" \
+    --cache-to      "$podman_build_cache_path" \
     --file          build/Dockerfile \
     --format        docker \
     --jobs          0 \
