@@ -12,7 +12,9 @@ set -x
 image_name="repo-converter"
 
 # Define the platforms/architectures to build images for
-platarch="linux/amd64,linux/arm64"
+# ARM build not working yet
+#platarch="linux/amd64,linux/arm64"
+platarch="linux/amd64"
 
 ################################################################################
 ## Config end
@@ -45,7 +47,7 @@ true > "${dot_env_file}"
 for var in "${image_tags_and_env_vars[@]}"
 do
     # If the env var has a value
-    if ${!var}
+    if [[ -n "${!var}" ]]
     then
         echo "$var=${!var}" >> "${dot_env_file}"
     fi
@@ -62,7 +64,7 @@ whoami
 pwd
 ls -al
 ls -al ./*
-printenv
+printenv | sort -u
 
 # Run the build
 podman build \
@@ -78,7 +80,7 @@ podman build \
 for var in "${image_tags_and_env_vars[@]}"
 do
     # If the env var has a value
-    if ${!var}
+    if [[ -n "${!var}" ]]
     then
         podman push "$image_name" ghcr.io/sourcegraph/"$image_name":"${!var}"
     fi
