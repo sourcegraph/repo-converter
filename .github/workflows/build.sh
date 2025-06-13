@@ -50,6 +50,7 @@ true > "${dot_env_file}"
 for var in "${image_tags_and_env_vars[@]}"
 do
     # If the env var has a value
+    # BUILD_TAG doesn't have a value if the current Git commit doesn't have a tag pointing to it
     if [[ -n "${!var}" ]]
     then
         echo "$var=${!var}" >> "${dot_env_file}"
@@ -66,16 +67,16 @@ cat "${dot_env_file}"
 
 
 # Metadata to troubleshoot failing builds
-whoami
-pwd
-ls -al
-ls -al ./*
-printenv | sort -u
+# whoami
+# pwd
+# ls -al
+# ls -al ./*
+# printenv | sort -u
 
 # Run the build
 podman build \
-    --cache-from    "$image_registry_path" \
-    --cache-to      "$image_registry_path" \
+    --cache-from    "$image_registry_path/cache" \
+    --cache-to      "$image_registry_path/cache" \
     --file          build/Dockerfile \
     --format        docker \
     --jobs          0 \
@@ -91,6 +92,7 @@ podman build \
 for var in "${image_tags_and_env_vars[@]}"
 do
     # If the env var has a value
+    # BUILD_TAG doesn't have a value if the current Git commit doesn't have a tag pointing to it
     if [[ -n "${!var}" ]]
     then
         podman push "$image_name" "$image_registry_path":"${!var}"

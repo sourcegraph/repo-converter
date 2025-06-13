@@ -15,12 +15,12 @@ FROM ubuntu:22.04 AS base
 # Avoid stuck build due to user prompt
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Prevents Python from writing pyc files
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Keeps Python from buffering stdout and stderr to avoid situations where
+# PYTHONDONTWRITEBYTECODE - Prevents Python from writing pyc files
+# PYTHONUNBUFFERED - Keeps Python from buffering stdout and stderr to avoid situations where
 # the application crashes without emitting any logs due to buffering
-ENV PYTHONUNBUFFERED=1
+ENV \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 # Install packages
 # default-jre needed for Atlassian's svn-migration-scripts.jar
@@ -62,6 +62,13 @@ RUN --mount=type=cache,target=~/.cache/pip \
     python3 -m pip install --root-user-action=ignore -r build/requirements.txt
 
 # Add OCI annotations to image
+# These don't change often, so could be earlier in the build,
+# but they're super lightweight, so the impact of being lower is low
+# And we'd hate for a change in a label to cause dependency installations
+# to have to run again
+# NOTE: the --label args on the podman build command are a separate build step,
+# so the new values for org.opencontainers.image.created and revision do not
+# invalidate the cache for this LABEL block
 LABEL \
     org.opencontainers.image.authors="Sourcegraph" \
     org.opencontainers.image.base.name="docker.io/library/ubuntu" \
@@ -72,9 +79,11 @@ LABEL \
     org.opencontainers.image.vendor="Sourcegraph"
 
 # Copy the source code into the image
+# The contents of this dir will change most builds
 COPY src/ src/
 
 # Copy the dotenv file into the image
+# The contents of this file changes every build
 COPY build/.env build/.env
 
 # Start the container
