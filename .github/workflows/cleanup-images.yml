@@ -6,7 +6,6 @@ on:
       package-name:
         type: string
         description: Package name
-        default: implementation-bridge-repo-converter
         required: true
       min-versions-to-keep:
         type: number
