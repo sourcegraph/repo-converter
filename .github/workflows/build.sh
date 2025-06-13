@@ -42,7 +42,7 @@ declare -a image_tags=(
 )
 
 # Fill in env vars
-BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)" # Somehow turned out to be HEAD on a tag build???
 BUILD_COMMIT="$(git rev-parse --short HEAD)"
 BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 BUILD_TAG="$(git tag --points-at HEAD)"
@@ -63,18 +63,12 @@ done
 # Log the content of the .env file to confirm its content
 cat "${dot_env_file}"
 
-# Count the number of /'s in platform_architecture, and use that as the number of build jobs
-# https://docs.podman.io/en/v5.3.2/markdown/podman-build.1.html#jobs-number
-# If 0 is specified, then there is no limit in the number of jobs that run in parallel.
-# jobs=$(echo $platform_architecture | tr -cd / | wc -c)
-
-
 # Metadata to troubleshoot failing builds
-# whoami
-# pwd
-# ls -al
-# ls -al ./*
-# printenv | sort -u
+whoami
+pwd
+ls -al
+ls -al ./*
+printenv | sort -u
 
 podman_build_cache_path="$image_registry_path/podman-build-cache"
 
