@@ -6,6 +6,7 @@
 
 # Using Ubuntu LTS
 FROM ubuntu:22.04 AS base
+# TODO: Switch to Wolfi Python base
 
 # Using Python Slim base
 # https://hub.docker.com/layers/library/python/slim/images/sha256-747576ffc7523e2cc620ae304eb7304cedc8abff915adc77f3ce53a33ad1730d
@@ -44,58 +45,31 @@ RUN apt-get update && \
     systemctl enable cron && \
     systemctl start cron
 
-# Download dependencies as a separate step to take advantage of Docker's caching
-# Leverage a cache mount to /root/.cache/pip to speed up subsequent builds
-# Leverage a bind mount to requirements.txt to avoid having to copy them into
-# into this layer
-# Install requirements
-# RUN --mount=type=cache,target=/root/.cache/pip \
-#     --mount=type=bind,source=../requirements.txt,target=./requirements.txt \
-#     python3 -m pip install --upgrade pip && \
-#     python3 -m pip install -r requirements.txt
-
-
-# Switching to podman compose build
-
-# Failed builds leave buildah containers dangling in an invalid state
-# See these containers with
-# podman ps --all --external
-# Clear these buildah containers with
-# podman rmi --force --all
-
-# This step seems to be failing on podman build, seems to require ',z' option on the bind mount as per
-# https://github.com/containers/podman/issues/15423#issuecomment-1223594100
-
-# This step is also failing due to the directory mismatch, had to remove '../' in the source bind mapping
-# RUN --mount=type=cache,target=/root/.cache/pip \
-#     --mount=type=bind,source=requirements.txt,target=requirements.txt,z \
-#     python3 -m pip install --upgrade pip && \
-#     python3 -m pip install -r requirements.txt
-
-# Create sourcegraph user
+# TODO: Create sourcegraph user, to run as non-root
 # https://github.com/containers/podman/issues/4016
 # RUN useradd sourcegraph
 # USER sourcegraph
 
+# cd to /sourcegraph/repo-converter in the image
 WORKDIR /sourcegraph/repo-converter
 
 # Copy the requirements file into the image
 COPY build/requirements.txt build/requirements.txt
 
-# Switching to podman build
+# Install required Python modules
 RUN --mount=type=cache,target=~/.cache/pip \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --root-user-action=ignore -r build/requirements.txt
 
 # Add OCI annotations to image
 LABEL \
-        org.opencontainers.image.authors="Sourcegraph" \
-        org.opencontainers.image.base.name="docker.io/library/ubuntu" \
-        org.opencontainers.image.description="Container for converting non-Git repos to Git" \
-        org.opencontainers.image.source="https://github.com/sourcegraph/repo-converter" \
-        org.opencontainers.image.title="repo-converter" \
-        org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter" \
-        org.opencontainers.image.vendor="Sourcegraph"
+    org.opencontainers.image.authors="Sourcegraph" \
+    org.opencontainers.image.base.name="docker.io/library/ubuntu" \
+    org.opencontainers.image.description="Container for converting non-Git repos to Git" \
+    org.opencontainers.image.source="https://github.com/sourcegraph/repo-converter" \
+    org.opencontainers.image.title="repo-converter" \
+    org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter" \
+    org.opencontainers.image.vendor="Sourcegraph"
 
 # Copy the source code into the image
 COPY src/ src/
