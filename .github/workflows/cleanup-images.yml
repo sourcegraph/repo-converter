@@ -38,7 +38,7 @@ jobs:
           package-name: ${{ github.event.inputs.package-name }}
           min-versions-to-keep: ${{ github.event.inputs.min-versions-to-keep }}
           delete-only-untagged-versions: ${{ github.event.inputs.delete-only-untagged-versions }}
-          ignore-versions: '^v\\d+\\.\\d+\\.\\d+$'
+          ignore-versions: "^v\\d+\\.\\d+\\.\\d+$"
           # ignore-versions: ${{ github.event.inputs.ignore-versions }}
           package-type: container
 
