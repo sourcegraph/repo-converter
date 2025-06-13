@@ -5,24 +5,9 @@ on:
     inputs:
       package-name:
         type: string
-        description: Delete only untagged versions?
+        description: Package name
         default: implementation-bridge-repo-converter
         required: true
-      min-versions-to-keep:
-        type: number
-        description: Minimum number of versions to keep
-        default: 10
-        required: true
-      delete-only-untagged-versions:
-        type: boolean
-        description: Delete only untagged versions?
-        default: true
-        required: true
-      # ignore-versions:
-      #   type: string
-      #   description: Ignore versions regex
-      #   default: ''?\d+\.\d+\.\d+|latest|main|marc''
-      #   required: false
 
   # schedule:
   #   - cron: '0 0 * * 0' # Run on Sundays at 00:00 UTC every week
@@ -35,27 +20,7 @@ jobs:
       - name: Cleanup package versions
         uses: actions/delete-package-versions@v5
         with:
+          delete-only-untagged-versions: true
+          min-versions-to-keep: 2
           package-name: ${{ github.event.inputs.package-name }}
-          min-versions-to-keep: ${{ github.event.inputs.min-versions-to-keep }}
-          delete-only-untagged-versions: ${{ github.event.inputs.delete-only-untagged-versions }}
-          ignore-versions: '^v\\\d+\\\.\\\d+\\\.\\\d+$'
-          # ignore-versions: ${{ github.event.inputs.ignore-versions }}
           package-type: container
-
-          # - name: Clean up old images for repo-converter
-      #   uses: actions/delete-package-versions@v5
-      #   with:
-      #     delete-only-untagged-versions: 'true'
-      #     # ignore-versions: '([v]?\d+\.\d+\.\d+|latest)'
-      #     min-versions-to-keep: 100
-      #     package-name: implementation-bridge-repo-converter
-      #     package-type: container
-
-      # - name: Clean up old images for repo-converter/podman-build-cache
-      #   uses: actions/delete-package-versions@v5
-      #   with:
-      #     delete-only-untagged-versions: 'true'
-      #     # ignore-versions: '([v]?\d+\.\d+\.\d+|latest)'
-      #     min-versions-to-keep: 100
-      #     package-name: implementation-bridge-repo-converter
-      #     package-type: container
