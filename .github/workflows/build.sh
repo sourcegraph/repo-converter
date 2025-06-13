@@ -1,0 +1,85 @@
+#!/bin/bash
+# Description: Podman build script for GitHub Actions
+
+# Print commands to logs as they're called
+set -x
+
+################################################################################
+## Config start
+################################################################################
+
+# Name of container image for manifests / pushes
+image_name="repo-converter"
+
+# Define the platforms/architectures to build images for
+platarch="linux/amd64,linux/arm64"
+
+################################################################################
+## Config end
+################################################################################
+
+# List of image tags / env vars
+# These vars are used as image tags and available inside the container as env vars
+declare -a image_tags_and_env_vars=(
+    "BUILD_BRANCH"
+    "BUILD_COMMIT"
+    "BUILD_DATE"
+    "BUILD_TAG"
+    "LATEST_TAG"
+)
+
+# Fill in env vars
+BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+BUILD_COMMIT="$(git rev-parse --short HEAD)"
+BUILD_DATE="$(date -u +'%Y-%m-%d-%H-%M-%S')"
+BUILD_TAG="$(git tag --points-at HEAD)"
+LATEST_TAG="latest"
+
+# Path to .env file to be read inside the container; values used for container logging
+dot_env_file="build/.env"
+
+# Create / clear the .env file
+true > "${dot_env_file}"
+
+# Loop through the list of env vars and write their names and values to the .env file
+for var in "${image_tags_and_env_vars[@]}"
+do
+    # If the env var has a value
+    if ${!var}
+    then
+        echo "$var=${!var}" >> "${dot_env_file}"
+    fi
+done
+
+# Log the content of the .env file to confirm its content
+cat "${dot_env_file}"
+
+# Count the number of /'s in platarch, and use that as the number of build jobs
+jobs=$(echo $platarch | tr -cd / | wc -c)
+
+# Metadata to troubleshoot failing builds
+whoami
+pwd
+ls -al
+ls -al ./*
+printenv
+
+# Run the build
+podman build \
+    --file build/Dockerfile \
+    --format docker \
+    --jobs "$jobs" \
+    --manifest "$image_name" \
+    --platform "$platarch" \
+    .
+
+# Push the builds
+# Loop through the list of env vars again, and push the image with the values as tags
+for var in "${image_tags_and_env_vars[@]}"
+do
+    # If the env var has a value
+    if ${!var}
+    then
+        podman push "$image_name" ghcr.io/sourcegraph/"$image_name":"${!var}"
+    fi
+done
