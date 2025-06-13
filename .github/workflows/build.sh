@@ -11,10 +11,13 @@ set -x
 # Name of container image for manifests / pushes
 image_name="repo-converter"
 
+# Full image registry and path
+image_registry_path="ghcr.io/sourcegraph/$image_name"
+
 # Define the platforms/architectures to build images for
 # ARM build not working yet
-# platarch="linux/amd64,linux/arm64"
-platarch="linux/amd64"
+# platform_architecture="linux/amd64,linux/arm64"
+platform_architecture="linux/amd64"
 
 ################################################################################
 ### Config end
@@ -33,7 +36,7 @@ declare -a image_tags_and_env_vars=(
 # Fill in env vars
 BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 BUILD_COMMIT="$(git rev-parse --short HEAD)"
-BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+BUILD_DATE="$(date -u +'%Y-%m-%d-%H-%M-%S')"
 BUILD_TAG="$(git tag --points-at HEAD)"
 LATEST_TAG="latest"
 
@@ -56,10 +59,11 @@ done
 # Log the content of the .env file to confirm its content
 cat "${dot_env_file}"
 
-# Count the number of /'s in platarch, and use that as the number of build jobs
+# Count the number of /'s in platform_architecture, and use that as the number of build jobs
 # https://docs.podman.io/en/v5.3.2/markdown/podman-build.1.html#jobs-number
 # If 0 is specified, then there is no limit in the number of jobs that run in parallel.
-# jobs=$(echo $platarch | tr -cd / | wc -c)
+# jobs=$(echo $platform_architecture | tr -cd / | wc -c)
+
 
 # Metadata to troubleshoot failing builds
 whoami
@@ -70,13 +74,16 @@ printenv | sort -u
 
 # Run the build
 podman build \
-    --file build/Dockerfile \
-    --format docker \
-    --jobs 0 \
-    --label "org.opencontainers.image.created=$BUILD_DATE" \
-    --label "org.opencontainers.image.revision=$BUILD_COMMIT" \
-    --manifest "$image_name" \
-    --platform "$platarch" \
+    --cache-from    "$image_registry_path" \
+    --cache-to      "$image_registry_path" \
+    --file          build/Dockerfile \
+    --format        docker \
+    --jobs          0 \
+    --label         "org.opencontainers.image.created=$BUILD_DATE" \
+    --label         "org.opencontainers.image.revision=$BUILD_COMMIT" \
+    --layers        \
+    --manifest      "$image_name" \
+    --platform      "$platform_architecture" \
     .
 
 # Push the builds
@@ -86,6 +93,6 @@ do
     # If the env var has a value
     if [[ -n "${!var}" ]]
     then
-        podman push "$image_name" ghcr.io/sourcegraph/"$image_name":"${!var}"
+        podman push "$image_name" "$image_registry_path":"${!var}"
     fi
 done

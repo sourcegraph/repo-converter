@@ -82,14 +82,8 @@ WORKDIR /sourcegraph/repo-converter
 # Copy the requirements file into the image
 COPY build/requirements.txt build/requirements.txt
 
-# Copy the source code into the image
-COPY src/ src/
-
-# Copy the dotenv file into the image
-COPY build/.env build/.env
-
 # Switching to podman build
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=~/.cache/pip \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --root-user-action=ignore -r build/requirements.txt
 
@@ -102,6 +96,12 @@ LABEL \
         org.opencontainers.image.title="repo-converter" \
         org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter" \
         org.opencontainers.image.vendor="Sourcegraph"
+
+# Copy the source code into the image
+COPY src/ src/
+
+# Copy the dotenv file into the image
+COPY build/.env build/.env
 
 # Start the container
 CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]
