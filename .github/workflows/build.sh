@@ -28,10 +28,15 @@ platform_architecture="linux/amd64"
 
 # List of image tags / env vars
 # These vars are used as image tags and available inside the container as env vars
-declare -a image_tags_and_env_vars=(
+declare -a env_vars=(
     "BUILD_BRANCH"
     "BUILD_COMMIT"
     "BUILD_DATE"
+    "BUILD_TAG"
+)
+
+declare -a image_tags=(
+    "BUILD_BRANCH"
     "BUILD_TAG"
     "LATEST_TAG"
 )
@@ -39,7 +44,7 @@ declare -a image_tags_and_env_vars=(
 # Fill in env vars
 BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 BUILD_COMMIT="$(git rev-parse --short HEAD)"
-BUILD_DATE="$(date -u +'%Y-%m-%d-%H-%M-%S')"
+BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 BUILD_TAG="$(git tag --points-at HEAD)"
 LATEST_TAG="latest"
 
@@ -50,14 +55,9 @@ dot_env_file="build/.env"
 true > "${dot_env_file}"
 
 # Loop through the list of env vars and write their names and values to the .env file
-for var in "${image_tags_and_env_vars[@]}"
+for env_var in "${env_vars[@]}"
 do
-    # If the env var has a value
-    # BUILD_TAG doesn't have a value if the current Git commit doesn't have a tag pointing to it
-    if [[ -n "${!var}" ]]
-    then
-        echo "$var=${!var}" >> "${dot_env_file}"
-    fi
+    echo "$env_var=${!env_var}" >> "${dot_env_file}"
 done
 
 # Log the content of the .env file to confirm its content
@@ -78,13 +78,17 @@ cat "${dot_env_file}"
 
 podman_build_cache_path="$image_registry_path/podman-build-cache"
 
+# Get the podman version number
+# This is a new arg, and seems to be failing
+#    --inherit-labels false \
+podman version
+
 # Run the build
 podman build \
     --cache-from    "$podman_build_cache_path" \
     --cache-to      "$podman_build_cache_path" \
     --file          build/Dockerfile \
     --format        docker \
-    --inherit-labels false \
     --jobs          0 \
     --label         "org.opencontainers.image.created=$BUILD_DATE" \
     --label         "org.opencontainers.image.revision=$BUILD_COMMIT" \
@@ -95,12 +99,12 @@ podman build \
 
 # Push the builds
 # Loop through the list of env vars again, and push the image with the values as tags
-for var in "${image_tags_and_env_vars[@]}"
+for image_tag in "${image_tags[@]}"
 do
     # If the env var has a value
     # BUILD_TAG doesn't have a value if the current Git commit doesn't have a tag pointing to it
-    if [[ -n "${!var}" ]]
+    if [[ -n "${!image_tag}" ]]
     then
-        podman push "$image_name" "$image_registry_path":"${!var}"
+        podman push "$image_name" "$image_registry_path":"${!image_tag}"
     fi
 done

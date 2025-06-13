@@ -4,9 +4,8 @@ name: Podman build and push to GitHub Container Registry
 
 on:
   pull_request:
-    branches:
-      - "**"
-      - "!**renovate**"
+    branches-ignore:
+      - "**renovate**"
     paths:
       - ".github/**"
       - "build/**"
@@ -16,9 +15,8 @@ on:
       - reopened
       - edited
   push:
-    branches:
-      - "**"
-      - "!**renovate*"
+    branches-ignore:
+      - "**renovate**"
     paths:
       - ".github/**"
       - "build/**"
