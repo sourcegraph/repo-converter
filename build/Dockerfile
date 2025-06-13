@@ -94,14 +94,14 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m pip install --root-user-action=ignore -r build/requirements.txt
 
 # Add OCI annotations to image
-LABEL org.opencontainers.image.authors="Sourcegraph" \
-      org.opencontainers.image.title="repo-converter" \
-      org.opencontainers.image.description="Container for converting non-Git repos to Git" \
-      org.opencontainers.image.documentation="https://github.com/sourcegraph/repo-converter" \
-      org.opencontainers.image.base.name="docker.io/library/ubuntu" \
-      org.opencontainers.image.source="https://github.com/sourcegraph/repo-converter" \
-      org.opencontainers.image.vendor="Sourcegraph" \
-      org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter"
+LABEL \
+        org.opencontainers.image.authors="Sourcegraph" \
+        org.opencontainers.image.base.name="docker.io/library/ubuntu" \
+        org.opencontainers.image.description="Container for converting non-Git repos to Git" \
+        org.opencontainers.image.source="https://github.com/sourcegraph/repo-converter" \
+        org.opencontainers.image.title="repo-converter" \
+        org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter" \
+        org.opencontainers.image.vendor="Sourcegraph"
 
 # Start the container
 CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]

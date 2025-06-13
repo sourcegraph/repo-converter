@@ -5,7 +5,7 @@
 set -x
 
 ################################################################################
-## Config start
+### Config start
 ################################################################################
 
 # Name of container image for manifests / pushes
@@ -13,11 +13,11 @@ image_name="repo-converter"
 
 # Define the platforms/architectures to build images for
 # ARM build not working yet
-#platarch="linux/amd64,linux/arm64"
+# platarch="linux/amd64,linux/arm64"
 platarch="linux/amd64"
 
 ################################################################################
-## Config end
+### Config end
 ################################################################################
 
 # List of image tags / env vars
@@ -33,7 +33,7 @@ declare -a image_tags_and_env_vars=(
 # Fill in env vars
 BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 BUILD_COMMIT="$(git rev-parse --short HEAD)"
-BUILD_DATE="$(date -u +'%Y-%m-%d-%H-%M-%S')"
+BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 BUILD_TAG="$(git tag --points-at HEAD)"
 LATEST_TAG="latest"
 
@@ -57,7 +57,9 @@ done
 cat "${dot_env_file}"
 
 # Count the number of /'s in platarch, and use that as the number of build jobs
-jobs=$(echo $platarch | tr -cd / | wc -c)
+# https://docs.podman.io/en/v5.3.2/markdown/podman-build.1.html#jobs-number
+# If 0 is specified, then there is no limit in the number of jobs that run in parallel.
+# jobs=$(echo $platarch | tr -cd / | wc -c)
 
 # Metadata to troubleshoot failing builds
 whoami
@@ -70,7 +72,9 @@ printenv | sort -u
 podman build \
     --file build/Dockerfile \
     --format docker \
-    --jobs "$jobs" \
+    --jobs 0 \
+    --label "org.opencontainers.image.created=$BUILD_DATE" \
+    --label "org.opencontainers.image.revision=$BUILD_COMMIT" \
     --manifest "$image_name" \
     --platform "$platarch" \
     .
