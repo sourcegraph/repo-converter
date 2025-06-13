@@ -2,6 +2,28 @@ name: Cleanup old Docker Images from GitHub Container Registry
 
 on:
   workflow_dispatch: # Creates button in web UI to run the workflow manually, shouldn't be needed
+    inputs:
+      package-name:
+        type: string
+        description: Delete only untagged versions?
+        default: implementation-bridge-repo-converter
+        required: true
+      min-versions-to-keep:
+        type: number
+        description: Minimum number of versions to keep
+        default: 10
+        required: true
+      delete-only-untagged-versions:
+        type: boolean
+        description: Delete only untagged versions?
+        default: true
+        required: true
+      ignore-versions:
+        type: string
+        description: Ignore versions regex
+        default: '?\d+\.\d+\.\d+|latest|main|marc'
+        required: false
+
   # schedule:
   #   - cron: '0 0 * * 0' # Run on Sundays at 00:00 UTC every week
 
@@ -10,16 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Clean up old images for implementation-bridge-repo-converter
+      - name: Cleanup package versions
         uses: actions/delete-package-versions@v5
         with:
-          # delete-only-untagged-versions: 'true'
-          ignore-versions: '([v]?\d+\.\d+\.\d+|latest|main)'
-          min-versions-to-keep: 10
-          package-name: implementation-bridge-repo-converter
+          package-name: ${{ github.event.inputs.package-name }}
+          min-versions-to-keep: ${{ github.event.inputs.min-versions-to-keep }}
+          delete-only-untagged-versions: ${{ github.event.inputs.delete-only-untagged-versions }}
+          ignore-versions: ${{ github.event.inputs.ignore-versions }}
           package-type: container
 
-      # - name: Clean up old images for repo-converter
+          # - name: Clean up old images for repo-converter
       #   uses: actions/delete-package-versions@v5
       #   with:
       #     delete-only-untagged-versions: 'true'

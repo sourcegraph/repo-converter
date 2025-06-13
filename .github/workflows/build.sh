@@ -84,6 +84,7 @@ podman build \
     --cache-to      "$podman_build_cache_path" \
     --file          build/Dockerfile \
     --format        docker \
+    --inherit-labels false \
     --jobs          0 \
     --label         "org.opencontainers.image.created=$BUILD_DATE" \
     --label         "org.opencontainers.image.revision=$BUILD_COMMIT" \
