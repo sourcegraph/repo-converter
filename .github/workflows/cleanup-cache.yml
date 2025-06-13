@@ -1,0 +1,43 @@
+name: Cleanup old Docker Images from GitHub Container Registry
+
+on:
+
+  # See limitations of scheduled runs:
+  # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule
+  schedule:
+    - cron: '0 0 * * 0' # Run on Sundays at 00:00 UTC every week
+
+  workflow_dispatch: # Creates button in web UI to run the workflow manually, shouldn't be needed
+    inputs:
+      package-name:
+        type: string
+        description: Package name
+        default: repo-converter/podman-build-cache
+        required: true
+      min-versions-to-keep:
+        type: number
+        description: Minimum number of versions to keep
+        default: 20
+        required: true
+      delete-only-untagged-versions:
+        type: boolean
+        description: Delete only untagged versions?
+        default: false
+        required: true
+
+
+jobs:
+
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Cleanup package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          # Setting defaults for the scheduled runs
+          # https://stackoverflow.com/a/73495922
+          delete-only-untagged-versions: ${{ github.event.inputs.delete-only-untagged-versions || false }}
+          min-versions-to-keep: ${{ github.event.inputs.min-versions-to-keep || 20 }}
+          package-name: ${{ github.event.inputs.package-name || 'repo-converter/podman-build-cache' }}
+          package-type: container
