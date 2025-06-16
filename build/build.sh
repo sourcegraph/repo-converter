@@ -1,4 +1,33 @@
 #!/bin/bash
+# Script for local dev builds
+
+## Usage:
+
+# ./build.sh
+# Run the build, do not start the containers
+
+# ./build.sh c
+# Run the build, start the containers, clear the terminal, and follow repo-converter's logs
+
+# ./build.sh <any>
+# Run the build, start the containers, and follow repo-converter's logs
+
+
+# TODO: check if the GitHub Actions build script can't be reused here?
+
+## Switching to podman
+
+# Install podman on macOS
+# https://podman.io/docs/installation#macos
+# brew install podman
+# podman machine init
+# podman machine start
+# sudo /opt/homebrew/Cellar/podman/5.5.0/bin/podman-mac-helper install
+# podman machine stop
+# podman machine start
+
+# Install podman-compose, because that's an unrelated OSS project
+# brew install podman-compose
 
 # Set exec flags
 
@@ -13,7 +42,6 @@ set -o errexit
 # Update the requirements.txt file
 # APPLICATION_CODE_DIR="../src/"
 # pipreqs --force --mode no-pin --savepath "$REQUIREMENTS_FILE" "$APPLICATION_CODE_DIR"
-
 
 # Sort and deduplicate the ${REQUIREMENTS_FILE} file
 REQUIREMENTS_FILE="./requirements.txt"
@@ -40,55 +68,36 @@ ENV_FILE=".env"
     echo "BUILD_TAG=${BUILD_TAG}"
 } > "$ENV_FILE"
 
+# Run the build
+podman-compose build repo-converter
 
-# # Build the repo-converter image
-# docker compose build repo-converter
-
-# # If you pass any args to this script
-# if [ "$1" != "" ]
-# then
-
-#     # Start the compose deployment
-#     docker compose up -d --remove-orphans
-
-#     # Clear the terminal
-#     clear
-
-#     # Follow the container logs
-#     docker compose logs repo-converter -f
-
-# fi
-
-# Switching to podman
-# Install podman on macOS
-# https://podman.io/docs/installation#macos
-# brew install podman
-# podman machine init
-# podman machine start
-# sudo /opt/homebrew/Cellar/podman/5.5.0/bin/podman-mac-helper install
-# podman machine stop
-# podman machine start
-
-
-# Build the repo-converter image
-# podman compose build repo-converter # Takes too long
-podman build -f Dockerfile --tag sourcegraph/repo-converter:build ..
-# DOCKER_BUILDKIT=1 podman compose build repo-converter
-
-# If you pass any args to this script
+# If you pass any args to this script, start the built image, and follow the logs
 if [ "$1" != "" ]
 then
 
+    # Stop any running containers
+    # because podman-compose can't figure this out on its own
+    podman-compose down
+
     # Pull the latest tags of the other images
-    podman compose pull
+    if [ "$1" == "*p*" ]
+    then
+        podman-compose pull
+    fi
 
     # Start the compose deployment
-    podman compose up -d --remove-orphans
+    podman-compose up -d --remove-orphans
 
     # Clear the terminal
-    # clear
+    if [ "$1" == "*c*" ]
+    then
+        clear
+    fi
 
     # Follow the container logs
-    podman compose logs repo-converter -f
+    if [ "$1" == "*f*" ]
+    then
+        podman-compose logs repo-converter -f
+    fi
 
 fi
