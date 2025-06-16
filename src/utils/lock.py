@@ -1,6 +1,6 @@
 # Import repo-converter modules
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 from utils import cmd
 
 # Import Python standard modules

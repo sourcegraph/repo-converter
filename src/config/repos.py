@@ -4,7 +4,7 @@
 # Import repo-converter modules
 from utils import secret
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 
 # Import Python standard modules
 from sys import exit

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-# Environment variable handling
+# Load Environment variables into context
 
-# Note: This is called before the logger is instantiated
+# Import repo-converter modules
+# context and logging are not available, as it would create a circular import
 
 # Import Python standard modules
 from os import environ
@@ -10,18 +11,21 @@ from os import environ
 from dotenv import load_dotenv # https://pypi.org/project/python-dotenv/
 
 
-def load_env_vars():
+def load_env_vars() -> dict:
     """Load config from environment variables"""
 
-    # Read the contents of the ./.env file (built into Docker image) into env vars
-    # Do not overwrite any existing env vars with the same name,
+    # Read the contents of the .env file into env vars
+    # The only use of this .env file is to bake env vars into container image during build,
+    # so it's fine to hard code the path in his file, as long as the file path in the build matches
+    # Do not overwrite any existing env vars with the same name (default behaviour),
     # so that env vars provided at container start time take precedence
-    dot_file_path="/sourcegraph/repo-converter/build/.env"
-    load_dotenv(dot_file_path)
+    dotenv_path="/sourcegraph/repo-converter/build/.env"
+    load_dotenv(dotenv_path=dotenv_path, override=False)
 
+    # Create empty env_vars dict to return at function exit
     env_vars = {}
 
-    # Try to read the variables from the Docker container's environment
+    # Try to read the variables from the container's environment
     # Set defaults in case they're not defined, where appropriate
     # Handle type casting here, instead of throughout the code
 
@@ -44,13 +48,20 @@ def load_env_vars():
     env_vars["SRC_SERVE_ROOT"]                          = str(environ.get("SRC_SERVE_ROOT"                          , "/sourcegraph/src-serve-root" ))
 
 
-# def load_config_from_repos_to_convert_file():
-#     # Try to load the environment variables from the REPOS_TO_CONVERT file
+    # String to use in log events
+    # Prefer the tag if available
+    # Otherwise use the commit short hash
+    build_tag_or_commit_for_logs = ""
+    if env_vars["BUILD_TAG"]:
+        build_tag_or_commit_for_logs = env_vars["BUILD_TAG"]
+    elif env_vars["BUILD_COMMIT"]:
+        build_tag_or_commit_for_logs = env_vars["BUILD_COMMIT"]
+    env_vars["BUILD_TAG_OR_COMMIT_FOR_LOGS"] = build_tag_or_commit_for_logs
 
 
-#     # Check if the default config file exists
-#     # If yes, read configs from it
-#     # If no, use the environment variables
-#     pass
+    # TODO: Try to load the environment variables from the REPOS_TO_CONVERT file
+    # Check if the default config file exists
+    # If yes, read configs from it
+    # If no, use the environment variables
 
     return env_vars

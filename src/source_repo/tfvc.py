@@ -20,7 +20,7 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 
 
 def clone_tfs_repos(ctx: Context) -> None:

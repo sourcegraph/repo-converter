@@ -2,11 +2,11 @@
 # Entry point for the repo-converter container
 
 # Import repo-converter modules
-from config import env, repos
+from config import load_env, repos, validate_env
 from source_repo import convert_repos
 from utils import cmd, git, logger
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 
 # Import Python standard modules
 import time
@@ -17,13 +17,16 @@ def main():
 
     # Load environment variables from the container's running environment into env_vars dict
     # Assuming the env vars can't be changed without restarting the container
-    env_vars = env.load_env_vars()
+    env_vars = load_env.load_env_vars()
 
     # Create initial context from env vars
     ctx = Context(env_vars)
 
     # Configure logging
-    logger.configure_logging(ctx)
+    logger.configure_logger(ctx.env_vars["LOG_LEVEL"])
+
+    # Validate env vars, now that we have logging available
+    validate_env.validate_env_vars(ctx)
 
     # DRY run log string
     run_log_string = ctx.get_run_log_string()
@@ -36,7 +39,7 @@ def main():
     interval = ctx.env_vars["REPO_CONVERTER_INTERVAL_SECONDS"]
     max_cycles = ctx.env_vars["MAX_CYCLES"]
 
-    # Application main loop
+    ### Application main loop
     while True:
 
         # Increment the run count
@@ -51,15 +54,18 @@ def main():
 
         # Tidy up zombie processes from the previous run through this loop
         cmd.status_update_and_cleanup_zombie_processes(ctx)
+        # This may be the right time to check which repos are still in progress, given running PIDs, still running from the previous run through this loop
 
         # Disable git safe directory, to work around "dubious ownership" errors
         git.git_config_safe_directory(ctx)
 
         # Run the main application logic
         convert_repos.start(ctx)
+        # Add started repo conversion jobs to the context dict?
 
         # Tidy up zombie processes which have already completed during this run through this loop
         cmd.status_update_and_cleanup_zombie_processes(ctx)
+        # Run the same code again, to update the list of running repo conversion jobs in the context dict
 
         # Log the end of the run
         uptime = cmd.get_pid_uptime()

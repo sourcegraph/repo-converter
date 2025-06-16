@@ -21,7 +21,7 @@
 # Import repo-converter modules
 from utils import cmd
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 
 
 git_config_namespace = "repo-converter"

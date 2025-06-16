@@ -3,7 +3,7 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 
 
 def add(ctx: Context, secret) -> None:
@@ -75,12 +75,10 @@ def redact(ctx: Context, input):
 
     else:
 
-        # Moving the import statement here, to avoid a circular import error
-        #  ImportError: cannot import name 'log' from partially initialized module 'utils.logging' (most likely due to a circular import) (/sourcegraph/repo-converter/utils/logging.py
-        from utils.logger import log
-        log(ctx, f"redact() doesn't handle input of type {type(input)}","error")
-
         # Set it to None to just break the code instead of leak the secret
         redacted_input = None
+
+        # Use an exception instead of importing the logging module and creating a circular import
+        raise Exception(f"redact() doesn't handle input of type {type(input)}")
 
     return redacted_input

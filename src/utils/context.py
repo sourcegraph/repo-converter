@@ -49,7 +49,6 @@ class Context:
         self.git_config_namespace = "repo-converter"
 
 
-
     def increment_run_count(self):
         """Increment the run counter and return the new count."""
         self.run_count += 1
