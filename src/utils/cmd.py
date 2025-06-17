@@ -2,7 +2,7 @@
 # Utility functions to execute external binaries, fork child processes, and track / cleanup child processes
 
 # Import repo-converter modules
-from utils.logger import log
+from utils.log import log
 from utils.context import Context
 from utils import lock
 

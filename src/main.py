@@ -3,8 +3,7 @@
 
 # Import repo-converter modules
 from config import load_env, repos, validate_env
-from source_repo import convert_repos
-from utils import cmd, git, logger
+from utils import cmd, concurrency, concurrency_monitor, convert_repos, git, logger
 from utils.context import Context
 from utils.log import log
 
@@ -14,6 +13,8 @@ import time
 
 def main():
     """Main entry point for the repo-converter container"""
+
+    ### Initialization steps
 
     # Load environment variables from the container's running environment into env_vars dict
     # Assuming the env vars can't be changed without restarting the container
@@ -33,6 +34,12 @@ def main():
 
     # Log the container start event
     log(ctx, f"Starting container; {run_log_string}", "INFO")
+
+    # Create semaphores for concurrency limits
+    concurrency_manager = concurrency.ConcurrencyManager(ctx)
+
+    # Start concurrency_monitor
+    concurrency_monitor.start_concurrency_monitor(ctx, concurrency_manager)
 
     # Extract the env vars used repeatedly, to keep this DRY
     # These values are only used in the main function
@@ -60,7 +67,7 @@ def main():
         git.git_config_safe_directory(ctx)
 
         # Run the main application logic
-        convert_repos.start(ctx)
+        convert_repos.start(ctx, concurrency_manager)
         # Add started repo conversion jobs to the context dict?
 
         # Tidy up zombie processes which have already completed during this run through this loop

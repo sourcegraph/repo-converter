@@ -46,6 +46,7 @@ class Context:
         # Run count
         self.run_count = 0
 
+        # Namespace for our metadata in git repo config files
         self.git_config_namespace = "repo-converter"
 
 
