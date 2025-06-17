@@ -17,11 +17,11 @@ services:
       dockerfile: build/Dockerfile
     container_name: repo-converter
     environment:
-      # - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
+      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
       # - MAX_CYCLES=100
       - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
-      # - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
-      # - MAX_CONCURRENT_CONVERSIONS_TOTAL=5
+      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
+      - MAX_CONCURRENT_CONVERSIONS_TOTAL=100
 
     image: sourcegraph/repo-converter:build
     restart: never

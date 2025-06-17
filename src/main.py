@@ -39,6 +39,10 @@ def main():
     concurrency_manager = concurrency.ConcurrencyManager(ctx)
 
     # Start concurrency_monitor
+    # TODO: Sort out if this is needed / duplicative,
+    # and if needed, does it need to be in a separate thread?
+    # And if it needs to be in a separate thread, how to kill it when the main thread dies
+    # So that the container can die and get restarted
     concurrency_monitor.start_concurrency_monitor(ctx, concurrency_manager)
 
     # Extract the env vars used repeatedly, to keep this DRY

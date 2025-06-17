@@ -53,35 +53,68 @@ class ConcurrencyManager:
         # Ensure no two processes can write to active_jobs at the same
         self.active_jobs_lock = multiprocessing.Lock()
 
-        log(ctx, f"Initialized concurrency manager: MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit}, MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}", "info")
+        log(ctx, f"Initialized concurrency manager: MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit}, MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}", "debug")
 
 
     def acquire_job_slot(self, repo_key: str, server_hostname: str, timeout: float = 10.0) -> bool:
         """
-        Try to acquire both global and server-specific semaphores.
-        Returns True if successful, False if would block.
+        Check if:
+        - Repo already has a job in progress
+        - Global and server semaphore slots are available
+        Try to acquire both global and server-specific semaphores
+        Returns True if:
+        - Successfully got a job slot
+        Returns False if:
+        - Repo already has a job in progress
         """
 
+        # Check if repo already has a job in progress
+        server_active_jobs_list = []
+        with self.active_jobs_lock:
+            if server_hostname in self.active_jobs:
+                server_active_jobs_list = list(self.active_jobs[server_hostname])
+        if repo_key in server_active_jobs_list:
+            log(self.ctx, f"{repo_key}; Repo job already in progress", "info")
+            return False
+
+        # Check global limit
+        if self.global_semaphore.get_value() <= 0:
+            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit} reached, waiting for a slot", "info")
+
+        # Check per-server limit
+
+        # Get the semaphore object for this server
+        server_semaphore = self.get_server_semaphore(server_hostname)
+
+        # Check the semaphore value for number of remaining slots
+        if server_semaphore.get_value() <= 0:
+            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit} reached, waiting for a slot", "info")
+
         # Acquire a slot in the global semaphore
-        if not self.global_semaphore.acquire(block=False, timeout=timeout):
+        # if not self.global_semaphore.acquire(block=False, timeout=timeout):
+        # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
+        if not self.global_semaphore.acquire(block=True):
 
             # TODO: Want to hold this semaphore request in a queue, so that repo sync jobs are executed in a predictable order,
             # not just whichever repo sync job happened to be requested after the [limit]'th job finished
-            log(self.ctx, f"{repo_key}; Cannot start - global concurrency limit ({self.global_limit}) reached", "info")
+            log(self.ctx, f"{repo_key}; self.global_semaphore.acquire failed", "error")
             return False
 
         # Get the semaphore object for this server
         server_semaphore = self.get_server_semaphore(server_hostname)
 
         # Try to acquire server-specific semaphore
-        if not server_semaphore.acquire(block=False, timeout=timeout):
+        #if not server_semaphore.acquire(block=False, timeout=timeout):
+        # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
+        if not server_semaphore.acquire(block=True):
 
             # Release the global semaphore since we couldn't get the server one
             self.global_semaphore.release()
 
             # TODO: Want to hold this semaphore request in a queue, so that repo sync jobs are executed in a predictable order,
             # not just whichever repo sync job happened to be requested after the [limit]'th job finished
-            log(self.ctx, f"{repo_key}; Cannot start - server {server_hostname} concurrency limit ({self.per_server_limit}) reached", "info")
+
+            log(self.ctx, f"{repo_key}; server_semaphore.acquire failed", "error")
             return False
 
         # Successfully acquired both semaphores
@@ -104,40 +137,6 @@ class ConcurrencyManager:
         log(self.ctx, f"{repo_key}; Acquired job slot for server {server_hostname} (global: {global_status}, server: {server_status}", "info")
 
         return True
-
-
-    def can_start_job(self, server_hostname: str, repo_key: str) -> tuple[bool, str]:
-        """
-        Check if:
-        - Repo already has a job in progress
-        - Global and server semaphore slots are available
-        """
-
-        # Check if repo already has a job in progress
-        server_active_jobs_list = []
-        with self.active_jobs_lock:
-
-            if server_hostname in self.active_jobs:
-
-                server_active_jobs_list = list(self.active_jobs[server_hostname])
-
-        if repo_key in server_active_jobs_list:
-            return False, "Repo job already in progress"
-
-        # Check global limit
-        if self.global_semaphore.get_value() <= 0:
-            return False, f"Hit concurrency limit MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit}"
-
-        # Check per-server limit
-
-        # Get the semaphore object for this server
-        server_semaphore = self.get_server_semaphore(server_hostname)
-
-        # Check the semaphore value for number of remaining slots
-        if server_semaphore.get_value() <= 0:
-            return False, f"Hit concurrency limit MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit} for server {server_hostname}"
-
-        return True, ""
 
 
     def extract_server_host(self, repo_config: dict) -> str:
@@ -250,4 +249,3 @@ class ConcurrencyManager:
 
         except ValueError as e:
             log(self.ctx, f"{repo_key}; Error releasing semaphores: {e}", "error")
-

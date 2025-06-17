@@ -35,6 +35,7 @@ def load_env_vars() -> dict:
     env_vars["BUILD_DATE"]                              = str(environ.get("BUILD_DATE"                              , "" ))
     env_vars["BUILD_DIRTY"]                             = str(environ.get("BUILD_DIRTY"                             , "" ))
     env_vars["BUILD_TAG"]                               = str(environ.get("BUILD_TAG"                               , "" ))
+    env_vars["CONCURRENCY_MONITOR_INTERVAL"]            = int(environ.get("CONCURRENCY_MONITOR_INTERVAL"            , 60     ))
     # DEBUG INFO WARNING ERROR CRITICAL
     env_vars["LOG_LEVEL"]                               = str(environ.get("LOG_LEVEL"                               , "INFO" ))
     env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]   = int(environ.get("MAX_CONCURRENT_CONVERSIONS_PER_SERVER"   , 10     ))

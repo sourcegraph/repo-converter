@@ -1,13 +1,17 @@
+#!/usr/bin/env python3
+# Try to clear the various lock files left behind by different git processes
+
 # Import repo-converter modules
+from utils import cmd
 from utils.context import Context
 from utils.log import log
-from utils import cmd
 
 # Import Python standard modules
-import subprocess
 import os
+import subprocess
 
-def check_lock_files(ctx: Context, args, process_dict):
+
+def check_lock_files(ctx: Context, args, process_dict) -> bool:
 
     return_value                = False
     repo_path                   = args[2] # [ "git", "-C", local_repo_path, "gc" ]
@@ -18,13 +22,21 @@ def check_lock_files(ctx: Context, args, process_dict):
         ("git svn fetch origin trunk"   , ".git/svn/refs/remotes/origin/trunk/index.lock"   ), # fatal: Unable to create '/sourcegraph/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/origin/trunk/index.lock': File exists
     ]
 
-    # TypeError: can only join an iterable
     try:
         process_command = " ".join(process_dict["cmdline"])
+
     except TypeError as exception:
+        # TypeError: can only join an iterable
         process_command = process_dict["cmdline"]
 
-    pid             = process_dict["pid"]
+    except KeyError:
+        # KeyError: 'cmdline'
+        # process_dict doesn't have an attribute cmdline??
+        # TODO: Review the calling code to see if this is a result of the recent concurrency work
+        log(ctx, f"Failed to check for lock files for process; args: {args}; dict: {process_dict}", "error")
+        return False
+
+    pid = process_dict["pid"]
 
     for lock_file in list_of_process_and_lock_file_path_tuples:
 

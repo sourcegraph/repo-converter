@@ -5,10 +5,10 @@
 # based on parallelism limits per server
 
 # Import repo-converter modules
+from source_repo import svn
+from utils.concurrency import ConcurrencyManager
 from utils.context import Context
 from utils.log import log
-from utils.concurrency import ConcurrencyManager
-from source_repo import svn
 
 # Import Python standard modules
 import multiprocessing
@@ -19,25 +19,27 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
 
     # Log initial status
     status = concurrency_manager.get_status()
-    log(ctx, f"Starting conversion with concurrency status: {status}", "info")
+    log(ctx, f"Starting convert_repos.start() with concurrency status: {status}", "info")
 
     # List to track started processes for cleanup
+    # TODO: Store this in ctx, and add all child procs to it?
     active_processes = []
 
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
 
+        # # Log initial status
+        # status = concurrency_manager.get_status()
+        # log(ctx, f"{repo_key}; Starting repo conversion with concurrency status: {status}", "info")
+
         # Get repo configuration
         repo_config = ctx.repos[repo_key]
+
+        # TODO: Move extract_server_host function to config/repos.py
         server_hostname = concurrency_manager.extract_server_host(repo_config)
 
-        # Check if we can start this job
-        repo_key_can_start_job, message = concurrency_manager.can_start_job(server_hostname, repo_key)
-        if not repo_key_can_start_job:
-            log(ctx, f"{repo_key}; Skipping: {message}", "info")
-            continue
-
         # Try to acquire concurrency slot
+        # This will block and wait till a slot is available
         if not concurrency_manager.acquire_job_slot(repo_key, server_hostname):
             log(ctx, f"{repo_key}; Could not acquire concurrency slot, skipping", "info")
             continue
@@ -74,13 +76,17 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
     cleanup_stale_processes(ctx, active_processes, concurrency_manager)
 
 
-def cleanup_stale_processes(ctx: Context, active_processes: list, concurrency_manager: ConcurrencyManager):
+def cleanup_stale_processes(ctx: Context, active_processes: list, concurrency_manager: ConcurrencyManager) -> None:
     """Clean up any stale processes and their semaphores."""
+
     for process, repo_key, server_hostname in active_processes:
+
         if not process.is_alive() and process.exitcode is not None:
+
             # Process is done but may not have cleaned up properly
             try:
                 concurrency_manager.release_job_slot(repo_key, server_hostname)
                 log(ctx, f"{repo_key}; Cleaned up stale process semaphore", "debug")
+
             except Exception as e:
-                log(ctx, f"{repo_key}; Error during stale process cleanup: {e}", "warning")
+                log(ctx, f"{repo_key}; Error during stale process cleanup: {e}", "error")

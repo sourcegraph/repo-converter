@@ -7,8 +7,15 @@ from utils.log import log
 import threading
 import time
 
-def start_concurrency_monitor(ctx: Context, concurrency_manager, interval: int = 60):
+def start_concurrency_monitor(ctx: Context, concurrency_manager) -> None:
     """Start a background thread to log concurrency status periodically."""
+
+    # Get the interval config from env vars
+    interval = ctx.env_vars["CONCURRENCY_MONITOR_INTERVAL"]
+
+    # If the env var is set to 0, then disable the monitor
+    if interval <= 0:
+        return
 
     def monitor_loop():
 
@@ -31,20 +38,21 @@ def start_concurrency_monitor(ctx: Context, concurrency_manager, interval: int =
 
                     server_active = server_status["active_slots"]
                     server_limit = server_status["limit"]
+                    active_jobs = server_status["active_jobs"]
 
                     if server_active > 0:
 
-                        server_summary.append(f"{server_hostname}: {server_active}/{server_limit}")
+                        server_summary.append(f"{server_hostname}: {server_active}/{server_limit}; repos: {active_jobs}")
 
                 servers_str = ", ".join(server_summary) if server_summary else "none active"
 
+                # 2025-06-17; 07:27:32.000558; af75882; run 1; INFO; Concurrency status - Global: 11/100, Servers: svn.apache.org: 10/10
                 log(ctx, f"Concurrency status - Global: {global_active}/{global_limit}, Servers: {servers_str}", "info")
-
-                time.sleep(interval)
 
             except Exception as e:
                 log(ctx, f"Error in concurrency monitor: {e}", "error")
-                time.sleep(interval)
+
+            time.sleep(interval)
 
     monitor_thread = threading.Thread(target=monitor_loop, daemon=True, name="concurrency_monitor")
     monitor_thread.start()

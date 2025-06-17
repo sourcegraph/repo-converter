@@ -27,15 +27,20 @@ def load_from_file(ctx: Context) -> None:
             # This should return a dict
             ctx.repos = yaml.safe_load(repos_to_convert_file)
 
+    except IsADirectoryError:
+
+        log(ctx, f"File not found at {repos_to_convert_file_path}, but found a directory, likely created by the Docker mount. Please stop the container, delete the directory, and create the yaml file.", "critical")
+        exit(1)
+
     except FileNotFoundError:
 
-        log(ctx, f"File not found at {repos_to_convert_file_path}", "error")
-        exit(1)
+        log(ctx, f"File not found at {repos_to_convert_file_path}", "critical")
+        exit(2)
 
     except (AttributeError, yaml.scanner.ScannerError) as exception: # type: ignore
 
-        log(ctx, f"Invalid YAML file format in {repos_to_convert_file_path}, please check the structure matches the format in the README.md. Exception: {type(exception)}, {exception.args}, {exception}", "error")
-        exit(2)
+        log(ctx, f"Invalid YAML file format in {repos_to_convert_file_path}, please check the structure matches the format in the README.md. Exception: {type(exception)}, {exception.args}, {exception}", "critical")
+        exit(3)
 
     sanitize_repos_dict(ctx)
 
