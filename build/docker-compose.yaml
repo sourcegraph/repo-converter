@@ -12,9 +12,6 @@ services:
       - ../config/cloud-agent-config.yaml:/sourcegraph/cloud-agent-config.yaml:ro
 
   repo-converter:
-    build:
-      context: ../
-      dockerfile: build/Dockerfile
     container_name: repo-converter
     environment:
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
@@ -22,8 +19,7 @@ services:
       - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
       - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
       - MAX_CONCURRENT_CONVERSIONS_TOTAL=100
-
-    image: sourcegraph/repo-converter:build
+    image: repo-converter:build
     restart: never
     volumes:
       - ../dev/toprc:/root/.config/procps/toprc # Add `top` config file

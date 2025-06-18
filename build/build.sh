@@ -75,8 +75,16 @@ ENV_FILE=".env"
 } > "$ENV_FILE"
 
 # Run the build
-echo "Running the podman-compose build"
-podman-compose build repo-converter
+echo "Running podman build"
+
+podman build \
+    --file          ./Dockerfile \
+    --format        docker \
+    --jobs          0 \
+    --label         "org.opencontainers.image.created=$BUILD_DATE" \
+    --label         "org.opencontainers.image.revision=$BUILD_COMMIT" \
+    --tag           repo-converter:build \
+    ..
 
 # If you pass any args to this script, start the built image, and follow the logs
 if [[ "$1" != "" ]]
@@ -95,8 +103,11 @@ then
     fi
 
     # Start the compose deployment
+    #    --no-recreate \
     echo "Starting new containers"
-    podman-compose up -d --remove-orphans
+    podman-compose up \
+        --detach \
+        --remove-orphans
 
     # Clear the terminal
     if [[ "$1" == *"c"* ]]
