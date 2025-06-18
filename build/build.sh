@@ -9,11 +9,10 @@
 # ./build.sh <any>
 # Run the build, start the containers
 
-# ./build.sh cf
-# Run the build, start the containers, clear the terminal, and follow repo-converter's logs
-
-# ./build.sh pcf
-# Run the build, pull newer containers, start the containers, clear the terminal, and follow repo-converter's logs
+# c - clear the terminal
+# f - follow repo-converter container's logs
+# m - restart podman machine
+# p - pull new images for src-cli and cloud-agent
 
 
 # TODO: check if the GitHub Actions build script can't be reused here?
@@ -41,6 +40,20 @@ set -x
 # Exit on error
 set -o errexit
 
+
+# If an m is passed in the args
+if [[ "$1" == *"m"* ]]
+then
+
+    # Restart the podman VM, as a background process
+    podman machine stop
+    podman machine start &
+    # But give it 10 seconds to start up
+    sleep 20
+
+fi
+
+container_name="repo-converter"
 
 # pip requirements
 req_file="./requirements.txt"
@@ -83,7 +96,7 @@ podman build \
     --jobs          0 \
     --label         "org.opencontainers.image.created=$BUILD_DATE" \
     --label         "org.opencontainers.image.revision=$BUILD_COMMIT" \
-    --tag           repo-converter:build \
+    --tag           "$container_name":build \
     ..
 
 # If you pass any args to this script, start the built image, and follow the logs
@@ -103,10 +116,10 @@ then
     fi
 
     # Start the compose deployment
-    #    --no-recreate \
     echo "Starting new containers"
     podman-compose up \
         --detach \
+        --no-recreate \
         --remove-orphans
 
     # Clear the terminal
@@ -119,8 +132,8 @@ then
     # Follow the container logs
     if [[ "$1" == *"f"* ]]
     then
-        echo "Following repo-converter logs"
-        podman-compose logs repo-converter -f
+        echo "Following $container_name logs"
+        podman-compose logs "$container_name" -f
     fi
 
 fi

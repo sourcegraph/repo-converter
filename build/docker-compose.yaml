@@ -14,11 +14,12 @@ services:
   repo-converter:
     container_name: repo-converter
     environment:
+      - CONCURRENCY_MONITOR_INTERVAL=10
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
-      # - MAX_CYCLES=100
-      - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
       - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
       - MAX_CONCURRENT_CONVERSIONS_TOTAL=100
+      - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
+      # - MAX_CYCLES=100
     image: repo-converter:build
     restart: never
     volumes:
