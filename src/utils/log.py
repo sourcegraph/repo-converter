@@ -29,7 +29,7 @@ def log(ctx: Context, message, level_name: str = "DEBUG") -> None:
     log_message += f"{date_string}; {time_string}; "
 
     build_tag   = ctx.env_vars["BUILD_TAG_OR_COMMIT_FOR_LOGS"]
-    log_message += f"{build_tag}; "
+    log_message += f"{build_tag}; {ctx.container_id}; "
 
     run_string  = f"run {ctx.run_count}"
     message     = secret.redact(ctx, message)

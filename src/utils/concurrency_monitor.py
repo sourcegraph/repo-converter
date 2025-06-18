@@ -2,12 +2,16 @@
 # Monitoring utility for concurrency management
 # This can be a thread of the main.py module, to share the concurrency_manager's memory
 
+# Import repo-converter modules
+from utils.concurrency import ConcurrencyManager
 from utils.context import Context
 from utils.log import log
+
+# Import Python standard modules
 import threading
 import time
 
-def start_concurrency_monitor(ctx: Context, concurrency_manager) -> None:
+def start_concurrency_monitor(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
     """Start a background thread to log concurrency status periodically."""
 
     # Get the interval config from env vars
@@ -17,7 +21,7 @@ def start_concurrency_monitor(ctx: Context, concurrency_manager) -> None:
     if interval <= 0:
         return
 
-    def monitor_loop():
+    def monitor_loop() -> None:
 
         while True:
 
@@ -38,11 +42,11 @@ def start_concurrency_monitor(ctx: Context, concurrency_manager) -> None:
 
                     server_active = server_status["active_slots"]
                     server_limit = server_status["limit"]
-                    active_jobs = server_status["active_jobs"]
+                    active_jobs = list(server_status["active_jobs"])
 
                     if server_active > 0:
 
-                        server_summary.append(f"{server_hostname}: {server_active}/{server_limit}; repos: {active_jobs}")
+                        server_summary.append(f"{server_hostname}: {server_active}/{server_limit}; Count of repos: {len(active_jobs)}; Repos: {active_jobs}")
 
                 servers_str = ", ".join(server_summary) if server_summary else "none active"
 
@@ -57,4 +61,4 @@ def start_concurrency_monitor(ctx: Context, concurrency_manager) -> None:
     monitor_thread = threading.Thread(target=monitor_loop, daemon=True, name="concurrency_monitor")
     monitor_thread.start()
 
-    log(ctx, f"Started concurrency monitor with {interval}s interval", "info")
+    log(ctx, f"Concurrency status - Started concurrency monitor with {interval}s interval", "info")

@@ -68,7 +68,7 @@ class ConcurrencyManager:
         - Repo already has a job in progress
         """
 
-        # Check if repo already has a job in progress
+        ## Check if this repo already has a job in progress
         server_active_jobs_list = []
         with self.active_jobs_lock:
             if server_hostname in self.active_jobs:
@@ -77,12 +77,8 @@ class ConcurrencyManager:
             log(self.ctx, f"{repo_key}; Repo job already in progress", "info")
             return False
 
-        # Check global limit
-        if self.global_semaphore.get_value() <= 0:
-            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit} reached, waiting for a slot", "info")
 
-        # Check per-server limit
-
+        ## Check per-server limit
         # Get the semaphore object for this server
         server_semaphore = self.get_server_semaphore(server_hostname)
 
@@ -90,44 +86,49 @@ class ConcurrencyManager:
         if server_semaphore.get_value() <= 0:
             log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit} reached, waiting for a slot", "info")
 
-        # Acquire a slot in the global semaphore
-        # if not self.global_semaphore.acquire(block=False, timeout=timeout):
-        # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
-        if not self.global_semaphore.acquire(block=True):
+        ## Check global limit
+        if self.global_semaphore.get_value() <= 0:
+            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit} reached, waiting for a slot", "info")
 
-            # TODO: Want to hold this semaphore request in a queue, so that repo sync jobs are executed in a predictable order,
-            # not just whichever repo sync job happened to be requested after the [limit]'th job finished
-            log(self.ctx, f"{repo_key}; self.global_semaphore.acquire failed", "error")
-            return False
 
-        # Get the semaphore object for this server
-        server_semaphore = self.get_server_semaphore(server_hostname)
-
-        # Try to acquire server-specific semaphore
-        #if not server_semaphore.acquire(block=False, timeout=timeout):
+        ## Acquire a slot in the the server-specific semaphore
         # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
         if not server_semaphore.acquire(block=True):
-
-            # Release the global semaphore since we couldn't get the server one
-            self.global_semaphore.release()
-
-            # TODO: Want to hold this semaphore request in a queue, so that repo sync jobs are executed in a predictable order,
-            # not just whichever repo sync job happened to be requested after the [limit]'th job finished
 
             log(self.ctx, f"{repo_key}; server_semaphore.acquire failed", "error")
             return False
 
-        # Successfully acquired both semaphores
+        ## Acquire a slot in the the global semaphore
+        # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
+        if not self.global_semaphore.acquire(block=True):
+
+            # Release the server semaphore since we couldn't get the global one
+            server_semaphore.release()
+
+            log(self.ctx, f"{repo_key}; self.global_semaphore.acquire failed", "error")
+            return False
+
+        ## Successfully acquired both semaphores
 
         # Add the active job to the active_jobs dict
+        server_active_jobs_list = []
         with self.active_jobs_lock:
 
             # If the server doesn't already have a list, then create one
             if server_hostname not in self.active_jobs:
                 self.active_jobs[server_hostname] = self.manager.list()
 
-            # Append the repo to the list, now that we're confident it exists
-            self.active_jobs[server_hostname].append(repo_key)
+            # Read it into a normal list
+            server_active_jobs_list = list(self.active_jobs[server_hostname])
+
+            # Append the repo key
+            server_active_jobs_list.append(repo_key)
+
+            # Sort the list
+            server_active_jobs_list.sort()
+
+            # Assign the list back to the manager list
+            self.active_jobs[server_hostname] = server_active_jobs_list
 
         # Get the n / limit, where n is the n'th slot this job got on the global semaphore, if limit is set
         global_status = f"{self.global_limit - self.global_semaphore.get_value()}/{self.global_limit}"
@@ -217,6 +218,7 @@ class ConcurrencyManager:
 
                     # The active jobs dict, seems to have the server hostname as keys
                     # Copy the dict, to free up the lock ASAP
+                    # active_jobs_list = list(self.active_jobs[server_hostname]).sort()
                     active_jobs_list = list(self.active_jobs[server_hostname])
 
                 status["servers"][server_hostname] = {
@@ -233,10 +235,22 @@ class ConcurrencyManager:
     def release_job_slot(self, repo_key: str, server_hostname: str):
         """Release both global and server-specific semaphores."""
 
+        server_active_jobs_list = []
+
+        with self.active_jobs_lock:
+
+            # Read it into a normal list
+            server_active_jobs_list = list(self.active_jobs[server_hostname])
+
+            # Remove the repo from the active_jobs list
+            if repo_key in server_active_jobs_list:
+                server_active_jobs_list.remove(repo_key)
+
+            # Overwrite the managed list
+            self.active_jobs[server_hostname] = server_active_jobs_list
+
+
         try:
-            with self.active_jobs_lock:
-                if repo_key in self.active_jobs[server_hostname]:
-                    self.active_jobs[server_hostname].remove(repo_key)
 
             # Release per-server semaphore
             server_semaphore = self.get_server_semaphore(server_hostname)
