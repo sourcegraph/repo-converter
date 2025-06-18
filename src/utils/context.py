@@ -37,7 +37,7 @@ class Context:
         self.container_id = os.uname().nodename
         self.start_datetime = datetime.fromtimestamp(psutil.Process().create_time()).strftime("%Y-%m-%d %H:%M:%S")
 
-        # Child processes
+        # Child process tracking
         self.child_procs = {}
 
         # Set of secrets to redact in logs

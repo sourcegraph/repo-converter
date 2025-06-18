@@ -1,24 +1,12 @@
 # TODO:
 
 - repos-to-convert.yaml
-    - Create env var for a map of servers, usernames, and passwords, so creds don't need to be stored in files
-    - Rewrite as a list of servers
-        - Server
-            - Name key
-            - URL
-            - Repo type
-            - Username
-            - Password
-            - Access token
-            - SSH key path
-            - per-server concurrency limit?
-            - List of repos
-                - list of repos could just be repo names
-                - each repo can have its own details, such as commits to skip, branch / tag layout
-                - If blank, try and parse the list from the server?
-    - If repo / server names need non-YAML-safe characters, make repo name a key-value instead of just a key
+    - Create env var for a map so creds don't need to be stored in files
+        - server
+        - username
+        - password
     - Env vars vs config file
-        - Read as many environment variables from repos-to-convert.yaml as we can, so the values can be changed without restarting the container
+        - Read as many configs from repos-to-convert.yaml as we can, so the values can be changed without restarting the container
         - Env vars
             - Service-oriented, ex. log level
             - Cannot change without restarting the container
@@ -28,6 +16,8 @@
             - Can change without restarting the container
     - Add a fetch-interval-seconds config to repos-to-convert.yaml file
         - under the server config
+        - for each repo in the repos_dict
+            - Add a "next sync time" field in the dict
         - convert_svn_repos loop
             - Try and read it
                     - next_fetch_time = repo_key.get(next-fetch-time, None)
@@ -66,9 +56,18 @@
         - git svn show-ignore
         - https://git-scm.com/docs/git-svn#Documentation/git-svn.txt-emcreate-ignoreem
     - Test layout tags and branches as lists / arrays
+    - If list of repos is blank in repos-to-convert, try and parse the list from the server?
 
 - Process management
-    - Lean more about multiprocessing pools
+    - Found the repo-converter container dead after 691 runs, with no evidence as to why it died in the container logs
+        - Next time this happens, run podman inspect <container ID>, and review state info
+        - Try to get all the logs / events from the container / pod, to find why it died
+        - How to have the container emit a message while it's dying?
+    - Need to integrate subprocess methods together
+        - State tracking, in ctx.child_procs = {}
+        - Cleanup of zombie processes
+        - Clean up of process state
+    - Learn more about multiprocessing pools
     - Library to cleanup zombie processes, or how does Amp suggest we manage zombies?
     - Is psutils necessary?
         - May not have had a recent release, may need to replace it
@@ -82,7 +81,86 @@
         - May require tracking process objects in a dict, which would prevent processes from getting auto-cleaned, resulting in higher zombie numbers
 
 - Builds
-    - Tags
+    - Local builds
+        - Not sure why the build is failing, trying to communicate to a closed socket, like the machine's API service died, but the machine is still running
+```shell
+Running podman build
++ podman build --file ./Dockerfile --format docker --jobs 0 --label 'org.opencontainers.image.created=2025-06-18 03:50:14 UTC' --label org.opencontainers.image.revision=fab91e6 --tag repo-converter:build ..
+ERRO[0007] 1 error occurred:
+        * lstat .../repo-converter/src-serve-root/svn.apache.org/asf/cocoon/.git/svn/refs/remotes/git-svn/index.lock: no such file or directory
+Error: Post "http://d/v5.5.1/libpod/build?...": io: read/write on closed pipe
+```
+        - Next time it happens, Activity Monitor to see if it's using all of its memory
+        - If they fail with weird messages, try podman machine commands:
+            - list
+            - info
+            - set
+            - stop
+            - start
+            - reset
+            - init
+            - inspect - Not super useful
+```shell
+[2025-06-17 21:52:49] build % podman machine list
+NAME                     VM TYPE     CREATED      LAST UP            CPUS        MEMORY      DISK SIZE
+podman-machine-default*  applehv     2 weeks ago  Currently running  5           8GiB        100GiB
+[2025-06-17 21:55:18] build % podman machine info
+host:
+    arch: arm64
+    currentmachine: podman-machine-default
+    defaultmachine: podman-machine-default
+    eventsdir: /var/folders/_m/lt7_4g3x12q5jlrss_vdj4140000gn/T/storage-run-501/podman
+    machineconfigdir: ~/.config/containers/podman/machine/applehv
+    machineimagedir: ~/.local/share/containers/podman/machine/applehv
+    machinestate: Running
+    numberofmachines: 1
+    os: darwin
+    vmtype: applehv
+version:
+    apiversion: 5.5.1
+    version: 5.5.1
+    goversion: go1.24.4
+    gitcommit: ""
+    builttime: Thu Jun  5 12:25:35 2025
+    built: 1749147935
+    buildorigin: brew
+    osarch: darwin/arm64
+    os: darwin
+
+[2025-06-17 21:55:25] build % podman machine inspect
+[
+     {
+          "ConfigDir": {
+               "Path": "~/.config/containers/podman/machine/applehv"
+          },
+          "ConnectionInfo": {
+               "PodmanSocket": {
+                    "Path": "/var/folders/_m/lt7_4g3x12q5jlrss_vdj4140000gn/T/podman/podman-machine-default-api.sock"
+               },
+               "PodmanPipe": null
+          },
+          "Created": "2025-05-30T18:40:55.226032-06:00",
+          "LastUp": "2025-06-17T17:22:06.514173-06:00",
+          "Name": "podman-machine-default",
+          "Resources": {
+               "CPUs": 5,
+               "DiskSize": 100,
+               "Memory": 8192,
+               "USBs": []
+          },
+          "SSHConfig": {
+               "IdentityPath": "~/.local/share/containers/podman/machine/machine",
+               "Port": 62020,
+               "RemoteUsername": "core"
+          },
+          "State": "running",
+          "UserModeNetworking": true,
+          "Rootful": false,
+          "Rosetta": true
+     }
+]
+```
+    - GitHub Action build tags
         - Want
             - latest: Latest release tag
             - insiders: Latest of any build
@@ -113,16 +191,20 @@
         - URL
         - Status (up to date / out of date)
         - Last run's status (success / fail / timeout)
+        - Progress (% of commits)
+        - Commits converted
+        - Commits remaining
+        - Total commits
         - Local commit
         - Remote commit
-        - Commits remaining to sync
         - Size on disk
-    - Log to JSON blobs?
+    - Switch to structured (i.e. JSON) logs?
+    - Find a tool to search / filter through logs
     - Log levels
         - proc events in DEBUG logs make DEBUG level logging too noisy
         - Increase log levels of everything else?
         - Create a new lower log level named proc?
-    - Debug log the list of servers and repos found in config file at the start of each run?
+    - Debug log the list of servers and repos found in config file at the start of each run, so we can see it in the last ~1k log lines?
 
 - Add git-to-p4 converter
     - Run it in MSP, to build up our Perforce test depots from public OSS repos

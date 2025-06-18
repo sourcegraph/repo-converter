@@ -40,19 +40,6 @@ set -x
 # Exit on error
 set -o errexit
 
-
-# If an m is passed in the args
-if [[ "$1" == *"m"* ]]
-then
-
-    # Restart the podman VM, as a background process
-    podman machine stop
-    podman machine start &
-    # But give it 10 seconds to start up
-    sleep 20
-
-fi
-
 container_name="repo-converter"
 
 # pip requirements
@@ -89,6 +76,18 @@ ENV_FILE=".env"
 
 # Run the build
 echo "Running podman build"
+
+# If an m is passed in the args
+if [[ "$1" == *"m"* ]]
+then
+
+    # Restart the podman VM, as a background process
+    podman machine stop
+    podman machine start &
+    # But give it 10 seconds to start up
+    sleep 20
+
+fi
 
 podman build \
     --file          ./Dockerfile \

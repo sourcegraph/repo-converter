@@ -61,7 +61,8 @@ def sanitize_repos_dict(ctx: Context) -> None:
 def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=False):
     """Recursive function to sanitize inputs of arbitrary types, to ensure they are returned as the correct type."""
 
-    # Uses recursion to depth-first-search through the repos_dict dictionary, with arbitrary depths, keys, and value types    # Take in the repos_dict
+    # Uses recursion to depth-first-search through the repos_dict dictionary, with arbitrary depths, keys, and value types
+    # Take in the repos_dict
     # DFS traverse the dictionary
     # Get the key:value pairs
     # Convert the keys to strings
@@ -70,22 +71,30 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
     # The inputs that have specific type requirements
     # Dictionary of tuples
     input_value_types_dict = {}
-    input_value_types_dict[ "authors-file-path"     ] = (str,           )
-    input_value_types_dict[ "authors-prog-path"     ] = (str,           )
-    input_value_types_dict[ "bare-clone"            ] = (bool,          )
-    input_value_types_dict[ "branches"              ] = (str, list      )
-    input_value_types_dict[ "code-host-name"        ] = (str,           )
-    input_value_types_dict[ "fetch-batch-size"      ] = (int,           )
-    input_value_types_dict[ "git-default-branch"    ] = (str,           )
-    input_value_types_dict[ "git-ignore-file-path"  ] = (str,           )
-    input_value_types_dict[ "git-org-name"          ] = (str,           )
-    input_value_types_dict[ "layout"                ] = (str,           )
-    input_value_types_dict[ "password"              ] = (str,           )
-    input_value_types_dict[ "svn-repo-code-root"    ] = (str,           )
-    input_value_types_dict[ "tags"                  ] = (str, list      )
-    input_value_types_dict[ "trunk"                 ] = (str,           )
-    input_value_types_dict[ "type"                  ] = (str,           )
-    input_value_types_dict[ "username"              ] = (str,           )
+    input_value_types_dict[ "authors-file-path"             ] = (str,       )
+    input_value_types_dict[ "authors-prog-path"             ] = (str,       )
+    input_value_types_dict[ "bare-clone"                    ] = (bool,      )
+    input_value_types_dict[ "branches"                      ] = (str, list  )
+    input_value_types_dict[ "code-host-name"                ] = (str,       )
+    input_value_types_dict[ "commits-to-skip"               ] = (str, list  )
+    input_value_types_dict[ "default-branch-only"           ] = (bool,      )
+    input_value_types_dict[ "destination-repo-name"         ] = (str,       )
+    input_value_types_dict[ "fetch-batch-size"              ] = (int,       )
+    input_value_types_dict[ "fetch-interval"                ] = (int,       )
+    input_value_types_dict[ "git-default-branch"            ] = (str,       )
+    input_value_types_dict[ "git-ignore-file-path"          ] = (str,       )
+    input_value_types_dict[ "git-org-name"                  ] = (str,       )
+    input_value_types_dict[ "max-concurrent-conversions"    ] = (int,       )
+    input_value_types_dict[ "password"                      ] = (str,       )
+    input_value_types_dict[ "repo-parent-url"               ] = (str,       )
+    input_value_types_dict[ "repos"                         ] = (str, list  )
+    input_value_types_dict[ "source-repo-name"              ] = (str,       )
+    input_value_types_dict[ "svn-branch-layout"             ] = (str, list  )
+    input_value_types_dict[ "svn-repo-code-root"            ] = (str,       )
+    input_value_types_dict[ "tags"                          ] = (str, list  )
+    input_value_types_dict[ "trunk"                         ] = (str,       )
+    input_value_types_dict[ "type"                          ] = (str,       )
+    input_value_types_dict[ "username"                      ] = (str,       )
 
 
     if isinstance(input_value, dict):
@@ -108,6 +117,8 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
         for input_list_item in input_value:
 
             # Recurse back into this function to handle the values of this list
+            # This passes in the input_key from the calling function,
+            # so that it validates the list items should be the correct type for this list
             output.append(sanitize_repos_to_convert(ctx, input_list_item, input_key, True))
 
     else:
@@ -126,6 +137,9 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
                 # Construct the warning message
                 type_warning_message = f"Parsing REPOS_TO_CONVERT file found incorrect variable type for "
 
+                # Set of input keys to not log the values of
+                # TypeError: argument of type 'type' is not iterable
+                # if input_key in ( "password" ):
                 if input_key == "password":
                     type_warning_message += input_key
                 else:

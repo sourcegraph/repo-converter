@@ -2,7 +2,7 @@
 # Entry point for the repo-converter container
 
 # Import repo-converter modules
-from config import load_env, repos, validate_env
+from config import load_env, load_repos, validate_env
 from utils import cmd, concurrency, concurrency_monitor, convert_repos, git, logger
 from utils.context import Context
 from utils.log import log
@@ -61,7 +61,7 @@ def main():
         log(ctx, f"Starting run {ctx.run_count}; container uptime: {uptime}", "info")
 
         # Load the repos to convert from file, in case the file has been changed while the container is running
-        repos.load_from_file(ctx)
+        load_repos.load_from_file(ctx)
 
         # Tidy up zombie processes from the previous run through this loop
         cmd.status_update_and_cleanup_zombie_processes(ctx)
