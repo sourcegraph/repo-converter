@@ -81,9 +81,11 @@ echo "Running podman build"
 if [[ "$1" == *"m"* ]]
 then
 
-    # Restart the podman VM, as a background process
+    # Restart the podman VM
     podman machine stop
-    podman machine start &
+    # Start it as a background process
+    # and disown it, so it continues to run after this script ends
+    podman machine start & disown
     # But give it 10 seconds to start up
     sleep 20
 

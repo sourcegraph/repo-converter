@@ -32,27 +32,27 @@ import traceback # https://docs.python.org/3/library/traceback.html
 
 def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
-    repos_dict = ctx.repos
-    env_vars = ctx.env_vars
-    max_retries = env_vars["MAX_RETRIES"]
+    # Get env vars
+    max_retries = ctx.env_vars["MAX_RETRIES"]
+    env_credentials = ctx.env_vars["CREDENTIALS"]
 
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
     git_repo_name               = repo_key
-    authors_file_path           = repos_dict[repo_key].get("authors-file-path"    , None    )
-    authors_prog_path           = repos_dict[repo_key].get("authors-prog-path"    , None    )
-    bare_clone                  = repos_dict[repo_key].get("bare-clone"           , True    )
-    branches                    = repos_dict[repo_key].get("branches"             , None    )
-    code_host_name              = repos_dict[repo_key].get("code-host-name"       , None    )
-    fetch_batch_size            = repos_dict[repo_key].get("fetch-batch-size"     , 100     )
-    git_default_branch          = repos_dict[repo_key].get("git-default-branch"   , "trunk" )
-    git_ignore_file_path        = repos_dict[repo_key].get("git-ignore-file-path" , None    )
-    git_org_name                = repos_dict[repo_key].get("git-org-name"         , None    )
-    layout                      = repos_dict[repo_key].get("layout"               , None    )
-    password                    = repos_dict[repo_key].get("password"             , None    )
-    svn_remote_repo_code_root   = repos_dict[repo_key].get("svn-repo-code-root"   , None    )
-    tags                        = repos_dict[repo_key].get("tags"                 , None    )
-    trunk                       = repos_dict[repo_key].get("trunk"                , None    )
-    username                    = repos_dict[repo_key].get("username"             , None    )
+    authors_file_path           = ctx.repos[repo_key].get("authors-file-path"    , None    )
+    authors_prog_path           = ctx.repos[repo_key].get("authors-prog-path"    , None    )
+    bare_clone                  = ctx.repos[repo_key].get("bare-clone"           , True    )
+    branches                    = ctx.repos[repo_key].get("branches"             , None    )
+    code_host_name              = ctx.repos[repo_key].get("code-host-name"       , None    )
+    fetch_batch_size            = ctx.repos[repo_key].get("fetch-batch-size"     , 100     )
+    git_default_branch          = ctx.repos[repo_key].get("git-default-branch"   , "trunk" )
+    git_ignore_file_path        = ctx.repos[repo_key].get("git-ignore-file-path" , None    )
+    git_org_name                = ctx.repos[repo_key].get("git-org-name"         , None    )
+    layout                      = ctx.repos[repo_key].get("layout"               , None    )
+    password                    = ctx.repos[repo_key].get("password"             , None    )
+    svn_remote_repo_code_root   = ctx.repos[repo_key].get("svn-repo-code-root"   , None    )
+    tags                        = ctx.repos[repo_key].get("tags"                 , None    )
+    trunk                       = ctx.repos[repo_key].get("trunk"                , None    )
+    username                    = ctx.repos[repo_key].get("username"             , None    )
 
     ## Parse config parameters into command args
     # TODO: Interpret code_host_name, git_org_name, and git_repo_name if not given
@@ -62,7 +62,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
         # git_org_name              = asf
         # git_repo_name             = parquet
         # git repo root             = site              # arbitrary path inside the repo where contributors decided to start storing /trunk /branches /tags and other files to be included in the repo
-    local_repo_path = f"{env_vars['SRC_SERVE_ROOT']}/{code_host_name}/{git_org_name}/{git_repo_name}"
+    local_repo_path = f"{ctx.env_vars['SRC_SERVE_ROOT']}/{code_host_name}/{git_org_name}/{git_repo_name}"
     git_config_file_path = f"{local_repo_path}/.git/config"
 
     ## Define common command args
