@@ -68,6 +68,20 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
 
         # If password is provided to this function, feed it into the subprocess' stdin pipe
         # communicate() also waits for the process to finish
+
+        # Process clone_svn_repo_<repo-name>:
+        # Traceback (most recent call last):
+        #   File "/usr/lib/python3.10/multiprocessing/process.py", line 314, in _bootstrap
+        #     self.run()
+        #   File "/usr/lib/python3.10/multiprocessing/process.py", line 108, in run
+        #     self._target(*self._args, **self._kwargs)
+        #   File "/sourcegraph/repo-converter/src/source_repo/svn.py", line 369, in clone_svn_repo
+        #     cmd.subprocess_run(ctx, cmd_git_default_branch)
+        #   File "/sourcegraph/repo-converter/src/utils/cmd.py", line 84, in subprocess_run
+        #     subprocess_output = subprocess_output[0].splitlines()
+        # UnboundLocalError: local variable 'subprocess_output' referenced before assignment
+        subprocess_output = ""
+
         if echo_password:
             subprocess_output = subprocess_to_run.communicate(password)
 
