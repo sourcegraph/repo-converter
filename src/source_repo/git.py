@@ -4,7 +4,7 @@
 # Import repo-converter modules
 from .base import Repo
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 
 
 class GitRepo(Repo):

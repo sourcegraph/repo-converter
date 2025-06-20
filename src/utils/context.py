@@ -8,10 +8,6 @@
 from datetime import datetime
 import os
 
-# Import third party modules
-import psutil # https://pypi.org/project/psutil/
-
-
 class Context:
     """
     Central context class for managing application state across all modules.
@@ -20,6 +16,22 @@ class Context:
 
     # repos-to-convert.yaml file contents
     repos = {}
+
+    # Child process tracking
+    child_procs = {}
+
+    # Set of secrets to redact in logs
+    secrets = set()
+
+    # Run count
+    run_count = 0
+
+    # Namespace for our metadata in git repo config files
+    git_config_namespace = "repo-converter"
+
+    # Container metadata
+    container_id = os.uname().nodename
+    start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
     def __init__(self, env_vars):
@@ -32,22 +44,6 @@ class Context:
 
         # Environment variables
         self.env_vars = env_vars
-
-        # Container metadata
-        self.container_id = os.uname().nodename
-        self.start_datetime = datetime.fromtimestamp(psutil.Process().create_time()).strftime("%Y-%m-%d %H:%M:%S")
-
-        # Child processes
-        self.child_procs = {}
-
-        # Set of secrets to redact in logs
-        self.secrets = set()
-
-        # Run count
-        self.run_count = 0
-
-        self.git_config_namespace = "repo-converter"
-
 
 
     def increment_run_count(self):
@@ -86,7 +82,7 @@ class Context:
         Returns:
             str: Formatted log string with container metadata
         """
-        return f"container ID: {self.container_id}; container running since {self.start_datetime}; with args: {str(self.env_vars)}"
+        return f"container ID: {self.container_id}; container running since {self.start_datetime}; with env vars: {str(self.env_vars)}"
 
 
     def get_env_var(self, key, default=None):

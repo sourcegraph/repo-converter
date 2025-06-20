@@ -19,10 +19,11 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 from utils import cmd, git
 
 # Import Python standard modules
+import json
 import os
 import random
 import shutil
@@ -32,37 +33,62 @@ import traceback # https://docs.python.org/3/library/traceback.html
 
 def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
-    repos_dict = ctx.repos
-    env_vars = ctx.env_vars
-    max_retries = env_vars["MAX_RETRIES"]
+    # Get env vars
+    max_retries     = ctx.env_vars["MAX_RETRIES"]
+    src_serve_root  = ctx.env_vars['SRC_SERVE_ROOT']
+
+    # Short name
+    repo_config = ctx.repos[repo_key]
+
+    # Debug logging for what values we have received for this repo
+    log(ctx, f"{repo_key}: ctx.repos[repo_key] = {json.dumps(repo_config, indent = 4, sort_keys=True)}","debug")
 
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
-    git_repo_name               = repo_key
-    authors_file_path           = repos_dict[repo_key].get("authors-file-path"    , None    )
-    authors_prog_path           = repos_dict[repo_key].get("authors-prog-path"    , None    )
-    bare_clone                  = repos_dict[repo_key].get("bare-clone"           , True    )
-    branches                    = repos_dict[repo_key].get("branches"             , None    )
-    code_host_name              = repos_dict[repo_key].get("code-host-name"       , None    )
-    fetch_batch_size            = repos_dict[repo_key].get("fetch-batch-size"     , 100     )
-    git_default_branch          = repos_dict[repo_key].get("git-default-branch"   , "trunk" )
-    git_ignore_file_path        = repos_dict[repo_key].get("git-ignore-file-path" , None    )
-    git_org_name                = repos_dict[repo_key].get("git-org-name"         , None    )
-    layout                      = repos_dict[repo_key].get("layout"               , None    )
-    password                    = repos_dict[repo_key].get("password"             , None    )
-    svn_remote_repo_code_root   = repos_dict[repo_key].get("svn-repo-code-root"   , None    )
-    tags                        = repos_dict[repo_key].get("tags"                 , None    )
-    trunk                       = repos_dict[repo_key].get("trunk"                , None    )
-    username                    = repos_dict[repo_key].get("username"             , None    )
+    authors_file_path           = repo_config.get("authors-file-path"    , None    )
+    authors_prog_path           = repo_config.get("authors-prog-path"    , None    )
+    bare_clone                  = repo_config.get("bare-clone"           , True    )
+    branches                    = repo_config.get("branches"             , None    )
+    code_host_name              = repo_config.get("code-host-name"       , None    ) # Yes
+    destination_git_repo_name   = repo_config.get("destination-git-repo-name"        , None    ) # Yes
+    fetch_batch_size            = repo_config.get("fetch-batch-size"     , 100     ) # Yes
+    git_default_branch          = repo_config.get("git-default-branch"   , "trunk" )
+    git_ignore_file_path        = repo_config.get("git-ignore-file-path" , None    )
+    git_org_name                = repo_config.get("git-org-name"         , None    ) # Yes
+    layout                      = repo_config.get("svn-layout"           , None    ) # Yes
+    password                    = repo_config.get("password"             , None    )
+    repo_url                    = repo_config.get("repo-url"             , None    ) # Required
+    repo_parent_url             = repo_config.get("repo-parent-url"      , None    ) # Required
+    source_repo_name            = repo_config.get("source-repo-name"        , None    ) # Yes
+    svn_repo_code_root          = repo_config.get("svn-repo-code-root"   , None    )
+    tags                        = repo_config.get("tags"                 , None    )
+    trunk                       = repo_config.get("trunk"                , None    )
+    username                    = repo_config.get("username"             , None    )
+
+
+    # TODO: Move .strip('/') calls to load_repos.sanitize_inputs()
+
+    # Assemble the full URL to the repo code root path
+    svn_remote_repo_code_root_url = ""
+
+    if repo_url:
+        svn_remote_repo_code_root_url = f"{repo_url.strip('/')}"
+
+    elif repo_parent_url:
+        svn_remote_repo_code_root_url = f"{repo_parent_url.strip('/')}/{source_repo_name}"
+
+    if svn_repo_code_root:
+        svn_remote_repo_code_root_url += f"/{svn_repo_code_root}"
+
 
     ## Parse config parameters into command args
-    # TODO: Interpret code_host_name, git_org_name, and git_repo_name if not given
+    # TODO: Interpret code_host_name, git_org_name, and destination_git_repo_name if not given
         # ex. https://svn.apache.org/repos/asf/parquet/site
         # code_host_name            = svn.apache.org    # can get by removing url scheme, if any, till the first /
         # arbitrary path on server  = repos             # optional, can either be a directory, or may actually be the repo
         # git_org_name              = asf
-        # git_repo_name             = parquet
+        # destination_git_repo_name             = parquet
         # git repo root             = site              # arbitrary path inside the repo where contributors decided to start storing /trunk /branches /tags and other files to be included in the repo
-    local_repo_path = f"{env_vars['SRC_SERVE_ROOT']}/{code_host_name}/{git_org_name}/{git_repo_name}"
+    local_repo_path = f"{src_serve_root}/{code_host_name}/{git_org_name}/{destination_git_repo_name}"
     git_config_file_path = f"{local_repo_path}/.git/config"
 
     ## Define common command args
@@ -73,7 +99,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     arg_svn_echo_password           = None
     arg_svn_non_interactive         =           [ "--non-interactive"                           ] # Do not prompt, just fail if the command doesn't work, only used for direct `svn` command
     arg_svn_password                =           [ "--password", password                        ] # Only used for direct `svn` commands
-    arg_svn_remote_repo_code_root   =           [ svn_remote_repo_code_root                     ]
+    arg_svn_remote_repo_code_root_url   =           [ svn_remote_repo_code_root_url                     ]
     arg_svn_username                =           [ "--username", username                        ]
 
     ## Define commands
@@ -88,9 +114,9 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     cmd_git_get_svn_url             = arg_git_cfg + [ "--get", "svn-remote.svn.url"                             ]
     cmd_git_set_batch_end_revision  = arg_git_cfg + [ "--replace-all"                                           ] + arg_batch_end_revision
     cmd_git_svn_fetch               = arg_git_svn + [ "fetch"                                                   ]
-    cmd_git_svn_init                = arg_git_svn + [ "init"                                                    ] + arg_svn_remote_repo_code_root
-    cmd_svn_info                    =               [ "svn", "info"                                             ] + arg_svn_non_interactive + arg_svn_remote_repo_code_root
-    cmd_svn_log                     =               [ "svn", "log", "--xml", "--with-no-revprops"               ] + arg_svn_non_interactive + arg_svn_remote_repo_code_root
+    cmd_git_svn_init                = arg_git_svn + [ "init"                                                    ] + arg_svn_remote_repo_code_root_url
+    cmd_svn_info                    =               [ "svn", "info"                                             ] + arg_svn_non_interactive + arg_svn_remote_repo_code_root_url
+    cmd_svn_log                     =               [ "svn", "log", "--xml", "--with-no-revprops"               ] + arg_svn_non_interactive + arg_svn_remote_repo_code_root_url
 
     ## Modify commands based on config parameters
     if username:
@@ -212,12 +238,13 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
         except Exception as exception:
 
-            log(ctx, f"{repo_key}; Failed check {i} of {max_retries} if fetching process is already running. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
+            log(ctx, f"{repo_key}; Failed check {i} of {max_retries} if fetching process is already running. Exception: {type(exception)}: {exception}", "warning")
 
-            stack = traceback.extract_stack()
-            (filename, line, procname, text) = stack[-1]
+            # This stack is not the stack we think it is, it's the stack of itself, not the exception
+            # stack = traceback.extract_stack()
+            # (filename, line, procname, text) = stack[-1]
 
-            log(ctx, f"filename, line, procname, text: {filename, line, procname, text}", "debug")
+            # log(ctx, f"filename, line, procname, text: {filename, line, procname, text}", "debug")
 
             # Raising this exception kills the multiprocessing process, so it doesn't try to run this cycle
             # raise exception
@@ -229,7 +256,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
         svn_remote_url = cmd.subprocess_run(ctx, cmd_git_get_svn_url, quiet=True)["output"][0]
 
-        if svn_remote_url in svn_remote_repo_code_root:
+        if svn_remote_url in svn_remote_repo_code_root_url:
 
             repo_state = "update"
 

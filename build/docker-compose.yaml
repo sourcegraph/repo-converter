@@ -1,7 +1,42 @@
-# See Docker Compose docs for why a separate override file is required
-# https://docs.docker.com/compose/how-tos/multiple-compose-files/include/#include-and-overrides
+services:
 
-include:
-  - path:
-    - ../deploy/docker-compose/docker-compose.yaml
-    - ./docker-compose.override.yaml
+  cloud-agent:
+    container_name: cloud-agent
+    command: ["-config=/sourcegraph/cloud-agent-config.yaml"]
+    image: index.docker.io/sourcegraph/src-tunnel-agent:latest
+    networks:
+      - default
+    restart: always
+    volumes:
+      - ../config/cloud-agent-service-account-key.json:/sourcegraph/cloud-agent-service-account-key.json:ro
+      - ../config/cloud-agent-config.yaml:/sourcegraph/cloud-agent-config.yaml:ro
+
+  repo-converter:
+    container_name: repo-converter
+    environment:
+      - CONCURRENCY_MONITOR_INTERVAL=10
+      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
+      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
+      - MAX_CONCURRENT_CONVERSIONS_TOTAL=100
+      - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
+      # - MAX_CYCLES=100
+    image: repo-converter:build
+    restart: never
+    volumes:
+      - ../dev/toprc:/root/.config/procps/toprc # Add `top` config file
+      - ../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
+      - ../src-serve-root/:/sourcegraph/src-serve-root
+
+  src-serve-git:
+    # Uses a valid hostname as container_name, to trick the cloud agent and code host config into finding this container on the Docker network
+    command: "-v serve-git -addr :443 /sourcegraph/src-serve-root" # -v verbose output
+    container_name: src-serve-git-wsl.local # Override hostname
+    image:  index.docker.io/sourcegraph/src-cli:latest
+    networks:
+      - default
+    restart: always
+    volumes:
+      - ../src-serve-root/:/sourcegraph/src-serve-root:ro # Correct path
+
+networks:
+  default:

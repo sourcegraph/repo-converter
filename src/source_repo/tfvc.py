@@ -20,12 +20,12 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.logger import log
+from utils.log import log
 
 
 def clone_tfs_repos(ctx: Context) -> None:
 
-    log(ctx, "Cloning TFS repos function not implemented yet", "warning")
+    log(ctx, "Cloning TFS repos function not implemented yet", "error")
 
     # # Declare an empty dict for TFS repos to extract them from the repos_dict
     # tfs_repos_dict = {}

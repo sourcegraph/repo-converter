@@ -1,4 +1,35 @@
 #!/bin/bash
+# Script for local dev builds
+
+## Usage:
+
+# ./build.sh
+# Just run the build, do not start the containers
+
+# ./build.sh <any>
+# Run the build, start the containers
+
+# c - clear the terminal
+# f - follow repo-converter container's logs
+# m - restart podman machine
+# p - pull new images for src-cli and cloud-agent
+
+
+# TODO: check if the GitHub Actions build script can't be reused here?
+
+## Switching to podman
+
+# Install podman on macOS
+# https://podman.io/docs/installation#macos
+# brew install podman
+# podman machine init
+# podman machine start
+# sudo /opt/homebrew/Cellar/podman/5.5.0/bin/podman-mac-helper install
+# podman machine stop
+# podman machine start
+
+# Install podman-compose, because that's an unrelated OSS project
+# brew install podman-compose
 
 # Set exec flags
 
@@ -9,19 +40,22 @@ set -x
 # Exit on error
 set -o errexit
 
+container_name="repo-converter"
+
+# pip requirements
+req_file="./requirements.txt"
+echo "Update and deduplicate the ${req_file} file"
 
 # Update the requirements.txt file
-# APPLICATION_CODE_DIR="../src/"
-# pipreqs --force --mode no-pin --savepath "$REQUIREMENTS_FILE" "$APPLICATION_CODE_DIR"
+# src_dir="../src/"
+# pipreqs --force --mode no-pin --savepath "$req_file" "$src_dir"
 
-
-# Sort and deduplicate the ${REQUIREMENTS_FILE} file
-REQUIREMENTS_FILE="./requirements.txt"
-echo "Sort and deduplicate the ${REQUIREMENTS_FILE} file"
-LC_ALL=C sort -u -o "$REQUIREMENTS_FILE" "$REQUIREMENTS_FILE"
+# Sort and deduplicate the ${req_file} file
+LC_ALL=C sort -u -o "$req_file" "$req_file"
 
 
 # Set environment variables from git metadata of this repo
+echo "Gathering environment variables to bake into image's .env file"
 BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 BUILD_COMMIT="$(git rev-parse --short HEAD)"
 BUILD_DATE="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
@@ -40,55 +74,67 @@ ENV_FILE=".env"
     echo "BUILD_TAG=${BUILD_TAG}"
 } > "$ENV_FILE"
 
+# Run the build
+echo "Running podman build"
 
-# # Build the repo-converter image
-# docker compose build repo-converter
-
-# # If you pass any args to this script
-# if [ "$1" != "" ]
-# then
-
-#     # Start the compose deployment
-#     docker compose up -d --remove-orphans
-
-#     # Clear the terminal
-#     clear
-
-#     # Follow the container logs
-#     docker compose logs repo-converter -f
-
-# fi
-
-# Switching to podman
-# Install podman on macOS
-# https://podman.io/docs/installation#macos
-# brew install podman
-# podman machine init
-# podman machine start
-# sudo /opt/homebrew/Cellar/podman/5.5.0/bin/podman-mac-helper install
-# podman machine stop
-# podman machine start
-
-
-# Build the repo-converter image
-# podman compose build repo-converter # Takes too long
-podman build -f Dockerfile --tag sourcegraph/repo-converter:build ..
-# DOCKER_BUILDKIT=1 podman compose build repo-converter
-
-# If you pass any args to this script
-if [ "$1" != "" ]
+# If an m is passed in the args
+if [[ "$1" == *"m"* ]]
 then
 
+    # Restart the podman VM
+    podman machine stop
+    # Start it as a background process
+    # and disown it, so it continues to run after this script ends
+    podman machine start & disown
+    # But give it 10 seconds to start up
+    sleep 20
+
+fi
+
+podman build \
+    --file          ./Dockerfile \
+    --format        docker \
+    --jobs          0 \
+    --label         "org.opencontainers.image.created=$BUILD_DATE" \
+    --label         "org.opencontainers.image.revision=$BUILD_COMMIT" \
+    --tag           "$container_name":build \
+    ..
+
+# If you pass any args to this script, start the built image, and follow the logs
+if [[ "$1" != "" ]]
+then
+
+    # Stop any running containers
+    # because podman-compose can't figure this out on its own
+    echo "Stopping old containers"
+    podman-compose down
+
     # Pull the latest tags of the other images
-    podman compose pull
+    if [[ "$1" == *"p"* ]]
+    then
+        echo "Checking for new images and pulling"
+        podman-compose pull cloud-agent src-serve-git
+    fi
 
     # Start the compose deployment
-    podman compose up -d --remove-orphans
+    echo "Starting new containers"
+    podman-compose up \
+        --detach \
+        --no-recreate \
+        --remove-orphans
 
     # Clear the terminal
-    # clear
+    if [[ "$1" == *"c"* ]]
+    then
+        echo "Clearing terminal"
+        clear
+    fi
 
     # Follow the container logs
-    podman compose logs repo-converter -f
+    if [[ "$1" == *"f"* ]]
+    then
+        echo "Following $container_name logs"
+        podman-compose logs "$container_name" -f
+    fi
 
 fi
