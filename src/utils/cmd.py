@@ -154,15 +154,18 @@ def truncate_subprocess_output(subprocess_output):
 
     if len(str(subprocess_output)) > max_output_total_characters:
 
+        subprocess_output_lines = len(subprocess_output)
+
         # If the output list is longer than max_output_lines lines, truncate it
         subprocess_output = subprocess_output[-max_output_lines:]
-        subprocess_output.append(f"...LOG OUTPUT TRUNCATED TO {max_output_lines} LINES")
+        subprocess_output.append(f"...LOG OUTPUT TRUNCATED FROM {subprocess_output_lines} LINES TO {max_output_lines} LINES")
 
         # Truncate really long lines
         for i in range(len(subprocess_output)):
 
             if len(subprocess_output[i]) > max_output_line_characters:
-                subprocess_output[i] = textwrap.shorten(subprocess_output[i], width=max_output_line_characters, placeholder=f"...LOG LINE TRUNCATED TO {max_output_line_characters} CHARACTERS")
+                subprocess_output_line_length = len(subprocess_output[i])
+                subprocess_output[i] = textwrap.shorten(subprocess_output[i], width=max_output_line_characters, placeholder=f"...LOG LINE TRUNCATED FROM {subprocess_output_line_length} CHARACTERS TO {max_output_line_characters} CHARACTERS")
 
     return subprocess_output
 

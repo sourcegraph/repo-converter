@@ -271,7 +271,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
         repo_type = server_config_dict["type"]
 
         # If the type key isn't a supported type, error, and skip the server
-        if repo_type not in source_repo_types:
+        if repo_type.lower() not in source_repo_types:
             log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has type: {repo_type}, which is not in the set of supported repo types: {source_repo_types}, skipping", "error")
             continue
 

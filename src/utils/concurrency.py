@@ -135,7 +135,7 @@ class ConcurrencyManager:
         server_status = f"{self.per_server_limit - server_semaphore.get_value()}/{self.per_server_limit})"
 
         # Log an update
-        log(self.ctx, f"{repo_key}; Acquired job slot for server {server_hostname} (global: {global_status}, server: {server_status}", "info")
+        log(self.ctx, f"{repo_key}; Acquired job slot for server {server_hostname} (global: {global_status}, server: {server_status}", "debug")
 
         return True
 
@@ -276,7 +276,7 @@ class ConcurrencyManager:
             # Release global semaphore
             self.global_semaphore.release()
 
-            log(self.ctx, f"{repo_key}; Released job slot for server {server_hostname}", "info")
+            log(self.ctx, f"{repo_key}; Released job slot for server {server_hostname}", "debug")
 
         except ValueError as e:
             log(self.ctx, f"{repo_key}; Error releasing semaphores: {e}", "error")

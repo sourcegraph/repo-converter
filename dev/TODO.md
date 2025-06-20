@@ -1,8 +1,57 @@
 # TODO:
 
-- repos-to-convert.yaml
+- Logging
+    - Switch to structured (i.e. JSON) logs, including:
+        - Basics
+            - Date
+            - Time
+            - Log level
+            - Message
+            - Unix timestamp
+        - Code
+            - Module name
+            - Function name
+            - File
+            - Line number
+        - Pertinent details
+            - Commands
+                - Command / args
+                - Command success / fail
+                - Execution time
+                - Command stdout
+                - Command stderr
+            - Fetch
+                - Repo
+                - Repo status (up to date / out of date)
+                - Commits behind to catch up
+                - Batch size
+                - Local rev
+                - Remote rev
+                - SVN server errors, ex. svn: E175012: Connection timed out
+            - Uptime
+                - Run number
+                - Container uptime
+            - Container metadata
+                - Image version / build tag
+                - Image build date
+                - Container ID
 
-    - Finish parsing the new repos-to-convert format, so repo conversion jobs can succeed
+
+
+- SVN
+    - `svn log` commands
+        - longest commands which seem to be timing out and causing issues are the svn log commands, which just return commit metadata
+        - these commands may be duplicative
+        - We may be able to make the conversion process much smoother if we can use fewer of these log commands
+        - Keep an svn log file in a .git/sourcegraph directory in each repo
+        - When to run the next svn log file? When the last commit ID number in the svn log file has been converted
+        - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file cache?
+        - Do we need to keep a log file of svn commands, svn server URL, repo name, execution times, response codes, response size?
+        - Run git svn log --xml to store the repo's log on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
+        - XML parsing library to store and update a local subversion log file?
+
+
+- repos-to-convert.yaml
 
     - Move the config schema to a separate YAML file, bake it into image, read it into Context on container startup, and provide for each field:
         - Name
@@ -13,8 +62,6 @@
         - Usage
         - Examples
         - Default values
-
-    - Make `repos_to_convert_fields` a part of Context, so the `sanitize_repos_to_convert` function can save it, to make it available to `check_required_fields`
 
     - Create server-specific concurrency semaphore from repos-to-convert value, if present
 
@@ -58,17 +105,6 @@
             - Can change without restarting the container
 
 - SVN
-    - `svn log` commands
-        - longest commands which seem to be timing out and causing issues are the svn log commands, which just return commit metadata
-        - these commands may be duplicative
-        - We may be able to make the conversion process much smoother if we can use fewer of these log commands
-        - Keep an svn log file in a .git/sourcegraph directory in each repo
-        - When to run the next svn log file? When the last commit ID number in the svn log file has been converted
-        - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file cache?
-        - Do we need to keep a log file of svn commands, svn server URL, repo name, execution times, response codes, response size?
-        - Run git svn log --xml to store the repo's log on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
-        - XML parsing library to store and update a local subversion log file?
-
     - Try to add the batch size to the svn log command to speed it up
     - SVN commands hanging
         - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
