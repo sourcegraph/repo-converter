@@ -1,3 +1,4 @@
+# podman-compose
 services:
 
   cloud-agent:
@@ -19,7 +20,8 @@ services:
       - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
       - MAX_CONCURRENT_CONVERSIONS_TOTAL=100
       - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
-      # - MAX_CYCLES=100
+#      - MAX_CYCLES=5
+#    image: ghcr.io/sourcegraph/repo-converter:HEAD
     image: repo-converter:build
     restart: never
     volumes:
