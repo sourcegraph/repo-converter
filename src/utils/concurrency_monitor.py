@@ -53,8 +53,10 @@ def start_concurrency_monitor(ctx: Context, concurrency_manager: ConcurrencyMana
                 # 2025-06-17; 07:27:32.000558; af75882; run 1; INFO; Concurrency status - Global: 11/100, Servers: svn.apache.org: 10/10
                 log(ctx, f"Concurrency status - Global: {global_active}/{global_limit}, Servers: {servers_str}", "info")
 
-            except Exception as e:
-                log(ctx, f"Error in concurrency monitor: {e}", "error")
+            except Exception as exception:
+                log(ctx, f"Error in concurrency monitor: {exception}", "error")
+
+                raise exception
 
             time.sleep(interval)
 

@@ -84,7 +84,8 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         # If the process exited successfully
         if subprocess_to_run.returncode == 0:
 
-            status_message = "succeeded"
+            # TODO: Find a way to include the run time (wall time) in this output
+            status_message = f"succeeded"
 
             return_dict["returncode"] = 0
 

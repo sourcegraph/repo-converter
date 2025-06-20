@@ -1,19 +1,25 @@
 # TODO:
 
 - repos-to-convert.yaml
-    - Create env var for a map so creds don't need to be stored in files
-        - server
-        - username
-        - password
-    - Env vars vs config file
-        - Read as many configs from repos-to-convert.yaml as we can, so the values can be changed without restarting the container
-        - Env vars
-            - Service-oriented, ex. log level
-            - Cannot change without restarting the container
-            - Secrets
-        - repos-to-convert.yaml
-            - List of repos to convert
-            - Can change without restarting the container
+
+    - Finish parsing the new repos-to-convert format, so repo conversion jobs can succeed
+
+    - Move the config schema to a separate YAML file, bake it into image, read it into Context on container startup, and provide for each field:
+        - Name
+        - Description
+        - Valid parents (global / server / repo)
+        - Valid types
+        - Required? (ex. either repo-url or repo-parent-url)
+        - Usage
+        - Examples
+        - Default values
+
+    - Make `repos_to_convert_fields` a part of Context, so the `sanitize_repos_to_convert` function can save it, to make it available to `check_required_fields`
+
+    - Create server-specific concurrency semaphore from repos-to-convert value, if present
+
+    - Add parent key to repos-to-convert sanitizer, so child keys can be validated that they're under a valid parent key
+
     - Add a fetch-interval-seconds config to repos-to-convert.yaml file
         - under the server config
         - for each repo in the repos_dict
@@ -37,6 +43,19 @@
                 - If yes, calculate and store the next fetch time
                 - If fetch_interval_seconds
                     - repo_key[next-fetch-time] = fetch_interval_seconds + time.now()
+    - Create env var for a map so creds don't need to be stored in files
+        - server
+        - username
+        - password
+    - Env vars vs config file
+        - Read as many configs from repos-to-convert.yaml as we can, so the values can be changed without restarting the container
+        - Env vars
+            - Service-oriented, ex. log level
+            - Cannot change without restarting the container
+            - Secrets
+        - repos-to-convert.yaml
+            - List of repos to convert
+            - Can change without restarting the container
 
 - SVN
     - `svn log` commands
@@ -48,6 +67,8 @@
         - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file cache?
         - Do we need to keep a log file of svn commands, svn server URL, repo name, execution times, response codes, response size?
         - Run git svn log --xml to store the repo's log on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
+        - XML parsing library to store and update a local subversion log file?
+
     - Try to add the batch size to the svn log command to speed it up
     - SVN commands hanging
         - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
@@ -59,6 +80,11 @@
     - If list of repos is blank in repos-to-convert, try and parse the list from the server?
 
 - Process management
+    - Refactor cmd.subprocess_run() more similar to def convert_repos.conversion_wrapper()
+    - Find a way to get the run time (clock time) of a process once its complete / succeeded / failed
+```log
+2025-06-20; 06:46:14.315469; 96d41ad; ed2e81648d30; run 2; DEBUG; pid 117; succeeded; subprocess_to_run Popen object: psutil.Popen(pid=117, name='svn', status='terminated', started='06:46:12'); process_dict: {'ppid': 108, 'name': 'svn', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/crunch/site', '--limit', '2', '--revision', '1449307:HEAD'], 'status': 'running', 'num_fds': 4, 'cpu_times': pcputimes(user=0.0, system=0.0, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_percent': 0.01071397007889333, 'open_files': []}; std_out: ['<?xml version="1.0" encoding="UTF-8"?>', '<log>', '<logentry', '   revision="1449311">', '</logentry>', '<logentry', '   revision="1449347">', '</logentry>', '</log>'];
+```
     - Found the repo-converter container dead after 691 runs, with no evidence as to why it died in the container logs
         - Next time this happens, run podman inspect <container ID>, and review state info
         - Try to get all the logs / events from the container / pod, to find why it died
@@ -198,7 +224,9 @@ version:
         - Local commit
         - Remote commit
         - Size on disk
+    - Find a way to output a whole stack trace for each ERROR (and higher) log event
     - Switch to structured (i.e. JSON) logs?
+    - Log structure to include file / line number, module / function names
     - Find a tool to search / filter through logs
     - Log levels
         - proc events in DEBUG logs make DEBUG level logging too noisy

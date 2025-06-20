@@ -143,25 +143,42 @@ class ConcurrencyManager:
     def extract_server_host(self, repo_config: dict) -> str:
         """Extract server hostname from repos-to-convert dict."""
 
-        # Try to get from svn-repo-code-root URL
+        server_host = ""
+
         # TODO: Make the repos-to-convert.yaml key more generic for other code host types
-        repo_url = repo_config.get("svn-repo-code-root", "")
-        if repo_url:
-            try:
-                parsed = urlparse(repo_url)
-                if parsed.hostname:
-                    return parsed.hostname
-            except Exception as e:
-                log(self.ctx, f"Failed to parse URL {repo_url}: {e}", "warning")
+
+        # List of URL fields, in priority order
+        url_fields = [
+            "repo-url"
+            "repo-parent-url",
+            "svn-repo-code-root"
+        ]
+
+        for url_field in url_fields:
+
+            repo_url = repo_config.get(url_field, "")
+
+            if repo_url:
+
+                try:
+                    parsed = urlparse(repo_url)
+                    if parsed.hostname:
+                        server_host = parsed.hostname
+                        break
+
+                except Exception as e:
+                    log(self.ctx, f"Failed to parse URL {repo_url}: {e}", "warning")
 
         # Fallback to code-host-name if provided
-        code_host = repo_config.get("code-host-name", "")
-        if code_host:
-            return code_host
+        if not server_host:
+            server_host = repo_config.get("code-host-name", "")
 
         # Last resort: use "unknown"
-        log(self.ctx, f"Could not determine server host for repo config: {repo_config}", "warning")
-        return "unknown"
+        if not server_host:
+            server_host = "unknown"
+            log(self.ctx, f"Could not determine server host for repo config: {repo_config}", "warning")
+
+        return server_host
 
 
     def get_server_semaphore(self, server_hostname: str):

@@ -44,8 +44,11 @@ def load_from_file(ctx: Context) -> None:
         log(ctx, f"YAML syntax error in {repos_to_convert_file_path}, please lint it. Exception: {type(exception)}, {exception.args}, {exception}", "critical")
         exit(3)
 
-    repos = sanitize_repos_dict(ctx, repos)
-    repos = convert_repos_dict(ctx, repos)
+    repos = check_types(ctx, repos)
+    repos = reformat_repos_dict(ctx, repos)
+    repos = sanitize_inputs(ctx, repos)
+    repos = validate_inputs(ctx, repos)
+    repos = validate_required_inputs(ctx, repos)
 
     ctx.repos = repos
 
@@ -53,20 +56,19 @@ def load_from_file(ctx: Context) -> None:
     log(ctx, f"Repos to convert: {json.dumps(ctx.repos, indent = 4, sort_keys=True)}", "debug")
 
 
-def sanitize_repos_dict(ctx: Context, repos: dict) -> dict:
+def check_types(ctx: Context, repos: dict) -> dict:
     """Middle layer function to abstract return type ambiguity"""
 
-    repos = sanitize_repos_to_convert(ctx, repos)
+    repos = check_types_recursive(ctx, repos)
 
-    # sanitize_repos_to_convert() uses recursion and can return many different types, but ends with a dict
+    # check_types_recursive() uses recursion and can return many different types, but ends with a dict
     return repos
 
 
-def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=False): # -> Any
+def check_types_recursive(ctx: Context, input_value, input_key="", recursed=False): # -> Any
     """
     Recursive function to sanitize inputs of arbitrary types,
     to ensure they are returned as the correct type.
-    TODO: Add more input validation here, ex. URLs, git repo names, file paths, integers >= 0, etc.
     """
 
     # Uses recursion to depth-first-search through the repos dictionary, with arbitrary depths, keys, and value types
@@ -78,38 +80,56 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
 
     # The inputs that have specific type requirements
     # Dictionary of tuples, must have commas in the values set
-    input_value_types_dict = {}
-    input_value_types_dict[ "authors-file-path"             ] = (str,           )
-    input_value_types_dict[ "authors-prog-path"             ] = (str,           )
-    input_value_types_dict[ "bare-clone"                    ] = (bool,          )
-    input_value_types_dict[ "branches"                      ] = (str, list      )
-    input_value_types_dict[ "code-host-name"                ] = (str,           )
-    input_value_types_dict[ "commits-to-skip"               ] = (str, list      )
-    input_value_types_dict[ "default-branch-only"           ] = (bool,          )
-    input_value_types_dict[ "fetch-batch-size"              ] = (int,           )
-    input_value_types_dict[ "fetch-interval"                ] = (int,           )
-    input_value_types_dict[ "git-clone-command-args"        ] = (str,           )
-    input_value_types_dict[ "git-default-branch"            ] = (str,           )
-    input_value_types_dict[ "git-ignore-file-path"          ] = (str,           )
-    input_value_types_dict[ "git-org-name"                  ] = (str,           )
-    input_value_types_dict[ "git-repo-name"                 ] = (str,           )
-    input_value_types_dict[ "git-ssh-command-args"          ] = (str,           )
-    input_value_types_dict[ "max-concurrent-conversions"    ] = (int,           )
-    input_value_types_dict[ "password"                      ] = (str, "secret"  )
-    input_value_types_dict[ "repo-parent-url"               ] = (str,           )
-    input_value_types_dict[ "repo-url"                      ] = (str,           )
-    input_value_types_dict[ "repos"                         ] = (str, list      )
-    input_value_types_dict[ "source-repo-name"              ] = (str,           )
-    input_value_types_dict[ "svn-layout"                    ] = (str, list      )
-    input_value_types_dict[ "svn-repo-code-root"            ] = (str,           )
-    input_value_types_dict[ "tags"                          ] = (str, list      )
-    input_value_types_dict[ "tfvc-collection"               ] = (str,           )
-    input_value_types_dict[ "token"                         ] = (str, "secret"  )
-    input_value_types_dict[ "trunk"                         ] = (str,           )
-    input_value_types_dict[ "type"                          ] = (str,           )
-    input_value_types_dict[ "username"                      ] = (str,           )
-    # Would like to validate dicts as well
-    # input_value_types_dict[ "global"                        ] = (dict,          )
+
+    # TODO: Move the config schema to a separate JSON file, and provide for each field:
+        # Name
+        # Description
+        # Valid parents (global / server / repo)
+        # Valid types
+        # Required? (ex. either repo-url or repo-parent-url)
+        # Usage
+        # Examples
+        # Default values
+
+    repos_to_convert_fields = {}
+
+    # TODO: Implement these
+    repos_to_convert_fields[ "max-concurrent-conversions"    ] = (int,           )
+    repos_to_convert_fields[ "fetch-interval"                ] = (int,           )
+    repos_to_convert_fields[ "commits-to-skip"               ] = (str, list      )
+
+    repos_to_convert_fields[ "default-branch-only"           ] = (bool,          )
+    repos_to_convert_fields[ "git-clone-command-args"        ] = (str,           )
+    repos_to_convert_fields[ "git-ssh-command-args"          ] = (str,           )
+    repos_to_convert_fields[ "tfvc-collection"               ] = (str,           )
+    repos_to_convert_fields[ "token"                         ] = (str, "secret"  )
+    # repos_to_convert_fields[ "global"                        ] = (dict,          ) # Would like to validate dicts as well
+
+
+    # TODO: Test these
+    repos_to_convert_fields[ "authors-file-path"             ] = (str,           )
+    repos_to_convert_fields[ "authors-prog-path"             ] = (str,           )
+    repos_to_convert_fields[ "bare-clone"                    ] = (bool,          )
+    repos_to_convert_fields[ "branches"                      ] = (str, list      )
+    repos_to_convert_fields[ "git-ignore-file-path"          ] = (str,           )
+    repos_to_convert_fields[ "repo-url"                      ] = (str,           ) # Required: Either repo-parent-url or repo-url
+    repos_to_convert_fields[ "source-repo-name"              ] = (str,           )
+    repos_to_convert_fields[ "svn-layout"                    ] = (str, list      )
+    repos_to_convert_fields[ "tags"                          ] = (str, list      )
+    repos_to_convert_fields[ "trunk"                         ] = (str,           )
+
+    # Implemented and tested
+    repos_to_convert_fields[ "code-host-name"                ] = (str,           ) # Recommended but not strictly required
+    repos_to_convert_fields[ "fetch-batch-size"              ] = (int,           )
+    repos_to_convert_fields[ "git-default-branch"            ] = (str,           )
+    repos_to_convert_fields[ "git-org-name"                  ] = (str,           ) # Recommended but not strictly required
+    repos_to_convert_fields[ "destination-git-repo-name"     ] = (str,           ) # Recommended but not strictly required
+    repos_to_convert_fields[ "password"                      ] = (str, "secret"  )
+    repos_to_convert_fields[ "repo-parent-url"               ] = (str,           ) # Required: Either repo-parent-url or repo-url
+    repos_to_convert_fields[ "repos"                         ] = (str, list      )
+    repos_to_convert_fields[ "svn-repo-code-root"            ] = (str,           )
+    repos_to_convert_fields[ "type"                          ] = (str,           )
+    repos_to_convert_fields[ "username"                      ] = (str,           )
 
 
     if isinstance(input_value, dict):
@@ -122,7 +142,7 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
             output_key = str(input_value_key)
 
             # Recurse back into this function to handle the values of this dict
-            output[output_key] = sanitize_repos_to_convert(ctx, input_value[input_value_key], input_value_key, True)
+            output[output_key] = check_types_recursive(ctx, input_value[input_value_key], input_value_key, True)
 
     # If this function was called with a list
     elif isinstance(input_value, list):
@@ -134,15 +154,15 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
             # Recurse back into this function to handle the values of this list
             # This passes in the input_key from the calling function,
             # so that it validates the list items should be the correct type for this list
-            output.append(sanitize_repos_to_convert(ctx, input_list_item, input_key, True))
+            output.append(check_types_recursive(ctx, input_list_item, input_key, True))
 
     else:
 
-        # If the key is in the input_value_types_dict, then validate the value type
-        if input_key in input_value_types_dict.keys():
+        # If the key is in the repos_to_convert_fields, then validate the value type
+        if input_key in repos_to_convert_fields.keys():
 
             # If the value's type is in the tuple, then just copy it as is
-            if type(input_value) in input_value_types_dict[input_key]:
+            if type(input_value) in repos_to_convert_fields[input_key]:
 
                 output = input_value
 
@@ -153,14 +173,14 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
                 type_warning_message = f"Parsing REPOS_TO_CONVERT file found incorrect variable type for "
 
                 # Set of input keys to not log the values of
-                if "secret" in input_value_types_dict[input_key]:
+                if "secret" in repos_to_convert_fields[input_key]:
                     type_warning_message += input_key
                 else:
                     type_warning_message += f"{input_key}: {input_value}"
 
                 type_warning_message += f", type {type(input_value)}, should be "
 
-                for variable_type in input_value_types_dict[input_key]:
+                for variable_type in repos_to_convert_fields[input_key]:
                     type_warning_message += f"{variable_type}, "
 
                 type_warning_message += "will attempt to convert it"
@@ -171,17 +191,17 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
                 # Cast the value to the correct type
                 # This one chokes pretty hard, need to add a try except block
                 # ValueError: invalid literal for int() with base 10: '2=1'
-                if input_value_types_dict[input_key] == (int,):
+                if repos_to_convert_fields[input_key] == (int,):
                     output = int(input_value)
 
-                elif input_value_types_dict[input_key] == (bool,):
+                elif repos_to_convert_fields[input_key] == (bool,):
                     output = bool(input_value)
 
                 else:
                     output = str(input_value)
 
             # Now that the keys and values are the correct type, check if it's a password
-            if "secret" in input_value_types_dict[input_key]:
+            if "secret" in repos_to_convert_fields[input_key]:
 
                 log(ctx, f"Adding secret {input_key} to set of secrets to redact", "debug")
 
@@ -196,7 +216,7 @@ def sanitize_repos_to_convert(ctx: Context, input_value, input_key="", recursed=
     return output
 
 
-def convert_repos_dict(ctx: Context, repos_input: dict) -> dict:
+def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
     """
     This is the function to make it make sense
 
@@ -212,6 +232,9 @@ def convert_repos_dict(ctx: Context, repos_input: dict) -> dict:
     """
 
     repos_to_convert_file_path = ctx.env_vars["REPOS_TO_CONVERT"]
+
+    # TODO: Read dict from creds env var, and add to the repos_dict for all repos in the server they apply to
+    env_credentials = ctx.env_vars["CREDENTIALS"]
 
     source_repo_types = (
         "git",
@@ -328,8 +351,49 @@ def convert_repos_dict(ctx: Context, repos_input: dict) -> dict:
                 if repo[repo_key] is not None:
                     repo_dict = repo_dict | repo[repo_key]
 
-                log(ctx, f"Repo {repo_key} is a dict, and has some config of its own: {repo_dict}", "debug")
+                log(ctx, f"Repo {repo_key} is a dict, and has some config of its own: {repo[repo_key]}", "debug")
 
+
+            # If the repo's settings didn't specify a destination-git-repo-name, then assume it from repo_key
+            if "destination-git-repo-name" not in repo_dict.keys():
+                repo_dict["destination-git-repo-name"] = repo_key
+
+            # If the repo's settings didn't specify a source-repo-name, then assume it from repo_key
+            if "source-repo-name" not in repo_dict.keys():
+                repo_dict["source-repo-name"] = repo_key
+
+            # Save the repo to the return dict
             repos_output[repo_key] = repo_dict
 
     return repos_output
+
+
+def sanitize_inputs(ctx: Context, repos_input: dict) -> dict:
+    """
+    TODO: Sanitize inputs here, ex.
+    Trim trailing '/' from URLs
+    """
+
+    return repos_input
+
+
+def validate_inputs(ctx: Context, repos_input: dict) -> dict:
+    """
+    TODO: Add input validation here, ex.
+    Valid URLs (ex. urlParse?)
+    Valid characters in: git repo names, file paths
+    Verify provided file paths exist
+    integers >= 0
+    """
+
+
+    return repos_input
+
+def validate_required_inputs(ctx: Context, repos_input: dict) -> dict:
+    """
+    If input is marked as required in the list of inputs, then verify every repo has this value
+    """
+
+
+
+    return repos_input

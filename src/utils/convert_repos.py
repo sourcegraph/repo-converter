@@ -28,9 +28,9 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
 
-        # # Log initial status
-        # status = concurrency_manager.get_status()
-        # log(ctx, f"{repo_key}; Starting repo conversion with concurrency status: {status}", "info")
+        # Log initial status
+        status = concurrency_manager.get_status()
+        log(ctx, f"{repo_key}; Starting repo conversion with concurrency status: {status}", "debug")
 
         # Get repo configuration
         repo_config = ctx.repos[repo_key]
@@ -47,12 +47,16 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
         # Find the repo type
         repo_type = repo_config.get("type", "").lower()
 
+        # TODO: Refactor this to be more generic for different repo types
+
         # Start the conversion process with concurrency management
         if repo_type in ("svn", "subversion"):
+
             log(ctx, f"Starting repo type {repo_type}, name {repo_key}, server {server_hostname}")
 
             # Create a wrapper function that handles semaphore cleanup
             def conversion_wrapper(ctx, repo_key, server_hostname, concurrency_manager):
+
                 try:
                     svn.clone_svn_repo(ctx, repo_key)
                 finally:
@@ -66,6 +70,8 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
                 args=(ctx, repo_key, server_hostname, concurrency_manager)
             )
             process.start()
+
+            # Append the tuple to the list
             active_processes.append((process, repo_key, server_hostname))
 
     # Log final status
