@@ -38,6 +38,13 @@ def get_pid_uptime(pid:int = 1) -> timedelta | None:
 
 
 def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=False):
+    """
+    Middleware function to
+    - Take a CLI command as an args string or list of strings
+    - Execute it as a subprocess
+    - Gather the needed command output and metadata
+    - Handle generic process errors
+    """
 
     # Log a start message, so we may be able to predict which proc finished early
     arg_string = ""
@@ -92,7 +99,7 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
             # The .as_dict() function can take longer to run than some subprocesses,
             # so it may fail, trying to read metadata for procs which no longer exist in the OS
             # I really wish psutils had a way around this, to gather the data as it's created in .Popen
-            psutils_process_dict = subprocess_to_run.as_dict()
+            psutils_process_dict = subprocess_to_run.as_dict(attrs=ctx.process_attributes_to_fetch)
             status_message = "started"
 
         except psutil.NoSuchProcess:
@@ -103,7 +110,7 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
             psutils_process_dict.update(basic_process_info)
 
 
-            status_message = "finished before getting the psutil.dict"
+            status_message = "Exception: psutil.NoSuchProcess; finished before getting the psutil.dict"
             if not quiet:
                 log_level = "error"
 
@@ -111,7 +118,7 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         psutils_process_dict["args"] = args
 
         # Log a starting message
-        print_process_status(ctx, psutils_process_dict, status_message)
+        print_process_status(ctx = ctx, psutils_process_dict = psutils_process_dict, status_message = status_message, args = args)
 
         # If password is provided to this function, feed it into the subprocess' stdin pipe
         # communicate() also waits for the process to finish
@@ -156,7 +163,9 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
     # it raises a FileNotFoundError exception
     except FileNotFoundError as exception:
 
-        status_message = "finished before getting the psutil.dict"
+        # Use the basic process info we captured earlier
+        process_dict = basic_process_info
+        status_message = "Exception: FileNotFoundError; finished before getting the psutil.dict"
         if not quiet:
             log_level = "error"
 
@@ -170,10 +179,10 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
             # Change the log_level to debug so the failed process doesn't log an error in print_process_status()
             log_level = "debug"
 
-    print_process_status(ctx, psutils_process_dict, status_message, str(truncated_subprocess_output_to_log), log_level)
+    print_process_status(ctx = ctx, psutils_process_dict = psutils_process_dict, status_message = status_message, args = args, std_out = str(truncated_subprocess_output_to_log), log_level = log_level)
 
     return_dict["end_time"] = datetime.now()
-    get_subprocess_run_time(ctx, return_dict)
+    calculate_subprocess_run_time(ctx, return_dict)
 
     return return_dict
 
@@ -203,25 +212,14 @@ def truncate_subprocess_output(subprocess_output):
     return subprocess_output
 
 
-def print_process_status(ctx: Context, psutils_process_dict = {}, status_message = "", std_out = "", log_level = "debug"):
+def print_process_status(ctx: Context, psutils_process_dict = {}, status_message = "", args = "", std_out = "", log_level = "debug"):
+
+    log(ctx, f"print_process_status: psutils_process_dict: {psutils_process_dict}", "debug")
 
     log_message = ""
 
-    process_attributes_to_log = [
-        "ppid",
-        "name",
-        "cmdline",
-        "status",
-        "num_fds",
-        "cpu_times",
-        "memory_percent",
-        "connections_count",
-        "connections",
-        "open_files",
-        "start_time",
-        "end_time",
-        "run_time",
-    ]
+    # Why not try and set it here then
+    psutils_process_dict["args"] = args
 
     pid = psutils_process_dict['pid']
 
@@ -232,7 +230,7 @@ def print_process_status(ctx: Context, psutils_process_dict = {}, status_message
 
         if status_message == "started":
 
-            log_message += f"started;   "
+            log_message += f"started; "
 
         else:
 
@@ -246,13 +244,13 @@ def print_process_status(ctx: Context, psutils_process_dict = {}, status_message
 
         # Pick the interesting bits out of the connections list
         # connections is usually in the dict, as a zero-length list of "pconn"-type objects, (named tuples of tuples)
-        if "connections" in psutils_process_dict.keys():
+        if "net_connections" in psutils_process_dict.keys():
 
-            connections = psutils_process_dict["connections"]
+            connections = psutils_process_dict["net_connections"]
 
             if isinstance(connections, list):
 
-                psutils_process_dict["connections_count"] = len(psutils_process_dict["connections"])
+                psutils_process_dict["connections_count"] = len(psutils_process_dict["net_connections"])
 
                 connections_string = ""
 
@@ -264,9 +262,9 @@ def print_process_status(ctx: Context, psutils_process_dict = {}, status_message
                     connections_string += connection.status
                     connections_string += ", "
 
-                psutils_process_dict["connections"] = connections_string[:-2]
+                psutils_process_dict["net_connections"] = connections_string[:-2]
 
-        psutils_process_dict_to_log = {key: psutils_process_dict[key] for key in process_attributes_to_log if key in psutils_process_dict}
+        psutils_process_dict_to_log = {key: psutils_process_dict[key] for key in ctx.process_attributes_to_log if key in psutils_process_dict}
         log_message += f"psutils_process_dict: {psutils_process_dict_to_log}; "
 
         if std_out:
@@ -278,27 +276,27 @@ def print_process_status(ctx: Context, psutils_process_dict = {}, status_message
     log(ctx, log_message, log_level)
 
 
-def get_subprocess_run_time(ctx: Context, psutils_process_dict) -> None:
+def calculate_subprocess_run_time(ctx: Context, return_dict) -> None:
 
     run_time = None
 
-    if "start_time" in psutils_process_dict:
+    if "start_time" in return_dict:
 
-        if "end_time" in psutils_process_dict:
+        if "end_time" in return_dict:
 
-            run_time = psutils_process_dict["end_time"] - psutils_process_dict["start_time"]
+            run_time = return_dict["end_time"] - return_dict["start_time"]
 
         else:
 
-            run_time = datetime.now() - psutils_process_dict["start_time"]
+            run_time = datetime.now() - return_dict["start_time"]
 
     else:
 
-        log(ctx, f"psutils_process_dict is missing a start_time: {psutils_process_dict}", "debug")
+        log(ctx, f"return_dict is missing a start_time: {return_dict}", "debug")
 
     if run_time:
 
-        psutils_process_dict["run_time"] = timedelta(seconds=run_time.total_seconds())
+        return_dict["run_time"] = timedelta(seconds=run_time.total_seconds())
 
 
 def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
@@ -359,7 +357,7 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             process_to_wait_for = psutil.Process(process_pid_to_wait_for)
 
             # Get the process attributes from the OS
-            psutils_process_dict = process_to_wait_for.as_dict()
+            psutils_process_dict = process_to_wait_for.as_dict(attrs=ctx.process_attributes_to_fetch)
 
             # This rarely fires, ex. if cleaning up processes at the beginning of a script execution and the process finished during the interval
             if process_to_wait_for.status() == psutil.STATUS_ZOMBIE:
@@ -382,7 +380,7 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
         if "pid" not in psutils_process_dict.keys():
             psutils_process_dict["pid"] = process_pid_to_wait_for
 
-        print_process_status(ctx, psutils_process_dict, status_message)
+        print_process_status(ctx = ctx, psutils_process_dict = psutils_process_dict, status_message = status_message)
 
 
 # Signal handling
