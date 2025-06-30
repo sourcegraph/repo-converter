@@ -81,13 +81,6 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
 
     ## Parse config parameters into command args
-    # TODO: Interpret code_host_name, git_org_name, and destination_git_repo_name if not given
-        # ex. https://svn.apache.org/repos/asf/parquet/site
-        # code_host_name            = svn.apache.org    # can get by removing url scheme, if any, till the first /
-        # arbitrary path on server  = repos             # optional, can either be a directory, or may actually be the repo
-        # git_org_name              = asf
-        # destination_git_repo_name             = parquet
-        # git repo root             = site              # arbitrary path inside the repo where contributors decided to start storing /trunk /branches /tags and other files to be included in the repo
     local_repo_path = f"{src_serve_root}/{code_host_name}/{git_org_name}/{destination_git_repo_name}"
     git_config_file_path = f"{local_repo_path}/.git/config"
 
@@ -306,6 +299,25 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
         else:
 
             log(ctx, f"{repo_key}; Successfully connected to repo remote after {retries_attempted} retries", "warning")
+
+    log(ctx, f"svn info: {json.dumps(svn_info['output'], indent = 4, sort_keys=True)}", "debug")
+    # This command should be super lightweight
+    # Why does it take upwards of an hour on the customer's svn server??
+    # When it takes less than a second on svn.apache.org?
+
+    # [2025-06-30 09:05:44] build % time svn info --non-interactive https://svn.apache.org/repos/asf/crunch/site
+    # Path: site
+    # URL: https://svn.apache.org/repos/asf/crunch/site
+    # Relative URL: ^/crunch/site
+    # Repository Root: https://svn.apache.org/repos/asf
+    # Repository UUID: 13f79535-47bb-0310-9956-ffa450edef68
+    # Revision: 1926872
+    # Node Kind: directory
+    # Last Changed Author: jwills
+    # Last Changed Rev: 1881028
+    # Last Changed Date: 2020-08-20 10:02:07 -0600 (Thu, 20 Aug 2020)
+    # [empty line]
+    # svn info --non-interactive https://svn.apache.org/repos/asf/crunch/site  0.02s user 0.01s system 4% cpu 0.702 total
 
     # Get last changed revision for this repo
     last_changed_rev = svn_info_output_string.split("Last Changed Rev: ")[1].split(" ")[0]

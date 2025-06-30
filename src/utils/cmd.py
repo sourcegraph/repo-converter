@@ -66,9 +66,6 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         status_message = "started"
         print_process_status(ctx, process_dict, status_message)
 
-        # If password is provided to this function, feed it into the subprocess' stdin pipe
-        # communicate() also waits for the process to finish
-
         # Process clone_svn_repo_<repo-name>:
         # Traceback (most recent call last):
         #   File "/usr/lib/python3.10/multiprocessing/process.py", line 314, in _bootstrap
@@ -82,6 +79,8 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         # UnboundLocalError: local variable 'subprocess_output' referenced before assignment
         subprocess_output = ""
 
+        # If password is provided to this function, feed it into the subprocess' stdin pipe
+        # communicate() also waits for the process to finish
         if echo_password:
             subprocess_output = subprocess_to_run.communicate(password)
 

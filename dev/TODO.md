@@ -1,5 +1,7 @@
 # TODO:
 
+- How to get process execution times from logs
+
 - Logging
     - Switch to structured (i.e. JSON) logs, including:
         - Basics
@@ -17,6 +19,8 @@
             - Commands
                 - Command / args
                 - Command success / fail
+                - Start time
+                - End time
                 - Execution time
                 - Command stdout
                 - Command stderr
@@ -39,10 +43,18 @@
 
 
 - SVN
+
+    - `svn info` commands
+        - Lightweight, takes a ~second to run
+        - Tests connectivity and credentials
+
     - `svn log` commands
-        - longest commands which seem to be timing out and causing issues are the svn log commands, which just return commit metadata
-        - these commands may be duplicative
+        - Longest commands, which seem to be timing out and causing issues
         - We may be able to make the conversion process much smoother if we can use fewer of these log commands
+        - What do we use them for? Why?
+            - Commit metadata
+            -
+        - these commands may be duplicative
         - Keep an svn log file in a .git/sourcegraph directory in each repo
         - When to run the next svn log file? When the last commit ID number in the svn log file has been converted
         - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file cache?

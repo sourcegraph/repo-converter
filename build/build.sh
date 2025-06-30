@@ -15,7 +15,9 @@
 # p - pull new images for src-cli and cloud-agent
 
 
-# TODO: check if the GitHub Actions build script can't be reused here?
+# TODO:
+    # Add `podman machine info` command to verify the local podman VM is running
+    # check if the GitHub Actions build script can't be reused here?
 
 ## Switching to podman
 
