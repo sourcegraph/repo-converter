@@ -35,6 +35,9 @@ def main():
     # Log the container start event
     log(ctx, f"Starting container; {run_log_string}", "INFO")
 
+    # Register signal handlers for graceful shutdown
+    cmd.register_signal_handler(ctx)
+
     # Create semaphores for concurrency limits
     concurrency_manager = concurrency.ConcurrencyManager(ctx)
 

@@ -52,11 +52,12 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
 
         # Create the process object and start it
         subprocess_to_run = psutil.Popen(
-            args    = args,
-            stdin   = subprocess.PIPE,
-            stdout  = subprocess.PIPE,
-            stderr  = subprocess.STDOUT,
-            text    = True,
+            args        = args,
+            preexec_fn  = os.setsid,  # Create new process group for better cleanup
+            stderr      = subprocess.STDOUT,
+            stdin       = subprocess.PIPE,
+            stdout      = subprocess.PIPE,
+            text        = True,
         )
 
         # Get the process attributes from the OS
@@ -356,9 +357,10 @@ def register_signal_handler(ctx: Context):
 
     try:
 
-        log(ctx, f"Registering signal handler","debug")
+        log(ctx, f"Registering signal handlers","debug")
 
-        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGINT, lambda sig, frame: signal_handler(ctx, sig, frame))
+        signal.signal(signal.SIGTERM, lambda sig, frame: signal_handler(ctx, sig, frame))
 
     except Exception as exception:
 
@@ -367,8 +369,26 @@ def register_signal_handler(ctx: Context):
 
 def signal_handler(ctx: Context, incoming_signal, frame):
 
-    log(ctx, f"Received signal: {incoming_signal} frame: {frame}","debug")
-
     signal_name = signal.Signals(incoming_signal).name
 
-    log(ctx, f"Handled signal {signal_name}: {incoming_signal} frame: {frame}","debug")
+    log(ctx, f"Received signal {signal_name} ({incoming_signal}), initiating graceful shutdown", "warning")
+
+    # Kill all child processes in our process group
+    try:
+
+        # Send SIGTERM to all processes in our group
+        os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
+        log(ctx, "Sent SIGTERM to process group", "info")
+
+    except ProcessLookupError:
+        log(ctx, "No process group to terminate", "debug")
+
+    except OSError as e:
+        log(ctx, f"Error terminating process group: {e}", "error")
+
+    # Clean up any remaining zombie processes
+    status_update_and_cleanup_zombie_processes(ctx)
+
+    # Exit gracefully
+    log(ctx, f"Graceful shutdown complete for signal {signal_name}", "warning")
+    exit(0)
