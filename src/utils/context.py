@@ -6,6 +6,7 @@
 
 # Import Python standard modules
 from datetime import datetime
+import json
 import os
 
 class Context:
@@ -82,7 +83,7 @@ class Context:
         Returns:
             str: Formatted log string with container metadata
         """
-        return f"container ID: {self.container_id}; container running since {self.start_datetime}; with env vars: {str(self.env_vars)}"
+        return f"container ID: {self.container_id}; container running since {self.start_datetime}; with env vars: {json.dumps(self.env_vars, indent = 4, sort_keys=True)}"
 
 
     def get_env_var(self, key, default=None):

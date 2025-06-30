@@ -11,36 +11,42 @@ import os
 import subprocess
 
 
-def check_lock_files(ctx: Context, args, process_dict) -> bool:
+def check_lock_files(ctx: Context, psutils_process_dict) -> bool:
 
-    return_value                = False
+    args                        = psutils_process_dict['args']
     repo_path                   = args[2] # [ "git", "-C", local_repo_path, "gc" ]
-    list_of_process_and_lock_file_path_tuples = [
-        ("Git garbage collection"       , ".git/gc.pid"                                     ), # fatal: gc is already running on machine '75c377aedbaf' pid 3700 (use --force if not)
-        ("svn config"                   , ".git/svn/.metadata.lock"                         ), # error: could not lock config file .git/svn/.metadata: File exists config svn-remote.svn.branches-maxRev 125551: command returned error: 255
+    return_value                = False
+    list_of_command_and_lock_file_path_tuples = [
+        ("git garbage collection"       , ".git/gc.pid"                                     ), # fatal: gc is already running on machine '75c377aedbaf' pid 3700 (use --force if not)
         ("git svn fetch git-svn"        , ".git/svn/refs/remotes/git-svn/index.lock"        ), # fatal: Unable to create '/sourcegraph/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/git-svn/index.lock': File exists.
         ("git svn fetch origin trunk"   , ".git/svn/refs/remotes/origin/trunk/index.lock"   ), # fatal: Unable to create '/sourcegraph/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/origin/trunk/index.lock': File exists
+        ("svn config"                   , ".git/svn/.metadata.lock"                         ), # error: could not lock config file .git/svn/.metadata: File exists config svn-remote.svn.branches-maxRev 125551: command returned error: 255
     ]
 
     try:
-        process_command = " ".join(process_dict["cmdline"])
+
+        # If the cmdline is a list of strings
+        psutils_process_command = " ".join(psutils_process_dict["cmdline"])
 
     except TypeError as exception:
+
+        # If the cmdline is a single string
         # TypeError: can only join an iterable
-        process_command = process_dict["cmdline"]
+        psutils_process_command = psutils_process_dict["cmdline"]
 
     except KeyError:
+
         # KeyError: 'cmdline'
-        # process_dict doesn't have an attribute cmdline??
+        # psutils_process_dict doesn't have an attribute cmdline??
         # TODO: Review the calling code to see if this is a result of the recent concurrency work
-        log(ctx, f"Failed to check for lock files for process; args: {args}; dict: {process_dict}", "error")
+        log(ctx, f"Failed to check for lock files for process; args: {args}; dict: {psutils_process_dict}", "error")
         return False
 
-    pid = process_dict["pid"]
+    pid = psutils_process_dict["pid"]
 
-    for lock_file in list_of_process_and_lock_file_path_tuples:
+    for lock_file in list_of_command_and_lock_file_path_tuples:
 
-        process = lock_file[0]
+        command = lock_file[0]
         lock_file_path = f"{repo_path}/{lock_file[1]}"
 
         if os.path.exists(lock_file_path):
@@ -57,7 +63,7 @@ def check_lock_files(ctx: Context, args, process_dict) -> bool:
                 except UnicodeDecodeError as exception:
                     lock_file_content = exception
 
-                log(ctx, f"pid {pid} failed; {process} failed to start due to finding a lock file in the repo at {lock_file_path}, but no other process is running with {process_command}; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
+                log(ctx, f"pid {pid} failed; {command} failed to start due to finding a lock file in the repo at {lock_file_path}, but no other process is running with {psutils_process_command}; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
                 cmd_rm_lock_file = ["rm", "-f", lock_file_path]
                 cmd.subprocess_run(ctx, cmd_rm_lock_file)
