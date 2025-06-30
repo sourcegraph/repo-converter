@@ -15,7 +15,7 @@ import subprocess
 import textwrap
 
 # Import third party modules
-import psutil
+import psutil # Check for breaking changes https://github.com/giampaolo/psutil/blob/master/HISTORY.rst
 
 
 def get_pid_uptime(pid:int = 1) -> timedelta | None:
@@ -243,26 +243,35 @@ def print_process_status(ctx: Context, psutils_process_dict = {}, status_message
                 log_message += f"running for {pid_uptime}; "
 
         # Pick the interesting bits out of the connections list
-        # connections is usually in the dict, as a zero-length list of "pconn"-type objects, (named tuples of tuples)
+        # net_connections is a list of "pconn"-type objects, (named tuples of tuples)
+        # If no network connections are currently open for this process, then the list is empty
+        # This requires root on macOS for psutils to get this list, so the list is always empty on macOS unless the container is running as root
         if "net_connections" in psutils_process_dict.keys():
 
             connections = psutils_process_dict["net_connections"]
 
+            # log(ctx, f"net_connections: {connections}", "debug")
+
             if isinstance(connections, list):
 
-                psutils_process_dict["connections_count"] = len(psutils_process_dict["net_connections"])
+                connections_count = len(psutils_process_dict["net_connections"])
 
-                connections_string = ""
+                psutils_process_dict["net_connections_count"] = connections_count
 
-                for connection in connections:
+                if connections_count > 0:
 
-                    # raddr=addr(ip='93.186.135.91', port=80), status='ESTABLISHED'),
-                    connections_string += ":".join(map(str,connection.raddr))
-                    connections_string += ":"
-                    connections_string += connection.status
-                    connections_string += ", "
+                    connections_string = ""
 
-                psutils_process_dict["net_connections"] = connections_string[:-2]
+                    for connection in connections:
+
+                        # raddr=addr(ip='93.186.135.91', port=80), status='ESTABLISHED'),
+                        connections_string += ":".join(map(str,connection.raddr))
+                        connections_string += ":"
+                        connections_string += connection.status
+                        connections_string += ", "
+
+                    # Save to the dict, chopping off the trailing comma and space
+                    psutils_process_dict["net_connections"] = connections_string[:-2]
 
         psutils_process_dict_to_log = {key: psutils_process_dict[key] for key in ctx.process_attributes_to_log if key in psutils_process_dict}
         log_message += f"psutils_process_dict: {psutils_process_dict_to_log}; "

@@ -40,12 +40,11 @@ class Context:
     process_attributes_to_log = [
         "args",
         "cmdline",
-        "connections_count",
-        "connections",
         "cpu_times",
         "end_time",
         "memory_percent",
         "name",
+        "net_connections_count",
         "net_connections",
         "num_fds",
         "open_files",
