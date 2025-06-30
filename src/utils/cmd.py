@@ -38,6 +38,10 @@ def get_pid_uptime(pid:int = 1) -> timedelta | None:
 
 def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=False):
 
+    # Which log level to emit log events at,
+    # so events are only logged if this level his higher than the LOG_LEVEL the container is running at
+    log_level                           = "debug"
+
     process_dict                        = {}
     process_dict["args"]                = args
     return_dict                         = {}
@@ -45,8 +49,9 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
     return_dict["output"]               = None
     return_dict["returncode"]           = 1
     return_dict["start_time"]           = datetime.now()
+    status_message                      = ""
+    subprocess_output                   = ""
     truncated_subprocess_output_to_log  = None
-    log_level                           = "debug"
 
     try:
 
@@ -60,25 +65,31 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
             text        = True,
         )
 
-        # Get the process attributes from the OS
-        process_dict = subprocess_to_run.as_dict()
+        try:
+
+            # Immediately capture basic process info before it can finish, or SIGCHLD can reap it
+            basic_process_info = {
+                "pid": subprocess_to_run.pid,
+            }
+
+            # Try to get full process attributes from the OS
+            # The .as_dict() function can take longer to run than some subprocesses,
+            # so it may fail, trying to read metadata for procs which no longer exist in the OS
+            # I really wish psutils had a way around this, to gather the data as it's created in .Popen
+            process_dict = subprocess_to_run.as_dict()
+            status_message = "started"
+
+        except psutil.NoSuchProcess:
+            # Process finished so quickly it was reaped before we could get detailed info
+
+            # Merge in our basic info in case some fields are missing
+            process_dict.update(basic_process_info)
+            status_message = "finished before getting the psutil.dict"
+            if not quiet:
+                log_level = "error"
 
         # Log a starting message
-        status_message = "started"
         print_process_status(ctx, process_dict, status_message)
-
-        # Process clone_svn_repo_<repo-name>:
-        # Traceback (most recent call last):
-        #   File "/usr/lib/python3.10/multiprocessing/process.py", line 314, in _bootstrap
-        #     self.run()
-        #   File "/usr/lib/python3.10/multiprocessing/process.py", line 108, in run
-        #     self._target(*self._args, **self._kwargs)
-        #   File "/sourcegraph/repo-converter/src/source_repo/svn.py", line 369, in clone_svn_repo
-        #     cmd.subprocess_run(ctx, cmd_git_default_branch)
-        #   File "/sourcegraph/repo-converter/src/utils/cmd.py", line 84, in subprocess_run
-        #     subprocess_output = subprocess_output[0].splitlines()
-        # UnboundLocalError: local variable 'subprocess_output' referenced before assignment
-        subprocess_output = ""
 
         # If password is provided to this function, feed it into the subprocess' stdin pipe
         # communicate() also waits for the process to finish
@@ -361,6 +372,7 @@ def register_signal_handler(ctx: Context):
 
         signal.signal(signal.SIGINT, lambda sig, frame: signal_handler(ctx, sig, frame))
         signal.signal(signal.SIGTERM, lambda sig, frame: signal_handler(ctx, sig, frame))
+        signal.signal(signal.SIGCHLD, lambda sig, frame: sigchld_handler(ctx, sig, frame))
 
     except Exception as exception:
 
@@ -392,3 +404,31 @@ def signal_handler(ctx: Context, incoming_signal, frame):
     # Exit gracefully
     log(ctx, f"Graceful shutdown complete for signal {signal_name}", "warning")
     exit(0)
+
+
+def sigchld_handler(ctx: Context, incoming_signal, frame):
+    """Handle SIGCHLD to immediately reap zombie children"""
+
+    # Reap all available zombie children without blocking
+    while True:
+
+        try:
+
+            # WNOHANG means don't block if no children are ready
+            # -1 means wait for any child process
+            pid, status = os.waitpid(-1, os.WNOHANG)
+
+            # If pid is 0, no more children are ready
+            if pid == 0:
+                break
+
+            # Log the reaped child
+            log(ctx, f"SIGCHLD handler reaped child PID {pid} with status {status}", "debug")
+
+        except OSError:
+            # No child processes exist or other error
+            break
+
+        except Exception as e:
+            log(ctx, f"Error in SIGCHLD handler: {e}", "debug")
+            break
