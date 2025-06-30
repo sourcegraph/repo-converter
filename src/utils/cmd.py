@@ -81,7 +81,7 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
         # Create the process object and start it
         subprocess_to_run = psutil.Popen(
             args        = args,
-            preexec_fn  = os.setsid,  # Create new process group for better cleanup
+            preexec_fn  = os.setsid, # Create new process group for better cleanup
             stderr      = subprocess.STDOUT,
             stdin       = subprocess.PIPE,
             stdout      = subprocess.PIPE,
@@ -100,9 +100,10 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
             # so it may fail, trying to read metadata for procs which no longer exist in the OS
             # I really wish psutils had a way around this, to gather the data as it's created in .Popen
             psutils_process_dict = subprocess_to_run.as_dict(attrs=ctx.process_attributes_to_fetch)
+            psutils_process_dict["pgid"] = os.getpgid(psutils_process_dict["pid"])
             status_message = "started"
 
-        except psutil.NoSuchProcess:
+        except (psutil.NoSuchProcess, ProcessLookupError):
             # Process finished so quickly it was reaped before we could get detailed info
 
             # Merge in our basic info in case some fields are missing
@@ -355,9 +356,9 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
         # Raises an exception
     for process_pid_to_wait_for in process_pids_to_wait_for:
 
-        psutils_process_dict        = {}
-        process_to_wait_for = None
-        status_message      = ""
+        process_to_wait_for     = None
+        psutils_process_dict    = {}
+        status_message          = ""
 
         try:
 

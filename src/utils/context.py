@@ -42,6 +42,7 @@ class Context:
         "cmdline",
         "cpu_times",
         "end_time",
+        "memory_info",
         "memory_percent",
         "name",
         "net_connections_count",
@@ -49,10 +50,12 @@ class Context:
         "num_fds",
         "open_files",
         "pid",
+        "pgroup", "pgid", # Not implemented in psutils, need to use os.getpgid, https://github.com/giampaolo/psutil/issues/697#issuecomment-457302655
         "ppid",
         "run_time",
         "start_time",
         "status",
+        "threads",
     ]
 
     # Subset of process_attributes_to_log, filled by list(psutil.Process().as_dict().keys()) in self.initialize_process_attributes_to_fetch()
