@@ -24,10 +24,11 @@ services:
 #    image: ghcr.io/sourcegraph/repo-converter:HEAD
     image: repo-converter:build
     restart: never
+    userns_mode: keep-id
     volumes:
       - ../dev/toprc:/root/.config/procps/toprc # Add `top` config file
       - ../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
-      - ../src-serve-root/:/sourcegraph/src-serve-root
+      - ../src-serve-root/:/sourcegraph/src-serve-root:z
 
   src-serve-git:
     # Uses a valid hostname as container_name, to trick the cloud agent and code host config into finding this container on the Docker network
@@ -42,3 +43,8 @@ services:
 
 networks:
   default:
+
+# Podman extensions
+x-podman:
+  # Disable the creation of a pod, to allow userns configs on containers
+  in_pod: false

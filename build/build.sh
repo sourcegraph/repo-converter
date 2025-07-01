@@ -31,6 +31,9 @@
 # podman machine start
 
 # Install podman-compose, because that's an unrelated OSS project
+# pip install --upgrade podman-compose
+
+# Their brew cask may not get updated soon after a release
 # brew install podman-compose
 
 # Set exec flags
@@ -134,6 +137,7 @@ then
         --detach \
         --no-recreate \
         --remove-orphans
+        # --in-pod false \
 
     # Clear the terminal
     if [[ "$1" == *"c"* ]]

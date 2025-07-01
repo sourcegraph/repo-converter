@@ -117,7 +117,7 @@ class Context:
         Returns:
             str: Formatted log string with container metadata
         """
-        return f"container ID: {self.container_id}; container running since {self.start_datetime}; with env vars: {json.dumps(self.env_vars, indent = 4, sort_keys=True)}"
+        return f"container running since {self.start_datetime}; with env vars: {json.dumps(self.env_vars, indent = 4, sort_keys=True)}"
 
 
     def increment_run_count(self):

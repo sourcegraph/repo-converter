@@ -45,11 +45,6 @@ RUN apt-get update && \
     systemctl enable cron && \
     systemctl start cron
 
-# TODO: Create sourcegraph user, to run as non-root
-# https://github.com/containers/podman/issues/4016
-# RUN useradd sourcegraph
-# USER sourcegraph
-
 # cd to /sourcegraph/repo-converter in the image
 WORKDIR /sourcegraph/repo-converter
 
@@ -85,6 +80,11 @@ COPY src/ src/
 # Copy the dotenv file into the image
 # The contents of this file changes every build
 COPY build/.env build/.env
+
+# Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
+# https://github.com/containers/podman/issues/4016
+RUN useradd -u 1000 -m sourcegraph
+USER sourcegraph
 
 # Start the container
 CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]

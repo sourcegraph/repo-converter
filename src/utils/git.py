@@ -202,11 +202,11 @@ def deduplicate_git_config_file(ctx: Context, git_config_file_path: str, repo_st
         # Iterate through the lines in their existing order
         for line in config_file_data:
 
-            # If we haven't seen this line before / isn't a duplicate
-            if line not in lines_seen:
+            # If we haven't seen this line before / isn't a duplicate / isn't empty
+            if line and (not line.isspace()) and line not in lines_seen:
 
-                # Write it back to the config file, with a newline
-                config_file.write(line + "\n")
+                # Write it back to the config file
+                config_file.write(line)
 
                 # Add it to the set of lines we've seen
                 lines_seen.add(line)
@@ -233,10 +233,10 @@ def git_global_config(ctx: Context) -> None:
         - Default branch
     """
 
-    cmd_git_safe_directory = ["git", "config", "--system", "--replace-all", "safe.directory", "\"*\""]
+    cmd_git_safe_directory = ["git", "config", "--global", "--replace-all", "safe.directory", "\"*\""]
     cmd.subprocess_run(ctx, cmd_git_safe_directory)
 
-    cmd_git_default_branch = ["git", "config", "--system", "--replace-all", "init.defaultBranch", "main"]
+    cmd_git_default_branch = ["git", "config", "--global", "--replace-all", "init.defaultBranch", "main"]
     cmd.subprocess_run(ctx, cmd_git_default_branch)
 
 

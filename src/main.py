@@ -8,6 +8,7 @@ from utils.context import Context
 from utils.log import log
 
 # Import Python standard modules
+import os
 import time
 
 
@@ -32,8 +33,11 @@ def main():
     # DRY run log string
     run_log_string = ctx.get_run_log_string()
 
+    # Get UIDs
+    resuid = str(os.getresuid())
+
     # Log the container start event
-    log(ctx, f"Starting container; {run_log_string}", "INFO")
+    log(ctx, f"Starting container; running as resuid {resuid}; {run_log_string}", "INFO")
 
     # Register signal handlers for graceful shutdown
     signal_handler.register_signal_handler(ctx)
