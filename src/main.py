@@ -3,7 +3,7 @@
 
 # Import repo-converter modules
 from config import load_env, load_repos, validate_env
-from utils import cmd, concurrency, concurrency_monitor, convert_repos, git, logger
+from utils import cmd, concurrency, concurrency_monitor, convert_repos, git, logger, signal_handler
 from utils.context import Context
 from utils.log import log
 
@@ -36,7 +36,7 @@ def main():
     log(ctx, f"Starting container; {run_log_string}", "INFO")
 
     # Register signal handlers for graceful shutdown
-    cmd.register_signal_handler(ctx)
+    signal_handler.register_signal_handler(ctx)
 
     # Create semaphores for concurrency limits
     concurrency_manager = concurrency.ConcurrencyManager(ctx)

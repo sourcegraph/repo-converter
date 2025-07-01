@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+# Utility functions to handle signals
+
+# Import repo-converter modules
+from utils.log import log
+from utils.context import Context
+from utils import cmd
+
+# Import Python standard modules
+import os
+import signal
+
+
+def register_signal_handler(ctx: Context):
+
+    try:
+
+        log(ctx, f"Registering signal handlers","debug")
+
+        signal.signal(signal.SIGINT, lambda sig, frame: signal_handler(ctx, sig, frame))
+        signal.signal(signal.SIGTERM, lambda sig, frame: signal_handler(ctx, sig, frame))
+        signal.signal(signal.SIGCHLD, lambda sig, frame: sigchld_handler(ctx, sig, frame))
+
+    except Exception as exception:
+
+        log(ctx, f"Registering signal handler failed with exception: {type(exception)}, {exception.args}, {exception}","error")
+
+
+def signal_handler(ctx: Context, incoming_signal, frame) -> None:
+
+    signal_name = signal.Signals(incoming_signal).name
+
+    log(ctx, f"Received signal {signal_name} ({incoming_signal}), initiating graceful shutdown", "info")
+
+    # Kill all child processes in our process group
+    try:
+
+        # Send SIGTERM to all processes in our group
+        os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
+        log(ctx, "Sent SIGTERM to process group", "info")
+
+    except ProcessLookupError:
+        log(ctx, "No process group to terminate", "debug")
+
+    except OSError as e:
+        log(ctx, f"Error terminating process group: {e}", "error")
+
+    # Terminate any active multiprocessing jobs
+    try:
+        from utils.convert_repos import terminate_multiprocessing_jobs
+        terminate_multiprocessing_jobs(ctx, timeout=15)  # Shorter timeout during shutdown
+    except ImportError:
+        log(ctx, "convert_repos module not available for multiprocessing cleanup", "debug")
+    except Exception as e:
+        log(ctx, f"Error during multiprocessing job termination: {e}", "error")
+
+    # Clean up any remaining zombie processes
+    cmd.status_update_and_cleanup_zombie_processes(ctx)
+
+    # Exit gracefully
+    log(ctx, f"Graceful shutdown complete for signal {signal_name}", "info")
+    exit(0)
+
+
+def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
+    """Handle SIGCHLD to immediately reap zombie children"""
+
+    # Reap all available zombie children without blocking
+    while True:
+
+        try:
+
+            # WNOHANG means don't block if no children are ready
+            # -1 means wait for any child process
+            pid, status = os.waitpid(-1, os.WNOHANG)
+
+            # If pid is 0, no more children are ready
+            if pid == 0:
+                break
+
+            # Log the reaped child
+            log(ctx, f"SIGCHLD handler reaped child PID {pid} with status {status}", "debug")
+
+        except OSError:
+            # No child processes exist or other error
+            break
+
+        except Exception as e:
+            log(ctx, f"Error in SIGCHLD handler: {e}", "debug")
+            break
+
+
+def terminate_multiprocessing_jobs(ctx: Context, timeout: int = 30) -> None:
+    """Terminate all active multiprocessing jobs gracefully."""
+
+    if not hasattr(ctx, 'active_multiprocessing_jobs'):
+        return
+
+    log(ctx, f"Terminating {len(ctx.active_multiprocessing_jobs)} active multiprocessing jobs", "info")
+
+    for process, repo_key, server_hostname in ctx.active_multiprocessing_jobs[:]:  # Copy list to avoid modification during iteration
+        try:
+            if process.is_alive():
+                log(ctx, f"{repo_key}; Sending SIGTERM to multiprocessing job", "info")
+                process.terminate()  # Send SIGTERM
+
+                # Wait for graceful termination
+                process.join(timeout=timeout)
+
+                if process.is_alive():
+                    log(ctx, f"{repo_key}; Force killing unresponsive multiprocessing job", "warning")
+                    process.kill()  # Force kill with SIGKILL
+                    process.join(timeout=5)  # Brief wait after kill
+
+                if not process.is_alive():
+                    log(ctx, f"{repo_key}; Successfully terminated multiprocessing job", "info")
+                else:
+                    log(ctx, f"{repo_key}; Failed to terminate multiprocessing job", "error")
+
+        except Exception as e:
+            log(ctx, f"{repo_key}; Error terminating multiprocessing job: {e}", "error")
+
+    # Clear the list after termination
+    ctx.active_multiprocessing_jobs.clear()

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
+
 # Main application logic to
 # iterate through the repos_to_convert_dict,
 # and spawn sub processes,
 # based on parallelism limits per server
+
+# This module uses different multiprocessing logic than cmd.py,
+# because this module spawns new child processes targeting Python functions,
+# whereas cmd.py spawns new child processes to call external binaries
 
 # Import repo-converter modules
 from source_repo import svn
@@ -21,9 +26,9 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
     status = concurrency_manager.get_status()
     log(ctx, f"Starting convert_repos.start() with concurrency status: {status}", "info")
 
-    # List to track started processes for cleanup
-    # TODO: Store this in ctx, and add all child procs to it?
-    active_processes = []
+    # Store active processes in context for signal handler access
+    if not hasattr(ctx, 'active_multiprocessing_jobs'):
+        ctx.active_multiprocessing_jobs = []
 
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
@@ -71,28 +76,33 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
             )
             process.start()
 
-            # Append the tuple to the list
-            active_processes.append((process, repo_key, server_hostname))
+            # Store in context for signal handler access and cleanup
+            process_tuple = (process, repo_key, server_hostname)
+            ctx.active_multiprocessing_jobs.append(process_tuple)
 
     # Log final status
-    final_status = concurrency_manager.get_status()
-    log(ctx, f"Completed repo iteration with final status: {final_status}", "info")
+    status = concurrency_manager.get_status()
+    log(ctx, f"Completed convert_repos.start() with concurrency status: {status}", "info")
 
     # Clean up any processes that may have failed to release their semaphores
-    cleanup_stale_processes(ctx, active_processes, concurrency_manager)
+    cleanup_stale_processes(ctx, concurrency_manager)
 
 
-def cleanup_stale_processes(ctx: Context, active_processes: list, concurrency_manager: ConcurrencyManager) -> None:
+def cleanup_stale_processes(ctx: Context, concurrency_manager: ConcurrencyManager, timeout: int = 30) -> None:
     """Clean up any stale processes and their semaphores."""
 
-    for process, repo_key, server_hostname in active_processes:
+    if not hasattr(ctx, 'active_multiprocessing_jobs'):
+        return
 
-        if not process.is_alive() and process.exitcode is not None:
+    for process, repo_key, server_hostname in ctx.active_multiprocessing_jobs:
 
-            # Process is done but may not have cleaned up properly
-            try:
+        try:
+            # Only clean up processes that are done but may not have cleaned up properly
+            if not process.is_alive() and process.exitcode is not None:
+                # Process is done but may not have released its semaphore
                 concurrency_manager.release_job_slot(repo_key, server_hostname)
                 log(ctx, f"{repo_key}; Cleaned up stale process semaphore", "debug")
 
-            except Exception as e:
-                log(ctx, f"{repo_key}; Error during stale process cleanup: {e}", "error")
+        except Exception as e:
+            log(ctx, f"{repo_key}; Error during stale process cleanup: {e}", "error")
+

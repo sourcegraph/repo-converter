@@ -21,8 +21,11 @@ class Context:
     # repos-to-convert.yaml file contents
     repos = {}
 
-    # Child process tracking
+    # Child process tracking for cmd.py module's external commands
     child_procs = {}
+
+    # Child process tracking for convert_repos.py module's function calls
+    active_multiprocessing_jobs = []
 
     # Set of secrets to redact in logs
     secrets = set()
