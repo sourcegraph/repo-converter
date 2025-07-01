@@ -71,7 +71,7 @@ def main():
         # This may be the right time to check which repos are still in progress, given running PIDs, still running from the previous run through this loop
 
         # Disable git safe directory, to work around "dubious ownership" errors
-        git.git_config_safe_directory(ctx)
+        git.git_global_config(ctx)
 
         # Run the main application logic
         convert_repos.start(ctx, concurrency_manager)

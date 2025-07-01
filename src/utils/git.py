@@ -23,16 +23,24 @@ from utils import cmd
 from utils.context import Context
 from utils.log import log
 
+# Import standard libraries
+import os
+
 
 git_config_namespace = "repo-converter"
 
 
-def git_config_safe_directory(ctx: Context) -> None:
-    """Configure git to trust all directories."""
+def git_global_config(ctx: Context) -> None:
+    """Configure global git configs:
+        - Trust all directories
+        - Default branch
+    """
 
     cmd_git_safe_directory = ["git", "config", "--system", "--replace-all", "safe.directory", "\"*\""]
-
     cmd.subprocess_run(ctx, cmd_git_safe_directory)
+
+    cmd_git_default_branch = ["git", "config", "--system", "--replace-all", "init.defaultBranch", "main"]
+    cmd.subprocess_run(ctx, cmd_git_default_branch)
 
 
 def get_config(repo, key):
@@ -49,6 +57,10 @@ def set_config(repo, key, value):
 def deduplicate_git_config_file(ctx: Context, git_config_file_path) -> None:
 
     log(ctx, f"deduplicate_git_config_file; git_config_file_path: {git_config_file_path}", "debug")
+
+    if not os.path.exists(git_config_file_path):
+        log(ctx, f"deduplicate_git_config_file; git_config_file_path does not exist: {git_config_file_path}", "debug")
+        return
 
     # Use a set to store lines already seen
     # as it deduplicates lines automatically
@@ -93,6 +105,11 @@ def cleanup_branches_and_tags(ctx: Context, local_repo_path, cmd_git_default_bra
     # Need to convert the remote branches to local branches, so Sourcegraph users can see them
 
     packed_refs_file_path       = f"{local_repo_path}/.git/packed-refs"
+
+    if not os.path.exists(packed_refs_file_path):
+        log(ctx, f"cleanup_branches_and_tags; packed_refs_file_path does not exist: {packed_refs_file_path}", "debug")
+        return
+
 
     local_branch_prefix         = "refs/heads/"
     local_tag_prefix            = "refs/tags/"
