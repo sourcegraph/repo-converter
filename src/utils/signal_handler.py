@@ -47,10 +47,8 @@ def signal_handler(ctx: Context, incoming_signal, frame) -> None:
 
     # Terminate any active multiprocessing jobs
     try:
-        from utils.convert_repos import terminate_multiprocessing_jobs
         terminate_multiprocessing_jobs(ctx, timeout=15)  # Shorter timeout during shutdown
-    except ImportError:
-        log(ctx, "convert_repos module not available for multiprocessing cleanup", "debug")
+
     except Exception as e:
         log(ctx, f"Error during multiprocessing job termination: {e}", "error")
 
@@ -114,11 +112,18 @@ def terminate_multiprocessing_jobs(ctx: Context, timeout: int = 30) -> None:
 
                 if not process.is_alive():
                     log(ctx, f"{repo_key}; Successfully terminated multiprocessing job", "info")
+
+                    # Remove job from list
+                    ctx.active_multiprocessing_jobs.remove((process, repo_key, server_hostname))
+
                 else:
                     log(ctx, f"{repo_key}; Failed to terminate multiprocessing job", "error")
 
+        except ProcessLookupError:
+
+            log(ctx, f"{repo_key}; Multiprocessing job already terminated", "debug")
+            # Remove from list since it's already gone
+            ctx.active_multiprocessing_jobs.remove((process, repo_key, server_hostname))
+
         except Exception as e:
             log(ctx, f"{repo_key}; Error terminating multiprocessing job: {e}", "error")
-
-    # Clear the list after termination
-    ctx.active_multiprocessing_jobs.clear()
