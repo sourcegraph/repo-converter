@@ -178,10 +178,16 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
             # Change the log_level to debug so the failed process doesn't log an error in print_process_status()
             log_level = "debug"
 
-    print_process_status(ctx = ctx, psutils_process_dict = psutils_process_dict, status_message = status_message, args = args, std_out = str(truncated_subprocess_output_to_log), log_level = log_level)
 
+    # Get end time and calculate run time
     return_dict["end_time"] = datetime.now()
     calculate_subprocess_run_time(ctx, return_dict)
+
+    # Copy end time and run time to the process dict for log output
+    psutils_process_dict["end_time"] = return_dict["end_time"]
+    psutils_process_dict["run_time"] = return_dict["run_time"]
+
+    print_process_status(ctx = ctx, psutils_process_dict = psutils_process_dict, status_message = status_message, args = args, std_out = str(truncated_subprocess_output_to_log), log_level = log_level)
 
     return return_dict
 

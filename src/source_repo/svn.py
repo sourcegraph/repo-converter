@@ -267,7 +267,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
         else:
 
-            log(ctx, f"{repo_key}; {cmd_git_get_svn_url} did not find a matching repo URL in a repo on disk, creating a new repo", "info")
+            log(ctx, f"{repo_key}; {' '.join(cmd_git_get_svn_url)} did not find a matching repo URL in a repo on disk, creating a new repo", "info")
 
     except Exception as exception:
         # Get an error when trying to git config --get svn-remote.svn.url, when the directory doesn't exist on disk
