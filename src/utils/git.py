@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 # Handle repository operations for the resulting Git repos after conversion from other formats
 
-# TODO: Object Oriented
+# TODO: Refactor in Object Oriented format?
 # from .base import Repo
 # class converted_git(Repo):
 #     """Class for Git repository operations."""
@@ -27,89 +28,21 @@ from utils.log import log
 import os
 
 
-git_config_namespace = "repo-converter"
-
-
-def git_global_config(ctx: Context) -> None:
-    """Configure global git configs:
-        - Trust all directories
-        - Default branch
-    """
-
-    cmd_git_safe_directory = ["git", "config", "--system", "--replace-all", "safe.directory", "\"*\""]
-    cmd.subprocess_run(ctx, cmd_git_safe_directory)
-
-    cmd_git_default_branch = ["git", "config", "--system", "--replace-all", "init.defaultBranch", "main"]
-    cmd.subprocess_run(ctx, cmd_git_default_branch)
-
-
-def get_config(repo, key):
-
-    value = ""
-
-    return value
-
-
-def set_config(repo, key, value):
-    pass
-
-
-def deduplicate_git_config_file(ctx: Context, git_config_file_path) -> None:
-
-    log(ctx, f"deduplicate_git_config_file; git_config_file_path: {git_config_file_path}", "debug")
-
-    if not os.path.exists(git_config_file_path):
-        log(ctx, f"deduplicate_git_config_file; git_config_file_path does not exist: {git_config_file_path}", "debug")
-        return
-
-    # Use a set to store lines already seen
-    # as it deduplicates lines automatically
-    # however, don't write the set back to the file,
-    # because it's unordered
-    lines_seen = set()
-
-    # Open the config file, in read/write mode, so we can overwrite its contents
-    with open(git_config_file_path, "r+") as config_file:
-
-        # Read the whole file's contents into memory
-        config_file_data = config_file.readlines()
-
-        log(ctx, f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data)}", "debug")
-
-        # Move the file pointer back to the beginning of the file to start overwriting from there
-        config_file.seek(0)
-
-        # Iterate through the lines in their existing order
-        for line in config_file_data:
-
-            # If we haven't seen this line before / isn't a duplicate
-            if line not in lines_seen:
-
-                # Write it back to the config file, with a newline
-                config_file.write(line + "\n")
-
-                # Add it to the set of lines we've seen
-                lines_seen.add(line)
-
-        # Delete the rest of the file's contents
-        config_file.truncate()
-
-        log(ctx, f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
-
-
-
-
 def cleanup_branches_and_tags(ctx: Context, local_repo_path, cmd_git_default_branch, git_default_branch) -> None:
+    """
+    git svn, and git tfs, have a bad habit of creating converted branches as remote branches,
+    so the Sourcegraph clone doesn't show them to users
+    This function converts the remote branches to local branches, so Sourcegraph users can see them
 
-    # Git svn and git tfs both create converted branches as remote branches, so the Sourcegraph clone doesn't show them to users
-    # Need to convert the remote branches to local branches, so Sourcegraph users can see them
+    This function is only called after git svn fetch,
+    so if the git config file doesn't exist at this point, big problem
+    """
 
     packed_refs_file_path       = f"{local_repo_path}/.git/packed-refs"
 
     if not os.path.exists(packed_refs_file_path):
-        log(ctx, f"cleanup_branches_and_tags; packed_refs_file_path does not exist: {packed_refs_file_path}", "debug")
+        log(ctx, f"cleanup_branches_and_tags; packed_refs_file_path does not exist: {packed_refs_file_path}", "error")
         return
-
 
     local_branch_prefix         = "refs/heads/"
     local_tag_prefix            = "refs/tags/"
@@ -218,3 +151,98 @@ def cleanup_branches_and_tags(ctx: Context, local_repo_path, cmd_git_default_bra
 
     # Reset the default branch
     cmd.subprocess_run(ctx, cmd_git_default_branch)
+
+
+def deduplicate_git_config_file(ctx: Context, git_config_file_path: str, repo_state: str) -> None:
+    """
+    git svn has a bad habit of appending duplicate lines to a git config file
+    This function removes the duplicate lines, as a sacrifice to the git gods,
+    hoping for a successful fetch
+
+    This function is called before git svn fetch,
+    so if the git config file doesn't exist for a new repo, no problem
+    however, if the git config file doesn't exist for a repo that's supposed to exist and be updated, big problem
+    """
+
+    log(ctx, f"deduplicate_git_config_file; git_config_file_path: {git_config_file_path}", "debug")
+
+    if not os.path.exists(git_config_file_path):
+
+        log_level = "debug"
+        log_message = f"deduplicate_git_config_file; git_config_file_path does not exist: {git_config_file_path}"
+
+        if repo_state == "update":
+            log_level = "error"
+            log_message += f"; this is a problem, as repo_state == {repo_state}"
+
+        elif repo_state == "create":
+            log_level = "debug"
+            log_message += f"; this is not a problem, as repo_state == {repo_state}"
+
+        log(ctx, log_message, log_level)
+        return
+
+    # Use a set to store lines already seen
+    # as it deduplicates lines automatically
+    # however, don't write the set back to the file,
+    # because it's unordered
+    lines_seen = set()
+
+    # Open the config file, in read/write mode, so we can overwrite its contents
+    with open(git_config_file_path, "r+") as config_file:
+
+        # Read the whole file's contents into memory
+        config_file_data = config_file.readlines()
+
+        log(ctx, f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data)}", "debug")
+
+        # Move the file pointer back to the beginning of the file to start overwriting from there
+        config_file.seek(0)
+
+        # Iterate through the lines in their existing order
+        for line in config_file_data:
+
+            # If we haven't seen this line before / isn't a duplicate
+            if line not in lines_seen:
+
+                # Write it back to the config file, with a newline
+                config_file.write(line + "\n")
+
+                # Add it to the set of lines we've seen
+                lines_seen.add(line)
+
+        # Delete the rest of the file's contents
+        config_file.truncate()
+
+        log(ctx, f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
+
+
+def get_config(repo, key):
+    """
+    TODO: Implement as a more generic method to get a config value from a repo's config file
+    """
+
+    value = ""
+    return value
+
+
+def git_global_config(ctx: Context) -> None:
+    """
+    Configure global git configs:
+        - Trust all directories
+        - Default branch
+    """
+
+    cmd_git_safe_directory = ["git", "config", "--system", "--replace-all", "safe.directory", "\"*\""]
+    cmd.subprocess_run(ctx, cmd_git_safe_directory)
+
+    cmd_git_default_branch = ["git", "config", "--system", "--replace-all", "init.defaultBranch", "main"]
+    cmd.subprocess_run(ctx, cmd_git_default_branch)
+
+
+def set_config(repo, key, value):
+    """
+    TODO: Implement as a more generic method to set a config value in a repo's config file
+    """
+    pass
+

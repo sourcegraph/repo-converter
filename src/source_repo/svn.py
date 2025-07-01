@@ -514,7 +514,8 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
     # Delete duplicate lines from the git config file, before the fetch
     # hoping that it increases our chances of a successful fetch
-    git.deduplicate_git_config_file(ctx, git_config_file_path)
+    # Passing in repo_state, as a file not found error for repo_state=create is not a problem, but is a problem for repo_state=update
+    git.deduplicate_git_config_file(ctx, git_config_file_path, repo_state)
 
     # Start the fetch
     cmd_git_svn_fetch_string_may_have_batch_range = " ".join(cmd_git_svn_fetch)
