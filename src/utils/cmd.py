@@ -2,7 +2,6 @@
 # Utility functions to execute external binaries, fork child processes, and track / cleanup child processes
 
 # Import repo-converter modules
-from doctest import debug
 from utils.log import log
 from utils.context import Context
 from utils import lock
@@ -110,16 +109,15 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
             # This doesn't seem to work
             psutils_process_dict.update(basic_process_info)
 
-
-            status_message = "Exception: psutil.NoSuchProcess; finished before getting the psutil.dict"
+            status_message = "Process finished before getting process metadata"
             if not quiet:
-                log_level = "error"
+                log_level = "info"
 
         # It seems to be necessary to repeat this, as the dict may get cleared trying to assign it the value of .as_dict()
         psutils_process_dict["args"] = args
 
         # Log a starting message
-        print_process_status(ctx = ctx, psutils_process_dict = psutils_process_dict, status_message = status_message, args = args)
+        print_process_status(ctx = ctx, psutils_process_dict = psutils_process_dict, status_message = status_message, args = args, log_level = log_level)
 
         # If password is provided to this function, feed it into the subprocess' stdin pipe
         # communicate() also waits for the process to finish
@@ -165,10 +163,10 @@ def subprocess_run(ctx: Context, args, password=None, echo_password=None, quiet=
     except FileNotFoundError as exception:
 
         # Use the basic process info we captured earlier
-        process_dict = basic_process_info
-        status_message = "Exception: FileNotFoundError; finished before getting the psutil.dict"
+        psutils_process_dict = basic_process_info
+        status_message = "Process finished before getting process metadata (FileNotFoundError)"
         if not quiet:
-            log_level = "error"
+            log_level = "info"
 
     # If the command fails
     if subprocess_to_run.returncode != 0:
@@ -215,7 +213,7 @@ def truncate_subprocess_output(subprocess_output):
 
 def print_process_status(ctx: Context, psutils_process_dict = {}, status_message = "", args = "", std_out = "", log_level = "debug"):
 
-    log(ctx, f"print_process_status: psutils_process_dict: {psutils_process_dict}", "debug")
+    # log(ctx, f"print_process_status: psutils_process_dict: {psutils_process_dict}", "debug")
 
     log_message = ""
 

@@ -247,16 +247,33 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     # Check if the git repo already exists and has the correct settings in the config file
     try:
 
-        svn_remote_url = cmd.subprocess_run(ctx, cmd_git_get_svn_url, quiet=True)["output"][0]
+        svn_remote_url = ""
+
+        cmd_git_get_svn_url_output = cmd.subprocess_run(ctx, cmd_git_get_svn_url, quiet=True)
+
+        if "output" in cmd_git_get_svn_url_output.keys() and len(cmd_git_get_svn_url_output["output"]) > 0:
+
+            if isinstance(cmd_git_get_svn_url_output["output"], list):
+
+                svn_remote_url = cmd_git_get_svn_url_output["output"][0]
+
+            elif isinstance(cmd_git_get_svn_url_output["output"], str):
+
+                svn_remote_url = cmd_git_get_svn_url_output["output"]
 
         if svn_remote_url in svn_remote_repo_code_root_url:
 
             repo_state = "update"
 
+        else:
+
+            log(ctx, f"{repo_key}; {cmd_git_get_svn_url} did not find a matching repo URL in a repo on disk, creating a new repo", "info")
+
     except Exception as exception:
         # Get an error when trying to git config --get svn-remote.svn.url, when the directory doesn't exist on disk
         # WARNING; karaf; failed to check git config --get svn-remote.svn.url. Exception: <class 'TypeError'>, ("'NoneType' object is not subscriptable",), 'NoneType' object is not subscriptable
-        log(ctx, f"{repo_key}; failed to check git config --get svn-remote.svn.url. Exception: {type(exception)}, {exception.args}, {exception}", "warning")
+        # WARNING; crunch; failed to check git config --get svn-remote.svn.url. Exception: <class 'IndexError'>, ('list index out of range',), list index out of range
+        log(ctx, f"{repo_key}; failed to check git config --get svn-remote.svn.url. Exception: {type(exception)}, {exception.args}, {exception}; cmd_git_get_svn_url_output: {cmd_git_get_svn_url_output}", "warning")
 
 
     ## Run commands
@@ -320,7 +337,11 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     # svn info --non-interactive https://svn.apache.org/repos/asf/crunch/site  0.02s user 0.01s system 4% cpu 0.702 total
 
     # Get last changed revision for this repo
-    last_changed_rev = svn_info_output_string.split("Last Changed Rev: ")[1].split(" ")[0]
+    if "Last Changed Rev: " in svn_info_output_string:
+        last_changed_rev = svn_info_output_string.split("Last Changed Rev: ")[1].split(" ")[0]
+    else:
+        log(ctx, f"{repo_key}; 'Last Changed Rev:' not found in svn info output: {svn_info_output_string}", "error")
+        return
 
     # Check if the previous batch end revision is the same as the last changed rev from svn info
     # If yes, we're up to date, return to the next repo, instead of forking the git svn process to do the same check
