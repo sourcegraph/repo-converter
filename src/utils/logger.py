@@ -28,13 +28,15 @@ def _custom_json_renderer(logger, method_name, event_dict):
     # Define the desired key order
     ordered_keys = [
         "level",
-        "message", 
+        "message",
+        "command",
+        "correlation_id",
         "run_count",
         "date",
         "time",
         "timestamp",
+        "code",
         "container",
-        "code"
     ]
 
     # Rename 'event' to 'message'

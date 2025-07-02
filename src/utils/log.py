@@ -98,24 +98,22 @@ def _build_structured_payload(ctx: Context, message: str,
 
 def _capture_code_location(skip_frames: int = 3) -> dict:
     """Automatically capture code location information"""
+
     try:
+
         frame = inspect.currentframe()
+
         for _ in range(skip_frames):
             if frame.f_back:
                 frame = frame.f_back
 
-        # Include one level of parent directory in file path
-        full_path = frame.f_code.co_filename
-        parent_dir = os.path.basename(os.path.dirname(full_path))
-        filename = os.path.basename(full_path)
-        file_with_parent = f"{parent_dir}/{filename}" if parent_dir else filename
-
         return {
             "module": frame.f_globals.get('__name__', 'unknown'),
             "function": frame.f_code.co_name,
-            "file": file_with_parent,
+            "file": frame.f_code.co_filename,
             "line": frame.f_lineno
         }
+
     except (AttributeError, TypeError):
         return {
             "module": "unknown",
