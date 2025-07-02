@@ -32,14 +32,14 @@ class Context:
     secrets = set()
 
     # Run count
-    run_count = 0
+    cycle = 0
 
     # Namespace for our metadata in git repo config files
     git_config_namespace = "repo-converter"
 
     # Container metadata (set per-instance in __init__)
     container_id = None
-    start_datetime = None  
+    start_datetime = None
     start_timestamp = None
 
     process_attributes_to_log = [
@@ -49,14 +49,13 @@ class Context:
         "end_time",
         "memory_info",
         "memory_percent",
-        "name",
         "net_connections_count",
         "net_connections",
         "num_fds",
         "open_files",
         "pid",
-        "pgroup", "pgid", # Not implemented in psutils, need to use os.getpgid, https://github.com/giampaolo/psutil/issues/697#issuecomment-457302655
         "ppid",
+        "pgroup", "pgid", # Not implemented in psutils, need to use os.getpgid, https://github.com/giampaolo/psutil/issues/697#issuecomment-457302655
         "run_time",
         "start_time",
         "status",
@@ -80,7 +79,7 @@ class Context:
 
         # Store environment variables from context initialization call
         self.env_vars = env_vars
-        
+
         # Set container metadata (per-instance, not shared across instances)
         self.container_id = os.uname().nodename
         self.start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -127,10 +126,10 @@ class Context:
         return f"container running since {self.start_datetime}; with env vars: {json.dumps(self.env_vars, indent = 4, sort_keys=True)}"
 
 
-    def increment_run_count(self):
+    def increment_cycle(self):
         """Increment the run counter and return the new count."""
-        self.run_count += 1
-        return self.run_count
+        self.cycle += 1
+        return self.cycle
 
 
     def initialize_process_attributes_to_fetch(self):

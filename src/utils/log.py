@@ -61,7 +61,7 @@ def _build_structured_payload(ctx: Context, message: str,
     payload = {
 
         # Top-level core fields
-        "run_count": ctx.run_count,
+        "cycle": ctx.cycle,
         "date": now.date().isoformat(),
         "time": now.time().isoformat(),
         "timestamp": current_timestamp,

@@ -29,9 +29,9 @@ def _custom_json_renderer(logger, method_name, event_dict):
     ordered_keys = [
         "level",
         "message",
-        "command",
+        "process",
         "correlation_id",
-        "run_count",
+        "cycle",
         "date",
         "time",
         "timestamp",

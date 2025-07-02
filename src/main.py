@@ -61,11 +61,10 @@ def main():
     while True:
 
         # Increment the run count
-        ctx.run_count += 1
+        ctx.cycle += 1
 
         # Log the start of the run
-        uptime = cmd.get_pid_uptime()
-        log(ctx, f"Starting run {ctx.run_count}; container uptime: {uptime}", "info")
+        log(ctx, f"Starting run", "info")
 
         # Load the repos to convert from file, in case the file has been changed while the container is running
         load_repos.load_from_file(ctx)
@@ -86,26 +85,20 @@ def main():
         # Run the same code again, to update the list of running repo conversion jobs in the context dict
 
         # Log the end of the run
-        uptime = cmd.get_pid_uptime()
-        log(ctx, f"Finishing run {ctx.run_count}; container uptime: {uptime}", "info")
+        log(ctx, "Finishing run", "info")
 
         # Sleep the configured interval
         log(ctx, f"Sleeping main loop for REPO_CONVERTER_INTERVAL_SECONDS={interval} seconds", "info")
         time.sleep(interval)
 
         # If MAX_CYCLES was defined, and if we've reached it, then exit
-        if max_cycles > 0 and ctx.run_count >= max_cycles:
+        if max_cycles > 0 and ctx.cycle >= max_cycles:
             log(ctx, f"Reached MAX_CYCLES={max_cycles}, exiting loop"," warning")
             break
 
-
     # Log the exit event
-    uptime = cmd.get_pid_uptime()
-    log(ctx, f"Stopping container; container uptime: {uptime}; {run_log_string}", "warning")
+    log(ctx, f"Stopping container; {run_log_string}", "warning")
 
-    # TODO: Wait till all child procs are finished before exiting
-    # Exit the container
-    # return
 
 if __name__ == "__main__":
     main()

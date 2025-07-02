@@ -282,7 +282,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     svn_info = cmd.subprocess_run(ctx, cmd_svn_info, password, arg_svn_echo_password)
     svn_info_output_string = " ".join(svn_info["output"])
 
-    if svn_info["returncode"] != 0:
+    if svn_info["return_code"] != 0:
 
         retries_attempted = 0
 
@@ -303,7 +303,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
             svn_info = cmd.subprocess_run(ctx, cmd_svn_info, password, arg_svn_echo_password)
             svn_info_output_string = " ".join(svn_info["output"])
 
-        if svn_info["returncode"] != 0:
+        if svn_info["return_code"] != 0:
 
             log_failure_message = ""
 
@@ -523,7 +523,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     git_svn_fetch_result = cmd.subprocess_run(ctx, cmd_git_svn_fetch, password, password)
 
     # If the fetch succeed, and if we have a batch_end_revision
-    if git_svn_fetch_result["returncode"] == 0 and batch_end_revision:
+    if git_svn_fetch_result["return_code"] == 0 and batch_end_revision:
 
         # Store the ending revision number
         cmd_git_set_batch_end_revision.append(str(batch_end_revision))

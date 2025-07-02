@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Try to clear the various lock files left behind by different git processes
+# Try to clear the various lock files left behind by different processes
 
 # Import repo-converter modules
 from utils import cmd
@@ -11,7 +11,7 @@ import os
 import subprocess
 
 
-def check_lock_files(ctx: Context, psutils_process_dict) -> bool:
+def clear_lock_files(ctx: Context, psutils_process_dict) -> bool:
 
     args                        = psutils_process_dict['args']
     repo_path                   = args[2] # [ "git", "-C", local_repo_path, "gc" ]
