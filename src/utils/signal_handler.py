@@ -76,8 +76,13 @@ def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
             if pid == 0:
                 break
 
-            # Log the reaped child
-            log(ctx, f"SIGCHLD handler reaped child PID {pid} with status {status}", "debug")
+            # log(ctx, f"SIGCHLD handler reaped child PID {pid} with status {status}", "debug")
+
+            # Only log if child exited with non-zero status or was killed by signal
+            if os.WIFEXITED(status) and os.WEXITSTATUS(status) != 0:
+                log(ctx, f"SIGCHLD handler reaped child PID {pid} with exit code {os.WEXITSTATUS(status)}", "warning")
+            elif os.WIFSIGNALED(status):
+                log(ctx, f"SIGCHLD handler reaped child PID {pid} killed by signal {os.WTERMSIG(status)}", "warning")
 
         except OSError:
             # No child processes exist or other error

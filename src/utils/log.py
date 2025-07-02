@@ -64,7 +64,7 @@ def _build_structured_payload(ctx: Context, message: str,
         "cycle": ctx.cycle,
         "date": now.date().isoformat(),
         "time": now.time().isoformat(),
-        "timestamp": current_timestamp,
+        "timestamp": round(current_timestamp,4),
 
         # Code/build-related fields grouped
         "code": {

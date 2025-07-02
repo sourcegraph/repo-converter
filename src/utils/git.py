@@ -150,7 +150,7 @@ def cleanup_branches_and_tags(ctx: Context, local_repo_path, cmd_git_default_bra
             packed_refs_file.write(f"{line}\n")
 
     # Reset the default branch
-    cmd.subprocess_run(ctx, cmd_git_default_branch)
+    cmd.subprocess_run(ctx, cmd_git_default_branch, quiet=True)
 
 
 def deduplicate_git_config_file(ctx: Context, git_config_file_path: str, repo_state: str) -> None:
@@ -234,10 +234,10 @@ def git_global_config(ctx: Context) -> None:
     """
 
     cmd_git_safe_directory = ["git", "config", "--global", "--replace-all", "safe.directory", "\"*\""]
-    cmd.subprocess_run(ctx, cmd_git_safe_directory)
+    cmd.subprocess_run(ctx, cmd_git_safe_directory, quiet=True)
 
     cmd_git_default_branch = ["git", "config", "--global", "--replace-all", "init.defaultBranch", "main"]
-    cmd.subprocess_run(ctx, cmd_git_default_branch)
+    cmd.subprocess_run(ctx, cmd_git_default_branch, quiet=True)
 
 
 def set_config(repo, key, value):

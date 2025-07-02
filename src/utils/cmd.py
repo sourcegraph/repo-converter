@@ -10,7 +10,6 @@ from utils import lock
 # Import Python standard modules
 from datetime import datetime, timedelta
 from typing import Union, Optional, Dict, Any, List
-import json
 import os
 import subprocess
 import textwrap
@@ -66,7 +65,7 @@ def log_process_status(ctx: Context,
     Args:
         ctx: Context object for logging
         subprocess_psutils_dict: Dictionary of process attributes from psutil
-        status_message: Human-readable status description
+        subprocess_dict: Dict of keys and values to log, which are not in the psutil dict
         log_level: Log level for the output message
 
     Effects:
@@ -76,94 +75,100 @@ def log_process_status(ctx: Context,
 
     # log(ctx, f"log_process_status: subprocess_dict: {json.dumps(subprocess_dict, indent = 4, sort_keys=True, default=str)}; subprocess_psutils_dict: {json.dumps(subprocess_psutils_dict, indent = 4, sort_keys=True, default=str)}", "debug")
 
+    # Take shallow copies of the dicts, so we can modify top level keys here to reduce duplicates in log output, without affecting the dict in the calling function; if we need to modify nested objects, then we'll need to switch to deep copies
+    subprocess_dict_copy = subprocess_dict.copy()
+    subprocess_psutils_dict_copy = subprocess_psutils_dict.copy()
+
+    # Create output dicts to send to log() function
+    structured_log_dict = {}
+    subprocess_psutils_dict_to_log = {}
+
     # Set the log level for this event
     # Precedence:
         # function call parameter
-        # subprocess_dict["log_level"]
+        # subprocess_dict_copy["log_level"]
         # Default: debug
     if not log_level:
-        if "log_level" in subprocess_dict.keys():
-            log_level = subprocess_dict.pop("log_level")
-        else:
-            log_level = "debug"
+        log_level = subprocess_dict_copy.pop("log_level", "debug")
 
-    log_message = "Process "
-    if "status_message" in subprocess_dict.keys():
-        log_message += subprocess_dict.pop("status_message")
-    else:
-        log_message += "status"
+    # Gather the log message
+    log_message = f"Process {subprocess_dict_copy.pop('status_message', 'status')}"
 
-    if "correlation_id" in subprocess_dict.keys():
-        correlation_id = subprocess_dict.pop("correlation_id")
-    else:
-        correlation_id = None
+    # If there's a correlation_id, then pass it into the log function args
+    correlation_id = subprocess_dict_copy.pop("correlation_id", None)
 
-    structured_log_dict = {}
+    # Remove the full output, to keep the truncated output
+    subprocess_dict_copy.pop("output", "")
 
-    if subprocess_dict:
-        structured_log_dict["process"] = subprocess_dict
-
-
-    subprocess_psutils_dict_to_log = {}
-
+    # Try to get the running time if the pid is still running
     try:
 
-        # if "pid" in subprocess_psutils_dict.keys():
-        #     pid = subprocess_psutils_dict["pid"]
-        # elif "pid" in subprocess_dict.keys():
-        #     pid = subprocess_dict["pid"]
+        pid = None
+        running_time = None
 
-        # # Calculate its running time
-        # pid_uptime = get_pid_uptime(pid)
+        if "pid" in subprocess_psutils_dict_copy.keys():
+            pid = subprocess_psutils_dict_copy["pid"]
+        elif "pid" in subprocess_dict_copy.keys():
+            pid = subprocess_dict_copy["pid"]
 
-        # if pid_uptime:
-        #     log_message += f"running for {pid_uptime}; "
+        # Calculate its running time
+        if pid:
+            running_time = get_pid_uptime(pid)
 
-        # Pick the interesting bits out of the connections list
-        # net_connections is a list of "pconn"-type objects, (named tuples of tuples)
-        # If no network connections are currently open for this process, then the list is empty
-        # This requires root on macOS for psutils to get this list, so the list is always empty on macOS unless the container is running as root
-        if "net_connections" in subprocess_psutils_dict.keys():
-
-            connections = subprocess_psutils_dict["net_connections"]
-
-            # log(ctx, f"net_connections: {connections}", "debug")
-
-            if isinstance(connections, list):
-
-                connections_count = len(subprocess_psutils_dict["net_connections"])
-
-                subprocess_psutils_dict["net_connections_count"] = connections_count
-
-                if connections_count > 0:
-
-                    connections_string = ""
-
-                    for connection in connections:
-
-                        # raddr=addr(ip='93.186.135.91', port=80), status='ESTABLISHED'),
-                        connections_string += ":".join(map(str,connection.raddr))
-                        connections_string += ":"
-                        connections_string += connection.status
-                        connections_string += ", "
-
-                    # Save to the dict, chopping off the trailing comma and space
-                    subprocess_psutils_dict["net_connections"] = connections_string[:-2]
-
-        subprocess_psutils_dict_to_log = {key: subprocess_psutils_dict[key] for key in ctx.process_attributes_to_log if key in subprocess_psutils_dict}
-
+        if running_time:
+            subprocess_dict_copy["running_time"] = running_time
 
     except psutil.NoSuchProcess:
         log_message = "Process finished on status check"
 
+    # Round memory_percent to 4 digits
+    if "memory_percent" in subprocess_psutils_dict_copy.keys():
+        subprocess_psutils_dict_copy["memory_percent"] = round(subprocess_psutils_dict_copy["memory_percent"],4)
+
+    # Pick the interesting bits out of the connections list
+    # net_connections is a list of "pconn"-type objects, (named tuples of tuples)
+    # If no network connections are currently open for this process, then the list is empty
+    # This requires root on macOS for psutils to get this list, so the list is always empty on macOS unless the container is running as root
+    if "net_connections" in subprocess_psutils_dict_copy.keys():
+
+        connections = subprocess_psutils_dict_copy["net_connections"]
+
+        # log(ctx, f"net_connections: {connections}", "debug")
+
+        if isinstance(connections, list):
+
+            connections_count = len(subprocess_psutils_dict_copy["net_connections"])
+
+            subprocess_psutils_dict_copy["net_connections_count"] = connections_count
+
+            if connections_count > 0:
+
+                connections_string = ""
+
+                for connection in connections:
+
+                    # raddr=addr(ip='1.2.3.4', port=80), status='ESTABLISHED'),
+                    connections_string += ":".join(map(str,connection.raddr))
+                    connections_string += ":"
+                    connections_string += connection.status
+                    connections_string += ", "
+
+                # Save back to the dict, chopping off the trailing comma and space
+                subprocess_psutils_dict_copy["net_connections"] = connections_string[:-2]
+
+    # Truncate long lists of open files, ex. git svn fetch processes
+    if "open_files" in subprocess_psutils_dict_copy.keys() and len(subprocess_psutils_dict_copy["open_files"]) > 0:
+        subprocess_psutils_dict_copy["open_files"] = truncate_output(subprocess_psutils_dict_copy["open_files"])
+
+    # Copy the remaining attributes to be logged
+    subprocess_psutils_dict_to_log = {key: subprocess_psutils_dict_copy[key] for key in ctx.process_attributes_to_log if key in subprocess_psutils_dict_copy}
+
+    # Copy the subprocess_psutils_dict_to_log dict as a sub dict in structured_log_dict, for organized output
+    structured_log_dict["process"] = subprocess_dict_copy
     structured_log_dict["psutils"] = subprocess_psutils_dict_to_log
 
-    log(ctx,
-        message = log_message,
-        level_name = log_level,
-        structured_data = structured_log_dict,
-        correlation_id = correlation_id
-        )
+    # Log the event
+    log(ctx, log_message, log_level, structured_log_dict, correlation_id)
 
 
 def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
@@ -255,13 +260,26 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             subprocess_dict["status_message"] = "finished on wait"
 
         except psutil.TimeoutExpired as exception:
+
+            # Ignore logging main function processes which are still running
+            if "cmdline" in subprocess_psutils_dict.keys() and subprocess_psutils_dict["cmdline"] == ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]:
+                continue
+
+            # TODO: This is the log event that we're really looking for,
+            # for long-running processes
+            # How do we enrich these events, with process metadata in JSON keys?
+            # repo
+            # command
+            # url
+            # correlation_id
+
             subprocess_dict["status_message"] = "still running"
 
         except Exception as exception:
             subprocess_dict["status_message"] = f"raised an exception while waiting: {type(exception)}, {exception.args}, {exception}"
 
-        if "pid" not in subprocess_psutils_dict.keys():
-            subprocess_psutils_dict["pid"] = process_pid_to_wait_for
+        if "pid" not in subprocess_psutils_dict.keys() and "pid" not in subprocess_dict.keys():
+            subprocess_dict["pid"] = process_pid_to_wait_for
 
         log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
@@ -323,7 +341,8 @@ def subprocess_run(ctx: Context,
 
     # Log a starting message
     subprocess_dict["start_time"] = datetime.now()
-    log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+    if not quiet:
+        log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
     # Try to run the subprocess, and catch subprocess exceptions
     try:
@@ -367,7 +386,8 @@ def subprocess_run(ctx: Context,
         # Log a started message
         # Either started, with psutil dict,
         # or finished before getting process metadata, with pid
-        log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+        if not quiet:
+            log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
         # If echo_password is provided to this function,
         # feed the password string into the subprocess' stdin pipe;
@@ -427,7 +447,8 @@ def subprocess_run(ctx: Context,
             subprocess_dict["log_level"] = "warning"
             subprocess_dict["status_message"] = "failed due to a lock file"
 
-    log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+    if not (quiet and subprocess_dict["log_level"] == "debug"):
+        log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
     return subprocess_dict
 
@@ -461,13 +482,13 @@ def truncate_output(output: List[str]) -> List[str]:
 
         # If the output list is longer than max_output_lines lines, truncate it
         output = output[-max_output_lines:]
-        output.append(f"...LOG OUTPUT TRUNCATED FROM {subprocess_output_lines} LINES TO {max_output_lines} LINES")
+        output.append(f"...TRUNCATED FROM {subprocess_output_lines} LINES TO {max_output_lines} LINES FOR LOGGING")
 
         # Truncate really long lines
         for i in range(len(output)):
 
             if len(output[i]) > max_output_line_characters:
                 subprocess_output_line_length = len(output[i])
-                output[i] = textwrap.shorten(output[i], width=max_output_line_characters, placeholder=f"...LOG LINE TRUNCATED FROM {subprocess_output_line_length} CHARACTERS TO {max_output_line_characters} CHARACTERS")
+                output[i] = textwrap.shorten(output[i], width=max_output_line_characters, placeholder=f"...LINE TRUNCATED FROM {subprocess_output_line_length} CHARACTERS TO {max_output_line_characters} CHARACTERS FOR LOGGING")
 
     return output

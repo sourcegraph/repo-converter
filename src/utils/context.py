@@ -56,7 +56,7 @@ class Context:
         "pid",
         "ppid",
         "pgroup", "pgid", # Not implemented in psutils, need to use os.getpgid, https://github.com/giampaolo/psutil/issues/697#issuecomment-457302655
-        "run_time",
+        "execution_time",
         "start_time",
         "status",
         "threads",

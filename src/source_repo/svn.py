@@ -163,7 +163,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
             # Get running processes, both as a list and string
             ps_command = ["ps", "--no-headers", "-e", "--format", "pid,args"]
-            running_processes = cmd.subprocess_run(ctx, ps_command)["output"]
+            running_processes = cmd.subprocess_run(ctx, ps_command, quiet=True)["output"]
             running_processes_string        = " ".join(running_processes)
 
             # Define the list of strings we're looking for in the running processes' commands
@@ -358,7 +358,8 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
             log(ctx, f"{repo_key}; up to date; skipping; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}", "info")
 
             # Run git garbage collection and cleanup branches, even if repo is already up to date
-            cmd.subprocess_run(ctx, cmd_git_garbage_collection)
+            # TODO: Sort out why git gc is a command in this module, but cleaning up branches and tags is in a separate module
+            cmd.subprocess_run(ctx, cmd_git_garbage_collection, quiet=True)
             git.cleanup_branches_and_tags(ctx, local_repo_path, cmd_git_default_branch, git_default_branch)
 
             return
@@ -374,7 +375,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
             remaining_revs_count = svn_log_output_string.count("revision=")
 
             # Log the results
-            log(ctx, f"{repo_key}; out of date; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}, {remaining_revs_count} revs remaining to catch up, fetching next batch of {min(remaining_revs_count,fetch_batch_size)} revisions; svn log command run time {svn_log['run_time']}", "info")
+            log(ctx, f"{repo_key}; out of date; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}, {remaining_revs_count} revs remaining to catch up, fetching next batch of {min(remaining_revs_count,fetch_batch_size)} revisions; svn log command run time {svn_log['execution_time']}", "info")
 
 
     if repo_state == "create":
@@ -529,11 +530,11 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
         cmd_git_set_batch_end_revision.append(str(batch_end_revision))
         cmd.subprocess_run(ctx, cmd_git_set_batch_end_revision)
 
-        log(ctx, f"{repo_key}; git fetch complete; run time {git_svn_fetch_result['run_time']}", "info")
+        log(ctx, f"{repo_key}; git fetch complete; run time {git_svn_fetch_result['execution_time']}", "info")
 
     else:
 
-        log(ctx, f"{repo_key}; git fetch failed; run time {git_svn_fetch_result['run_time']}", "error")
+        log(ctx, f"{repo_key}; git fetch failed; run time {git_svn_fetch_result['execution_time']}", "error")
 
     # Run Git garbage collection before handing off to cleanup branches and tags
     cmd.subprocess_run(ctx, cmd_git_garbage_collection)

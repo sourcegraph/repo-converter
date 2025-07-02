@@ -1,46 +1,36 @@
 # TODO:
 
-- How to get process execution times from logs
-
 - Logging
-    - Switch to structured (i.e. JSON) logs, including:
-        - Basics
-            - Date
-            - Time
-            - Log level
-            - Message
-            - Unix timestamp
-        - Code
-            - Module name
-            - Function name
-            - File
-            - Line number
-        - Pertinent details
-            - Commands
-                - Command / args
-                - Command success / fail
-                - Start time
-                - End time
-                - Execution time
-                - Command stdout
-                - Command stderr
-            - Fetch
-                - Repo
-                - Repo status (up to date / out of date)
-                - Commits behind to catch up
-                - Batch size
-                - Local rev
-                - Remote rev
-                - SVN server errors, ex. svn: E175012: Connection timed out
-            - Uptime
-                - Run number
-                - Container uptime
-            - Container metadata
-                - Image version / build tag
-                - Image build date
-                - Container ID
 
+    - Objective:
+        - Make the code run faster in the customer's environment
+    - How do we achieve this?
+        - Identify which commands are taking a long time, and why
+    - Okay, how?
+        - Adopt structured logging, and a log parsing method to get this data
 
+    - Amp's suggestion
+        - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
+        - Decorator Pattern: Command execution decorator automatically captures all command-related data (args, timing, stdout/stderr, exit codes).
+        - The architecture uses a context stack pattern where different operational contexts (git operations, command execution) automatically push their metadata, making all relevant data available to every log statement within that context.
+
+    - Sort keys in logs for process and psutils subdicts
+
+    - Get details pertinent to which events are emitting logs into structured log keys
+        - Git Commands
+            - Repo
+            - Repo status (up to date / out of date)
+            - Commits behind to catch up
+            - Batch size
+            - Local rev
+            - Remote rev
+            - Remote server response errors, ex. svn: E175012: Connection timed out
+
+    - Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
+
+    - How to get process execution times from logs, and analyze them
+
+    - How to make code location output in logs more useful than just the line of the log event?
 
 - SVN
 
@@ -55,6 +45,15 @@
             - Commit metadata
             -
         - these commands may be duplicative
+        - This command is executed 3 times per sync job, which one is taking so long?
+
+2025-07-01; 02:35:50.400278; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --revision 1:HEAD
+2025-07-01; 02:35:51.983007; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 1 --revision 1:HEAD
+2025-07-01; 02:35:52.695285; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 2 --revision 1377700:HEAD
+
+2025-07-01; 15:09:44.641140; 924a81c; 3fef96dbf2ce; run 576; DEBUG; pid 101567; still running; running for 3:07:58.451094; psutils_process_dict: {'args': '', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/lucene', '--revision', '1059418:HEAD'], 'cpu_times': pcputimes(user=471.92, system=0.45, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_info': pmem(rss=11436032, vms=22106112, shared=9076736, text=323584, lib=0, data=2150400, dirty=0), 'memory_percent': 0.13784979013949392, 'name': 'svn', 'net_connections_count': 1, 'net_connections': '13.90.137.153:443:CLOSE_WAIT', 'num_fds': 5, 'open_files': [], 'pid': 101567, 'ppid': 101556, 'status': 'running', 'threads': [pthread(id=101567, user_time=471.92, system_time=0.45)]};
+
+
         - Keep an svn log file in a .git/sourcegraph directory in each repo
         - When to run the next svn log file? When the last commit ID number in the svn log file has been converted
         - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file cache?
@@ -65,7 +64,7 @@
 
 - repos-to-convert.yaml
 
-    - Move the config schema to a separate YAML file, bake it into image, read it into Context on container startup, and provide for each field:
+    - Move the config validation schema to a separate YAML file, bake it into image, read it into Context on container startup, and provide for each field:
         - Name
         - Description
         - Valid parents (global / server / repo)
@@ -127,26 +126,10 @@
     - Test layout tags and branches as lists / arrays
     - If list of repos is blank in repos-to-convert, try and parse the list from the server?
 
-- Process management
-    - Refactor cmd.subprocess_run() more similar to def convert_repos.conversion_wrapper()
-    - Find a way to get the run time (clock time) of a process once its complete / succeeded / failed
-```log
-2025-06-20; 06:46:14.315469; 96d41ad; ed2e81648d30; run 2; DEBUG; pid 117; succeeded; subprocess_to_run Popen object: psutil.Popen(pid=117, name='svn', status='terminated', started='06:46:12'); process_dict: {'ppid': 108, 'name': 'svn', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/crunch/site', '--limit', '2', '--revision', '1449307:HEAD'], 'status': 'running', 'num_fds': 4, 'cpu_times': pcputimes(user=0.0, system=0.0, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_percent': 0.01071397007889333, 'open_files': []}; std_out: ['<?xml version="1.0" encoding="UTF-8"?>', '<log>', '<logentry', '   revision="1449311">', '</logentry>', '<logentry', '   revision="1449347">', '</logentry>', '</log>'];
-```
-    - Found the repo-converter container dead after 691 runs, with no evidence as to why it died in the container logs
-        - Next time this happens, run podman inspect <container ID>, and review state info
-        - Try to get all the logs / events from the container / pod, to find why it died
-        - How to have the container emit a message while it's dying?
+
     - Need to integrate subprocess methods together
         - State tracking, in ctx.child_procs = {}
-        - Cleanup of zombie processes
         - Clean up of process state
-    - Learn more about multiprocessing pools
-    - Library to cleanup zombie processes, or how does Amp suggest we manage zombies?
-    - Is psutils necessary?
-        - May not have had a recent release, may need to replace it
-        - Requires adding gcc to the Docker image build, which adds ~4 minutes to the build time, and doubles the image size
-        - It would be handy if there was a workaround without it, but multiprocessing.active_children() doesn't join the intermediate processes that Python forks
     - Add to the process status check and cleanup function to
         - get the last lines of stdout from a running process,
         - instead of just wait with a timeout of 0.1,
@@ -273,9 +256,10 @@ version:
         - Remote commit
         - Size on disk
     - Find a way to output a whole stack trace for each ERROR (and higher) log event
-    - Switch to structured (i.e. JSON) logs?
     - Log structure to include file / line number, module / function names
+        - Need to make this more useful
     - Find a tool to search / filter through logs
+        - See Slack thread with Eng
     - Log levels
         - proc events in DEBUG logs make DEBUG level logging too noisy
         - Increase log levels of everything else?
