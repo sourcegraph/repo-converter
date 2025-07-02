@@ -3,7 +3,6 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.log import log
 
 
 def add(ctx: Context, secret) -> None:
@@ -58,7 +57,7 @@ def redact(ctx: Context, input):
             # Would it be more efficient to check for the presence of a secret before sending the line back through this function?
 
             # Send the list item back through this function to hit any of the non-list types
-            redacted_input.append(redact(item))
+            redacted_input.append(redact(ctx, item))
 
     # If it's a dict, recurse through the dict, until it gets down to primitive types
     elif isinstance(input, dict):
@@ -68,10 +67,10 @@ def redact(ctx: Context, input):
         for key in input.keys():
 
             # Check if the secret is in the key, and convert it to a string
-            key_string = redact(str(key))
+            key_string = redact(ctx, str(key))
 
             # Send the value back through this function to hit any of the non-list types
-            redacted_input[key_string] = redact(input[key])
+            redacted_input[key_string] = redact(ctx, input[key])
 
     else:
 

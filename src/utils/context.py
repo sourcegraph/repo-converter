@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import os
 import psutil
+import time
 
 class Context:
     """
@@ -36,9 +37,10 @@ class Context:
     # Namespace for our metadata in git repo config files
     git_config_namespace = "repo-converter"
 
-    # Container metadata
-    container_id = os.uname().nodename
-    start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Container metadata (set per-instance in __init__)
+    container_id = None
+    start_datetime = None  
+    start_timestamp = None
 
     process_attributes_to_log = [
         "args",
@@ -78,6 +80,11 @@ class Context:
 
         # Store environment variables from context initialization call
         self.env_vars = env_vars
+        
+        # Set container metadata (per-instance, not shared across instances)
+        self.container_id = os.uname().nodename
+        self.start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.start_timestamp = time.time()
 
         # Get the list of proc attributes from the psutils library, and initialize process_attributes_to_fetch
         self.initialize_process_attributes_to_fetch()

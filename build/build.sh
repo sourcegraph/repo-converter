@@ -149,8 +149,7 @@ then
     # Follow the container logs
     if [[ "$1" == *"f"* ]]
     then
-        echo "Following $container_name logs"
-        podman-compose logs "$container_name" -f
+        podman-compose logs "$container_name" -f | jq
     fi
 
 fi

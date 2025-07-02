@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Custom logging function
+# Custom logging function with structured logging support
 
 # Import repo-converter modules
 from utils import secret
@@ -7,32 +7,131 @@ from utils.context import Context
 
 # Import Python standard modules
 from datetime import datetime
-import logging
+import inspect
+import os
+import time
+
+# Import third party modules
+import structlog
 
 
-def log(ctx: Context, message, level_name: str = "DEBUG") -> None:
+def log(ctx: Context, message: str, level_name: str = "DEBUG",
+        structured_data: dict = None, correlation_id: str = None) -> None:
+    """
+    Enhanced logging function with structured data support.
 
-    # level_int
+    Args:
+        ctx: Context object containing run information
+        message: Log message string
+        level_name: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        structured_data: Optional dictionary of structured fields to include
+        correlation_id: Optional correlation ID for tracking related operations
+    """
+
+    # Normalize level name
     level_name = str(level_name).upper()
-
-    if level_name in ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]:
-        level_int = logging.getLevelName(level_name)
-    else:
+    if level_name not in ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]:
         level_name = "DEBUG"
-        level_int = logging.DEBUG
 
-    # log_message
-    log_message = ""
+    # Get structlog logger
+    logger = structlog.get_logger()
 
-    date_string = datetime.now().date().isoformat()
-    time_string = datetime.now().time().isoformat()
-    log_message += f"{date_string}; {time_string}; "
+    # Build structured data payload
+    structured_payload = _build_structured_payload(ctx, message, structured_data, correlation_id)
 
-    build_tag   = ctx.env_vars["BUILD_TAG_OR_COMMIT_FOR_LOGS"]
-    log_message += f"{build_tag}; {ctx.container_id}; "
+    # Apply redaction to the entire payload
+    redacted_payload = secret.redact(ctx, structured_payload)
 
-    run_string  = f"run {ctx.run_count}"
-    message     = secret.redact(ctx, message)
-    log_message += f"{run_string}; {level_name}; {str(message)}"
+    # Log using structlog
+    getattr(logger, level_name.lower())(message, **redacted_payload)
 
-    logging.log(level_int, log_message)
+
+def _build_structured_payload(ctx: Context, message: str,
+                              structured_data: dict = None, correlation_id: str = None) -> dict:
+    """Build the complete structured data payload for logging"""
+
+    now = datetime.now()
+
+    current_time = time.time()
+    
+    # Base payload with automatic fields
+    payload = {
+        # Timestamp fields
+        "date": now.date().isoformat(),
+        "time": now.time().isoformat(),
+        "unix_timestamp": current_time,
+        "container_uptime": _format_uptime(current_time - ctx.start_timestamp),
+
+        # Container metadata
+        "build_tag": ctx.env_vars.get("BUILD_TAG_OR_COMMIT_FOR_LOGS", "unknown"),
+        "build_date": ctx.env_vars.get("BUILD_DATE", "unknown"),
+        "container_id": ctx.container_id,
+        "run_count": ctx.run_count,
+
+        # Code location (auto-captured)
+        **_capture_code_location(),
+    }
+
+    # Add correlation ID if provided
+    if correlation_id:
+        payload["correlation_id"] = correlation_id
+
+    # Merge any additional structured data
+    if structured_data:
+        payload.update(structured_data)
+
+    return payload
+
+
+def _capture_code_location(skip_frames: int = 3) -> dict:
+    """Automatically capture code location information"""
+    try:
+        frame = inspect.currentframe()
+        for _ in range(skip_frames):
+            if frame.f_back:
+                frame = frame.f_back
+
+        # Include one level of parent directory in file path
+        full_path = frame.f_code.co_filename
+        parent_dir = os.path.basename(os.path.dirname(full_path))
+        filename = os.path.basename(full_path)
+        file_with_parent = f"{parent_dir}/{filename}" if parent_dir else filename
+        
+        return {
+            "module": frame.f_globals.get('__name__', 'unknown'),
+            "function": frame.f_code.co_name,
+            "file": file_with_parent,
+            "line": frame.f_lineno
+        }
+    except (AttributeError, TypeError):
+        return {
+            "module": "unknown",
+            "function": "unknown",
+            "file": "unknown",
+            "line": 0
+        }
+
+
+def _format_uptime(uptime_seconds: float) -> str:
+    """Format uptime seconds into human-readable format: 2d 14h 35m 42s"""
+    
+    total_seconds = int(uptime_seconds)
+    
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    
+    # Build format string, omitting zero values except seconds
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    
+    # Always include seconds (even if 0)
+    parts.append(f"{seconds}s")
+    
+    return " ".join(parts)
