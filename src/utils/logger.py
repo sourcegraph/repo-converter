@@ -18,45 +18,6 @@ import structlog
 import json
 
 
-def _custom_json_renderer(logger, method_name, event_dict):
-    """
-    Custom JSON renderer that:
-    - Renames keys, ex. 'event' to 'message'
-    - Sorts keys
-    """
-
-    # Define the desired key order
-    ordered_keys = [
-        "level",
-        "message",
-        "process",
-        "correlation_id",
-        "cycle",
-        "date",
-        "time",
-        "timestamp",
-        "code",
-        "container",
-    ]
-
-    # Rename 'event' to 'message'
-    if "event" in event_dict:
-        event_dict["message"] = event_dict.pop("event")
-
-    # Create ordered dictionary starting with known keys
-    ordered_dict = {}
-
-    # Add keys in preferred order
-    for key in ordered_keys:
-        if key in event_dict:
-            ordered_dict[key] = event_dict.pop(key)
-
-    # Add any remaining keys at the end
-    ordered_dict.update(event_dict)
-
-    return json.dumps(ordered_dict, default=str)
-
-
 def configure_logger(log_level: str) -> None:
     """
     Configure structured logging with JSON Lines output format using structlog
@@ -94,3 +55,90 @@ def configure_logger(log_level: str) -> None:
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level_value),
     )
+
+
+def _custom_json_renderer(logger, method_name, event_dict):
+    """
+    Custom JSON renderer that:
+    - Renames keys, ex. 'event' to 'message'
+    - Sorts keys at all levels
+    """
+
+    # Define the desired key order for top-level keys
+    top_level_key_order = [
+        "level",
+        "message",
+        "correlation_id",
+        "cycle",
+        "process",
+        "psutils",
+        "date",
+        "time",
+        "timestamp",
+        "code",
+        "container",
+    ]
+
+    # Define key orders for nested dictionaries
+    process_key_order = [
+        "status_message",
+        "command",
+        "return_code",
+        "execution_time",
+        "success",
+        "start_time",
+        "end_time",
+        "correlation_id"
+        "pid",
+    ]
+
+    psutils_key_order = [
+        "status",
+        "net_connections_count"
+        "pid",
+        "ppid",
+        "memory_percent",
+        "cpu_percent",
+        "create_time",
+        "num_threads",
+    ]
+
+    # Rename 'event' to 'message'
+    if "event" in event_dict:
+        event_dict["message"] = event_dict.pop("event")
+
+    # Create ordered dictionary starting with known keys
+    ordered_dict = {}
+
+    # Sort nested dictionaries first
+    if "process" in event_dict and isinstance(event_dict["process"], dict):
+        event_dict["process"] = sort_dict_by_key_order(event_dict["process"], process_key_order)
+
+    if "psutils" in event_dict and isinstance(event_dict["psutils"], dict):
+        event_dict["psutils"] = sort_dict_by_key_order(event_dict["psutils"], psutils_key_order)
+
+    # Add keys in preferred order
+    for key in top_level_key_order:
+        if key in event_dict:
+            ordered_dict[key] = event_dict.pop(key)
+
+    # Add any remaining keys at the end
+    ordered_dict.update(event_dict)
+
+    return json.dumps(ordered_dict, default=str)
+
+
+def sort_dict_by_key_order(d, key_order):
+    """Sort dictionary by preferred key order"""
+    if not isinstance(d, dict):
+        return d
+    ordered = {}
+    # Add keys in preferred order
+    for key in key_order:
+        if key in d:
+            ordered[key] = d[key]
+    # Add remaining keys at the end
+    for key, value in d.items():
+        if key not in ordered:
+            ordered[key] = value
+    return ordered
