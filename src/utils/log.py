@@ -52,24 +52,37 @@ def _build_structured_payload(ctx: Context, message: str,
 
     now = datetime.now()
 
-    current_time = time.time()
-    
-    # Base payload with automatic fields
+    current_timestamp = time.time()
+
+    # Capture code location info
+    code_location = _capture_code_location()
+
+    # Base payload with grouped structure
     payload = {
-        # Timestamp fields
+
+        # Top-level core fields
+        "run_count": ctx.run_count,
         "date": now.date().isoformat(),
         "time": now.time().isoformat(),
-        "unix_timestamp": current_time,
-        "container_uptime": _format_uptime(current_time - ctx.start_timestamp),
+        "timestamp": current_timestamp,
 
-        # Container metadata
-        "build_tag": ctx.env_vars.get("BUILD_TAG_OR_COMMIT_FOR_LOGS", "unknown"),
-        "build_date": ctx.env_vars.get("BUILD_DATE", "unknown"),
-        "container_id": ctx.container_id,
-        "run_count": ctx.run_count,
+        # Code/build-related fields grouped
+        "code": {
+            "module": code_location["module"],
+            "function": code_location["function"],
+            "file": code_location["file"],
+            "line": code_location["line"],
+            "build_tag": ctx.env_vars.get("BUILD_TAG_OR_COMMIT_FOR_LOGS", "unknown"),
+            "build_date": ctx.env_vars.get("BUILD_DATE", "unknown")
+        },
 
-        # Code location (auto-captured)
-        **_capture_code_location(),
+        # Container-related fields grouped
+        "container": {
+            "uptime": _format_uptime(current_timestamp - ctx.start_timestamp),
+            "start_datetime": ctx.start_datetime,
+            "id": ctx.container_id
+        }
+
     }
 
     # Add correlation ID if provided
@@ -96,7 +109,7 @@ def _capture_code_location(skip_frames: int = 3) -> dict:
         parent_dir = os.path.basename(os.path.dirname(full_path))
         filename = os.path.basename(full_path)
         file_with_parent = f"{parent_dir}/{filename}" if parent_dir else filename
-        
+
         return {
             "module": frame.f_globals.get('__name__', 'unknown'),
             "function": frame.f_code.co_name,
@@ -114,14 +127,14 @@ def _capture_code_location(skip_frames: int = 3) -> dict:
 
 def _format_uptime(uptime_seconds: float) -> str:
     """Format uptime seconds into human-readable format: 2d 14h 35m 42s"""
-    
+
     total_seconds = int(uptime_seconds)
-    
+
     days = total_seconds // 86400
     hours = (total_seconds % 86400) // 3600
     minutes = (total_seconds % 3600) // 60
     seconds = total_seconds % 60
-    
+
     # Build format string, omitting zero values except seconds
     parts = []
     if days > 0:
@@ -130,8 +143,8 @@ def _format_uptime(uptime_seconds: float) -> str:
         parts.append(f"{hours}h")
     if minutes > 0:
         parts.append(f"{minutes}m")
-    
+
     # Always include seconds (even if 0)
     parts.append(f"{seconds}s")
-    
+
     return " ".join(parts)
