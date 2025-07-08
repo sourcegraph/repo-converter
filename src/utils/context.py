@@ -34,28 +34,25 @@ class Context:
     git_config_namespace = "repo-converter"
 
     # Attributes we'd like to log for each process
-    process_attributes_to_log = [
-        'cmdline', 'net_connections', 'cpu_affinity', 'cpu_num', 'cpu_percent', 'cpu_times', 'create_time', 'cwd', 'environ', 'exe', 'gids', 'io_counters', 'ionice', 'memory_full_info', 'memory_info', 'memory_maps', 'memory_percent', 'name', 'nice', 'num_ctx_switches', 'num_fds', 'num_handles', 'num_threads', 'open_files', 'pid', 'ppid', 'status', 'terminal', 'threads', 'uids', 'username'
+    psutils_process_attributes_to_fetch = [
+        'cmdline',
+        'cpu_percent',
+        'cpu_times',
+        'create_time', # Seconds since Epoch, need to convert to datetime
+        'exe',
+        'io_counters',
+        'memory_full_info',
+        # 'memory_maps', # May be useful for deeper debugging, but is quite noisy when not needed
+        'memory_percent',
+        'net_connections',
+        'num_fds',
+        'num_threads',
+        'open_files',
+        'pid',
+        'ppid',
+        'status',
+        'threads',
     ]
-    # process_attributes_to_log = [
-    #     "args",
-    #     "cmdline",
-    #     "cpu_times",
-    #     "end_time",
-    #     "memory_info_bytes",
-    #     "memory_percent",
-    #     "net_connections_count",
-    #     "net_connections",
-    #     "num_fds",
-    #     "open_files",
-    #     "pid",
-    #     "ppid",
-    #     "pgroup", "pgid", # Not implemented in psutils, need to use os.getpgid, https://github.com/giampaolo/psutil/issues/697#issuecomment-457302655
-    #     "execution_time",
-    #     "start_time",
-    #     "status",
-    #     "threads",
-    # ]
 
     # repos-to-convert.yaml file contents
     repos = {}
@@ -72,9 +69,6 @@ class Context:
     resuid = None
     start_datetime = None
     start_timestamp = None
-
-    # Subset of process_attributes_to_log, filled by list(psutil.Process().as_dict().keys()) in self.initialize_process_attributes_to_fetch()
-    process_attributes_to_fetch = []
 
     # Track concurrency state in the context object
     concurrency_manager = None
@@ -100,7 +94,7 @@ class Context:
         self.start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.start_timestamp = time.time()
 
-        # Get the list of proc attributes from the psutils library, and initialize process_attributes_to_fetch
+        # Get the list of proc attributes from the psutils library, and initialize psutils_process_attributes_to_fetch
         self.initialize_process_attributes_to_fetch()
 
 
@@ -144,9 +138,9 @@ class Context:
 
         psutil_attributes = list(psutil.Process().as_dict().keys())
 
-        for attribute in self.process_attributes_to_log:
-            if attribute in psutil_attributes:
-                self.process_attributes_to_fetch.append(attribute)
+        for attribute in self.psutils_process_attributes_to_fetch:
+            if attribute not in psutil_attributes:
+                self.psutils_process_attributes_to_fetch.remove(attribute)
 
 
     def update_repos(self, repos_dict):

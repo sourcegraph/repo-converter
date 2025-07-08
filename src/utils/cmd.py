@@ -50,19 +50,51 @@ def get_pid_uptime(pid: int = 1) -> Optional[timedelta]:
 
 def get_psutil_metrics(ctx: Context, process: psutil.Process) -> Dict:
     """
-    Putting this in a function to deduplicate code
+    Reformat data returned by psutils.as_dict()
     """
 
+    psutils_metrics_dict = {}
+
     # Get most of the process attributes from the OS
-    process_dict = process.as_dict(attrs=ctx.process_attributes_to_fetch)
+    try:
+        psutils_metrics_dict = process.as_dict(attrs=ctx.psutils_process_attributes_to_fetch)
+    except:
+        #log(ctx, f"Failed to get psutils metrics for process {process}", "debug")
+        pass
 
     # Get the named tuples as dicts
-    process_dict["cpu_times"] = process.cpu_times()._asdict()
-    process_dict["memory_info_bytes"] = process.memory_info()._asdict()
-    process_dict["open_files"] = list(open_file._asdict() for open_file in process.open_files())
-    process_dict["threads"] = list(thread._asdict() for thread in process.threads())
+    try:
+        psutils_metrics_dict["cpu_times"] = process.cpu_times()._asdict()
+    except:
+        #log(ctx, f"Failed to get cpu_times psutils metrics for process {process}", "debug")
+        pass
+    try:
+        psutils_metrics_dict["create_datetime"] = datetime.fromtimestamp(psutils_metrics_dict["create_time"])
+    except:
+        #log(ctx, f"Failed to get create_datetime psutils metrics for process {process}", "debug")
+        pass
+    try:
+        psutils_metrics_dict["io_counters"] = process.io_counters()._asdict()
+    except:
+        #log(ctx, f"Failed to get io_counters psutils metrics for process {process}", "debug")
+        pass
+    try:
+        psutils_metrics_dict["memory_full_info"] = process.memory_full_info()._asdict()
+    except:
+        #log(ctx, f"Failed to get memory_full_info psutils metrics for process {process}", "debug")
+        pass
+    try:
+        psutils_metrics_dict["open_files"] = list(open_file._asdict() for open_file in process.open_files())
+    except:
+        #log(ctx, f"Failed to get open_files psutils metrics for process {process}", "debug")
+        pass
+    try:
+        psutils_metrics_dict["threads"] = list(thread._asdict() for thread in process.threads())
+    except:
+        #log(ctx, f"Failed to get threads psutils metrics for process {process}", "debug")
+        pass
 
-    return process_dict
+    return psutils_metrics_dict
 
 
 def log_process_status(ctx: Context,
@@ -93,29 +125,32 @@ def log_process_status(ctx: Context,
     # log(ctx, f"log_process_status: subprocess_dict: {json.dumps(subprocess_dict, indent = 4, sort_keys=True, default=str)}; subprocess_psutils_dict: {json.dumps(subprocess_psutils_dict, indent = 4, sort_keys=True, default=str)}", "debug")
 
     # Take shallow copies of the dicts, so we can modify top level keys here to reduce duplicates in log output, without affecting the dict in the calling function; if we need to modify nested objects, then we'll need to switch to deep copies
-    subprocess_dict_copy = subprocess_dict.copy()
-    subprocess_psutils_dict_copy = subprocess_psutils_dict.copy()
+    subprocess_dict_input = subprocess_dict.copy()
+    psutils_dict_input = subprocess_psutils_dict.copy()
 
     # Create output dicts to send to log() function
     structured_log_dict = {}
-    subprocess_psutils_dict_to_log = {}
+    psutils_dict_output = {}
 
     # Set the log level for this event
     # Precedence:
         # function call parameter
-        # subprocess_dict_copy["log_level"]
+        # subprocess_dict_input["log_level"]
         # Default: debug
     if not log_level:
-        log_level = subprocess_dict_copy.pop("log_level", "debug")
+        log_level = subprocess_dict_input.pop("log_level", "debug")
+    else:
+        # If both are provided, discard the one in the dict, to avoid duplicate and / or contradicting outputs
+        subprocess_dict_input.pop("log_level", "")
 
     # Gather the log message
-    log_message = f"Process {subprocess_dict_copy.pop('status_message', 'status')}"
+    log_message = f"Process {subprocess_dict_input.pop('status_message', 'status')}"
 
     # If there's a correlation_id, then pass it into the log function args
-    correlation_id = subprocess_dict_copy.pop("correlation_id", None)
+    correlation_id = subprocess_dict_input.pop("correlation_id", None)
 
     # Remove the full output, to keep the truncated output
-    subprocess_dict_copy.pop("output", "")
+    subprocess_dict_input.pop("output", "")
 
     # Try to get the running time if the pid is still running
     try:
@@ -123,40 +158,38 @@ def log_process_status(ctx: Context,
         pid = None
         running_time = None
 
-        if "pid" in subprocess_psutils_dict_copy.keys():
-            pid = subprocess_psutils_dict_copy["pid"]
-        elif "pid" in subprocess_dict_copy.keys():
-            pid = subprocess_dict_copy["pid"]
+        if "pid" in psutils_dict_input.keys():
+            pid = psutils_dict_input["pid"]
+        elif "pid" in subprocess_dict_input.keys():
+            pid = subprocess_dict_input["pid"]
 
         # Calculate its running time
         if pid:
             running_time = get_pid_uptime(pid)
 
         if running_time:
-            subprocess_dict_copy["running_time"] = running_time
+            subprocess_dict_input["running_time"] = running_time
 
     except psutil.NoSuchProcess:
         log_message = "Process finished on status check"
 
     # Round memory_percent to 4 digits
-    if "memory_percent" in subprocess_psutils_dict_copy.keys():
-        subprocess_psutils_dict_copy["memory_percent"] = round(subprocess_psutils_dict_copy["memory_percent"],4)
+    if "memory_percent" in psutils_dict_input.keys():
+        psutils_dict_output["memory_percent"] = round(psutils_dict_input["memory_percent"],4)
 
     # Pick the interesting bits out of the connections list
     # net_connections is a list of "pconn"-type objects, (named tuples of tuples)
     # If no network connections are currently open for this process, then the list is empty
     # This requires root on macOS for psutils to get this list, so the list is always empty on macOS unless the container is running as root
-    if "net_connections" in subprocess_psutils_dict_copy.keys():
+    if "net_connections" in psutils_dict_input.keys():
 
-        connections = subprocess_psutils_dict_copy["net_connections"]
-
-        # log(ctx, f"net_connections: {connections}", "debug")
+        connections = psutils_dict_input["net_connections"]
 
         if isinstance(connections, list):
 
-            connections_count = len(subprocess_psutils_dict_copy["net_connections"])
+            connections_count = len(psutils_dict_input["net_connections"])
 
-            subprocess_psutils_dict_copy["net_connections_count"] = connections_count
+            psutils_dict_output["net_connections_count"] = connections_count
 
             if connections_count > 0:
 
@@ -171,18 +204,20 @@ def log_process_status(ctx: Context,
                     connections_string += ", "
 
                 # Save back to the dict, chopping off the trailing comma and space
-                subprocess_psutils_dict_copy["net_connections"] = connections_string[:-2]
+                psutils_dict_input["net_connections"] = connections_string[:-2]
 
     # Truncate long lists of open files, ex. git svn fetch processes
-    if "open_files" in subprocess_psutils_dict_copy.keys() and len(subprocess_psutils_dict_copy["open_files"]) > 0:
-        subprocess_psutils_dict_copy["open_files"] = truncate_output(subprocess_psutils_dict_copy["open_files"])
+    if "open_files" in psutils_dict_input.keys() and len(psutils_dict_input["open_files"]) > 0:
+        psutils_dict_output["open_files"] = truncate_output(psutils_dict_input["open_files"])
 
-    # Copy the remaining attributes to be logged
-    subprocess_psutils_dict_to_log = {key: subprocess_psutils_dict_copy[key] for key in ctx.process_attributes_to_log if key in subprocess_psutils_dict_copy}
+    # Copy the remaining attributes to be logged, without overwriting any already copied over
+    for key in ctx.psutils_process_attributes_to_fetch:
+        if key in psutils_dict_input and key not in psutils_dict_output:
+            psutils_dict_output[key] = psutils_dict_input[key]
 
-    # Copy the subprocess_psutils_dict_to_log dict as a sub dict in structured_log_dict, for organized output
-    structured_log_dict["process"] = subprocess_dict_copy
-    structured_log_dict["psutils"] = subprocess_psutils_dict_to_log
+    # Copy the psutils_dict_output dict as a sub dict in structured_log_dict, for organized output
+    structured_log_dict["process"] = subprocess_dict_input
+    structured_log_dict["psutils"] = psutils_dict_output
 
     # Log the event
     log(ctx, log_message, log_level, structured_log_dict, correlation_id)
@@ -452,7 +487,9 @@ def subprocess_run(ctx: Context,
 
     # Get end time and calculate run time
     subprocess_dict["end_time"] = datetime.now()
-    subprocess_dict["execution_time"] = timedelta(seconds=(subprocess_dict["end_time"] - subprocess_dict["start_time"]).total_seconds())
+    execution_time_seconds = (subprocess_dict["end_time"] - subprocess_dict["start_time"]).total_seconds()
+    subprocess_dict["execution_time_seconds"] = execution_time_seconds
+    subprocess_dict["execution_time"] = timedelta(seconds=execution_time_seconds)
 
     # If the command failed, check if it was due to a lock file being left behind by a previous execution dying
     if not subprocess_dict["success"]:

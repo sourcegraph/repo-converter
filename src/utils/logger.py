@@ -85,11 +85,11 @@ def _custom_json_renderer(logger, method_name, event_dict):
         "status_message",
         "command",
         "return_code",
+        "execution_time_seconds",
         "execution_time",
         "success",
         "start_time",
         "end_time",
-        "correlation_id"
         "pid",
         "pgid",
         "output_line_count",
@@ -97,19 +97,19 @@ def _custom_json_renderer(logger, method_name, event_dict):
     ]
 
     psutils_key_order = [
-        "status",
-        "cmdline",
-        "pid",
-        "ppid",
-        "create_time",
-        "cpu_times",
-        "cpu_percent",
-        "memory_percent",
-        "memory_info_bytes",
-        "net_connections_count"
-        "net_connections"
-        "num_fds",
-        "threads",
+        # "status",
+        # "cmdline",
+        # "pid",
+        # "ppid",
+        # "create_time",
+        # "cpu_times",
+        # "cpu_percent",
+        # "memory_percent",
+        # "memory_info_bytes",
+        # "net_connections_count"
+        # "net_connections"
+        # "num_fds",
+        # "threads",
     ]
 
     # Rename 'event' to 'message'
