@@ -20,7 +20,9 @@ import multiprocessing
 
 
 def start(ctx: Context) -> None:
-    """Main entry point for repo conversion with concurrency management."""
+    """
+    Main entry point for repo conversion with concurrency management.
+    """
 
     concurrency_manager: ConcurrencyManager = ctx.concurrency_manager
 
@@ -33,16 +35,14 @@ def start(ctx: Context) -> None:
         # Log initial status
         log(ctx, f"{repo_key}; Starting repo conversion", "debug", log_concurrency_status=True)
 
-        # Get repo configuration
+        # Get repo's configuration dict
         repo_config = ctx.repos[repo_key]
-
-        # TODO: Move extract_server_host function to config/repos.py
-        server_hostname = concurrency_manager.extract_server_host(repo_config)
+        max_concurrent_conversions_server_name = repo_config["max-concurrent-conversions-server-name"]
 
         # Try to acquire concurrency slot
         # This will block and wait till a slot is available
-        if not concurrency_manager.acquire_job_slot(repo_key, server_hostname):
-            log(ctx, f"{repo_key}; Could not acquire concurrency slot, skipping", "info")
+        if not concurrency_manager.acquire_job_slot(repo_key, max_concurrent_conversions_server_name):
+            log(ctx, f"{repo_key}; Could not acquire concurrency slot, skipping", "info", log_concurrency_status=True)
             continue
 
         # Find the repo type
@@ -53,27 +53,27 @@ def start(ctx: Context) -> None:
         # Start the conversion process with concurrency management
         if repo_type in ("svn", "subversion"):
 
-            log(ctx, f"Starting repo type {repo_type}, name {repo_key}, server {server_hostname}")
+            log(ctx, f"Starting repo type {repo_type}, name {repo_key}, server {max_concurrent_conversions_server_name}")
 
             # Create a wrapper function that handles semaphore cleanup
-            def conversion_wrapper(ctx, repo_key, server_hostname, concurrency_manager):
+            def conversion_wrapper(ctx, repo_key, max_concurrent_conversions_server_name, concurrency_manager):
 
                 try:
                     svn.clone_svn_repo(ctx, repo_key)
                 finally:
                     # Always release the semaphore when done
-                    concurrency_manager.release_job_slot(repo_key, server_hostname)
+                    concurrency_manager.release_job_slot(repo_key, max_concurrent_conversions_server_name)
 
             # Start the process
             process = multiprocessing.Process(
                 target=conversion_wrapper,
                 name=f"clone_svn_repo_{repo_key}",
-                args=(ctx, repo_key, server_hostname, concurrency_manager)
+                args=(ctx, repo_key, max_concurrent_conversions_server_name, concurrency_manager)
             )
             process.start()
 
             # Store in context for signal handler access and cleanup
-            process_tuple = (process, repo_key, server_hostname)
+            process_tuple = (process, repo_key, max_concurrent_conversions_server_name)
             ctx.active_multiprocessing_jobs.append(process_tuple)
 
     # Log final status
@@ -86,7 +86,7 @@ def start(ctx: Context) -> None:
 def cleanup_stale_processes(ctx: Context, concurrency_manager: ConcurrencyManager, timeout: int = 30) -> None:
     """Clean up any stale processes and their semaphores."""
 
-    for process, repo_key, server_hostname in ctx.active_multiprocessing_jobs:
+    for process, repo_key, max_concurrent_conversions_server_name in ctx.active_multiprocessing_jobs:
 
         try:
 
@@ -94,7 +94,7 @@ def cleanup_stale_processes(ctx: Context, concurrency_manager: ConcurrencyManage
             if not process.is_alive() and process.exitcode is not None:
 
                 # Process is done but may not have released its semaphore
-                concurrency_manager.release_job_slot(repo_key, server_hostname)
+                concurrency_manager.release_job_slot(repo_key, max_concurrent_conversions_server_name)
                 log(ctx, f"{repo_key}; Cleaned up stale process semaphore", "debug")
 
         except Exception as e:

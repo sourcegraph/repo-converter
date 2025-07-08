@@ -8,6 +8,7 @@ from utils.log import log
 
 # Import Python standard modules
 from sys import exit
+from urllib.parse import urlparse
 import json
 
 # Import third party modules
@@ -53,7 +54,9 @@ def load_from_file(ctx: Context) -> None:
     ctx.repos = repos
 
     log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
-    log(ctx, f"Repos to convert: {json.dumps(ctx.repos, indent = 4, sort_keys=True)}", "debug")
+
+    repos_to_log = {"repos": ctx.repos}
+    log(ctx, "Repos to convert", "debug", repos_to_log)
 
 
 def check_types(ctx: Context, repos: dict) -> dict:
@@ -387,7 +390,52 @@ def validate_inputs(ctx: Context, repos_input: dict) -> dict:
     """
 
 
+    for repo in repos_input:
+
+        ## Ensure each repo has a "max_concurrent_conversions_server_name" attribute, for the purposes of enforcing MAX_CONCURRENT_CONVERSIONS_PER_SERVER; does not need to be a valid address for network connections
+        max_concurrent_conversions_server_name = ""
+
+        # TODO: Make the repos-to-convert.yaml key more generic for other code host types
+
+        # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
+        url_fields = [
+            "repo-url"
+            "repo-parent-url",
+            "svn-repo-code-root",
+        ]
+
+        # Loop through the list
+        for url_field in url_fields:
+
+            repo_url = repos_input[repo].get(url_field, "")
+
+            if repo_url:
+
+                try:
+                    parsed = urlparse(repo_url)
+                    if parsed.hostname:
+                        max_concurrent_conversions_server_name = parsed.hostname
+                        break
+
+                except Exception as e:
+                    log(ctx, f"urlparse failed to parse URL {repo_url}: {e}", "warning")
+
+        # Fallback to code-host-name if provided
+        if not max_concurrent_conversions_server_name:
+            max_concurrent_conversions_server_name = repos_input[repo].get("code-host-name", "")
+
+        # Last resort: use "unknown"
+        if not max_concurrent_conversions_server_name:
+            max_concurrent_conversions_server_name = "unknown"
+            log(ctx, f"Could not determine server host for repo config: {repo}", "warning")
+
+        # Set the value
+        repos_input[repo]["max-concurrent-conversions-server-name"] = max_concurrent_conversions_server_name
+
+
+
     return repos_input
+
 
 def validate_required_inputs(ctx: Context, repos_input: dict) -> dict:
     """
