@@ -35,24 +35,27 @@ class Context:
 
     # Attributes we'd like to log for each process
     process_attributes_to_log = [
-        "args",
-        "cmdline",
-        "cpu_times",
-        "end_time",
-        "memory_info",
-        "memory_percent",
-        "net_connections_count",
-        "net_connections",
-        "num_fds",
-        "open_files",
-        "pid",
-        "ppid",
-        "pgroup", "pgid", # Not implemented in psutils, need to use os.getpgid, https://github.com/giampaolo/psutil/issues/697#issuecomment-457302655
-        "execution_time",
-        "start_time",
-        "status",
-        "threads",
+        'cmdline', 'net_connections', 'cpu_affinity', 'cpu_num', 'cpu_percent', 'cpu_times', 'create_time', 'cwd', 'environ', 'exe', 'gids', 'io_counters', 'ionice', 'memory_full_info', 'memory_info', 'memory_maps', 'memory_percent', 'name', 'nice', 'num_ctx_switches', 'num_fds', 'num_handles', 'num_threads', 'open_files', 'pid', 'ppid', 'status', 'terminal', 'threads', 'uids', 'username'
     ]
+    # process_attributes_to_log = [
+    #     "args",
+    #     "cmdline",
+    #     "cpu_times",
+    #     "end_time",
+    #     "memory_info_bytes",
+    #     "memory_percent",
+    #     "net_connections_count",
+    #     "net_connections",
+    #     "num_fds",
+    #     "open_files",
+    #     "pid",
+    #     "ppid",
+    #     "pgroup", "pgid", # Not implemented in psutils, need to use os.getpgid, https://github.com/giampaolo/psutil/issues/697#issuecomment-457302655
+    #     "execution_time",
+    #     "start_time",
+    #     "status",
+    #     "threads",
+    # ]
 
     # repos-to-convert.yaml file contents
     repos = {}

@@ -9,8 +9,9 @@ from utils.context import Context
 from utils.log import log
 
 # Import Python standard modules
+from datetime import datetime
 import multiprocessing
-
+import time
 
 class ConcurrencyManager:
     """
@@ -54,6 +55,12 @@ class ConcurrencyManager:
         # Ensure no two processes can write to active_jobs at the same
         self.active_jobs_lock = multiprocessing.Lock()
 
+        # Track jobs waiting for a semaphore to become available, using a list for each server_name, not sure why
+        # TODO: Add correlation_id
+        self.job_queue = self.manager.dict()  # server_name -> list of (repo_key, timestamp, correlation_id)
+        self.job_queue_lock = multiprocessing.Lock()
+
+
         structured_data_to_log = {
             "concurrency": {
                 "MAX_CONCURRENT_CONVERSIONS_GLOBAL": self.global_limit,
@@ -65,6 +72,7 @@ class ConcurrencyManager:
         log(ctx, f"Initialized concurrency manager", "debug", structured_data_to_log)
 
 
+    # TODO: Add correlation_id
     def acquire_job_slot(self, repo_key: str, server_name: str, timeout: float = 10.0) -> bool:
         """
         Check if:
@@ -79,7 +87,6 @@ class ConcurrencyManager:
 
         ## Check if this repo already has a job in progress
         # TODO: Remove the duplicate logic in svn.py, and integrate the missing bits in here
-
         server_active_jobs_list = []
         with self.active_jobs_lock:
 
@@ -90,9 +97,21 @@ class ConcurrencyManager:
 
         if repo_key in server_active_jobs_list:
 
-            log(self.ctx, f"{repo_key}; {server_name}; Repo job already in progress", "info")
+            log(self.ctx, f"{repo_key}; {server_name}; Repo job already in progress, skipping", "info")
             return False
 
+        ## Add this job to the dict of waiting jobs, just in case the blocking semaphore acquire takes a while
+        with self.job_queue_lock:
+
+            if server_name not in self.job_queue:
+                self.job_queue[server_name] = self.manager.list()
+
+            jobs_queued_list = list(self.job_queue[server_name])
+            # TODO: Add correlation_id
+            # jobs_queued_list.append((repo_key, time.time(), correlation_id))
+            jobs_queued_list.append((repo_key, time.time()))
+
+            self.job_queue[server_name] = jobs_queued_list
 
         ## Check per-server limit
         # Get the semaphore object for this server
@@ -100,12 +119,11 @@ class ConcurrencyManager:
 
         # Check the semaphore value for number of remaining slots
         if server_semaphore.get_value() <= 0:
-            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit} reached for server {server_name}, waiting for a slot", "info")
+            log(self.ctx, f"{repo_key}; Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit} for server {server_name}, waiting for a server slot", "info", log_concurrency_status=True)
 
         ## Check global limit
         if self.global_semaphore.get_value() <= 0:
-            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit} reached, waiting for a slot", "info")
-
+            log(self.ctx, f"{repo_key}; Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", log_concurrency_status=True)
 
         ## Acquire a slot in the the server-specific semaphore
         # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
@@ -139,14 +157,22 @@ class ConcurrencyManager:
             # Read it into a normal list
             server_active_jobs_list = list(self.active_jobs[server_name])
 
-            # Append the repo key
-            server_active_jobs_list.append(repo_key)
-
-            # Sort the list
-            server_active_jobs_list.sort()
+            # Append the repo job
+            # TODO: Add correlation_id
+            # server_active_jobs_list.append((repo_key, time.time(), correlation_id))
+            server_active_jobs_list.append((repo_key, time.time()))
 
             # Assign the list back to the manager list
             self.active_jobs[server_name] = server_active_jobs_list
+
+        # Remove the job from the queued jobs list
+        with self.job_queue_lock:
+
+            jobs_queued_list = list(self.job_queue[server_name])
+            # TODO: Add correlation_id
+            # jobs_queued_list = [(repo, timestamp, correlation_id) for repo, timestamp, correlation_id in jobs_queued_list if repo != repo_key]
+            jobs_queued_list = [(repo, timestamp) for repo, timestamp in jobs_queued_list if repo != repo_key]
+            self.job_queue[server_name] = jobs_queued_list
 
         # Log an update
         log(self.ctx, f"{repo_key}; Acquired job slot for server {server_name}", "debug")
@@ -188,8 +214,15 @@ class ConcurrencyManager:
                 "available": "",
                 "limit": self.global_limit
             },
-            "servers": {}
+            "servers": {},
+            "active_jobs_count" : "",
+            "active_jobs" : {},
+            "job_queue_count": "",
+            "job_queue": {},
         }
+
+        active_jobs_count = 0
+        job_queue_count = 0
 
         # Fill in global fields
         status["global"]["active"]      = self.global_limit - self.global_semaphore.get_value()
@@ -204,6 +237,12 @@ class ConcurrencyManager:
             # tuples of server hostnames, and their respective semaphores
             for server_name, per_server_semaphore in self.per_server_semaphores.items():
 
+                status["servers"][server_name] = {
+                    "active": self.per_server_limit - per_server_semaphore.get_value(),
+                    "available": per_server_semaphore.get_value(),
+                    "limit": self.per_server_limit,
+                }
+
                 # Get the lock on the active_jobs dict as well,
                 # to ensure that the values are not changing as this is reading them
                 # Not sure why to get and release the same lock for each server,
@@ -215,12 +254,63 @@ class ConcurrencyManager:
                     # active_jobs_list = list(self.active_jobs[server_name]).sort()
                     active_jobs_list = list(self.active_jobs[server_name])
 
-                status["servers"][server_name] = {
-                    "active": self.per_server_limit - per_server_semaphore.get_value(),
-                    "available": per_server_semaphore.get_value(),
-                    "limit": self.per_server_limit,
-                    "active_jobs": active_jobs_list
-                }
+                    if len(active_jobs_list) > 0:
+
+                        status_active_jobs_list = list()
+
+                        for repo, timestamp in active_jobs_list:
+
+                            active_jobs_count += 1
+                            timestamp = round(timestamp,2)
+
+                            status_active_jobs_list.append(
+                                {
+                                    "repo": repo,
+                                    "started_timestamp": timestamp,
+                                    "started_datetime": datetime.fromtimestamp(timestamp),
+                                    "running_time": round((time.time() - timestamp),2),
+                                    # TODO: Add correlation_id
+                                    # "correlation_id": correlation_id
+                                }
+                            )
+
+                        status["active_jobs"][server_name] = status_active_jobs_list
+
+
+        status["active_jobs_count"] = active_jobs_count
+
+        # Fill in details for queued jobs
+        with self.job_queue_lock:
+
+            for server_name in self.job_queue:
+
+                jobs_queued_list = list(self.job_queue[server_name])
+
+                if len(jobs_queued_list) > 0:
+
+                    status_jobs_queued_list = list()
+
+                    # TODO: Add correlation_id
+                    # for repo, timestamp, correlation_id in jobs_queued_list:
+                    for repo, timestamp in jobs_queued_list:
+
+                        job_queue_count += 1
+                        timestamp = round(timestamp,2)
+
+                        status_jobs_queued_list.append(
+                            {
+                                "repo": repo,
+                                "queued_timestamp": timestamp,
+                                "queued_datetime": datetime.fromtimestamp(timestamp),
+                                "queue_wait_time": round((time.time() - timestamp),2),
+                                # TODO: Add correlation_id
+                                # "correlation_id": correlation_id
+                            }
+                        )
+
+                    status["job_queue"][server_name] = status_jobs_queued_list
+
+        status["job_queue_count"] = job_queue_count
 
         # Return the status dict
         return status
@@ -228,21 +318,6 @@ class ConcurrencyManager:
 
     def release_job_slot(self, repo_key: str, server_name: str):
         """Release both global and server-specific semaphores."""
-
-        server_active_jobs_list = []
-
-        with self.active_jobs_lock:
-
-            # Read it into a normal list
-            server_active_jobs_list = list(self.active_jobs[server_name])
-
-            # Remove the repo from the active_jobs list
-            if repo_key in server_active_jobs_list:
-                server_active_jobs_list.remove(repo_key)
-
-            # Overwrite the managed list
-            self.active_jobs[server_name] = server_active_jobs_list
-
 
         try:
 
@@ -252,6 +327,21 @@ class ConcurrencyManager:
 
             # Release global semaphore
             self.global_semaphore.release()
+
+            server_active_jobs_list = []
+
+            with self.active_jobs_lock:
+
+                # Read it into a normal list
+                server_active_jobs_list = list(self.active_jobs[server_name])
+
+                # Remove the repo from the active_jobs list by filtering tuples
+                # TODO: Add correlation_id
+                # server_active_jobs_list = [(repo, timestamp, correlation_id) for repo, timestamp, correlation_id in server_active_jobs_list if repo != repo_key]
+                server_active_jobs_list = [(repo, timestamp) for repo, timestamp in server_active_jobs_list if repo != repo_key]
+
+                # Overwrite the managed list
+                self.active_jobs[server_name] = server_active_jobs_list
 
             log(self.ctx, f"{repo_key}; Released job slot for server {server_name}", "debug")
 

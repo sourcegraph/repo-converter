@@ -23,7 +23,6 @@ from utils.log import log
 from utils import cmd, git
 
 # Import Python standard modules
-import json
 import os
 import random
 import shutil
@@ -41,24 +40,24 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     repo_config = ctx.repos[repo_key]
 
     # Debug logging for what values we have received for this repo
-    log(ctx, f"{repo_key}: ctx.repos[repo_key] = {json.dumps(repo_config, indent = 4, sort_keys=True)}","debug")
+    log(ctx, f"{repo_key}: ctx.repos[repo_key]","debug", {"repo_config": repo_config})
 
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
     authors_file_path           = repo_config.get("authors-file-path"    , None    )
     authors_prog_path           = repo_config.get("authors-prog-path"    , None    )
     bare_clone                  = repo_config.get("bare-clone"           , True    )
     branches                    = repo_config.get("branches"             , None    )
-    code_host_name              = repo_config.get("code-host-name"       , None    ) # Yes
-    destination_git_repo_name   = repo_config.get("destination-git-repo-name"        , None    ) # Yes
-    fetch_batch_size            = repo_config.get("fetch-batch-size"     , 100     ) # Yes
+    code_host_name              = repo_config.get("code-host-name"       , None    )
+    destination_git_repo_name   = repo_config.get("destination-git-repo-name"   , None    )
+    fetch_batch_size            = repo_config.get("fetch-batch-size"     , 100     )
     git_default_branch          = repo_config.get("git-default-branch"   , "trunk" )
     git_ignore_file_path        = repo_config.get("git-ignore-file-path" , None    )
-    git_org_name                = repo_config.get("git-org-name"         , None    ) # Yes
-    layout                      = repo_config.get("svn-layout"           , None    ) # Yes
+    git_org_name                = repo_config.get("git-org-name"         , None    )
+    layout                      = repo_config.get("svn-layout"           , None    )
     password                    = repo_config.get("password"             , None    )
-    repo_url                    = repo_config.get("repo-url"             , None    ) # Required
-    repo_parent_url             = repo_config.get("repo-parent-url"      , None    ) # Required
-    source_repo_name            = repo_config.get("source-repo-name"        , None    ) # Yes
+    repo_url                    = repo_config.get("repo-url"             , None    )
+    repo_parent_url             = repo_config.get("repo-parent-url"      , None    )
+    source_repo_name            = repo_config.get("source-repo-name"     , None    )
     svn_repo_code_root          = repo_config.get("svn-repo-code-root"   , None    )
     tags                        = repo_config.get("tags"                 , None    )
     trunk                       = repo_config.get("trunk"                , None    )
@@ -317,24 +316,8 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
 
             log(ctx, f"{repo_key}; Successfully connected to repo remote after {retries_attempted} retries", "warning")
 
-    log(ctx, f"svn info: {json.dumps(svn_info['output'], indent = 4, sort_keys=True)}", "debug")
-    # This command should be super lightweight
-    # Why does it take upwards of an hour on the customer's svn server??
-    # When it takes less than a second on svn.apache.org?
-
-    # [2025-06-30 09:05:44] build % time svn info --non-interactive https://svn.apache.org/repos/asf/crunch/site
-    # Path: site
-    # URL: https://svn.apache.org/repos/asf/crunch/site
-    # Relative URL: ^/crunch/site
-    # Repository Root: https://svn.apache.org/repos/asf
-    # Repository UUID: 13f79535-47bb-0310-9956-ffa450edef68
-    # Revision: 1926872
-    # Node Kind: directory
-    # Last Changed Author: jwills
-    # Last Changed Rev: 1881028
-    # Last Changed Date: 2020-08-20 10:02:07 -0600 (Thu, 20 Aug 2020)
-    # [empty line]
-    # svn info --non-interactive https://svn.apache.org/repos/asf/crunch/site  0.02s user 0.01s system 4% cpu 0.702 total
+    # SVN info should be quite lightweight, and return very quickly
+    # log(ctx, f"{repo_key}; svn info", "debug", {"svn_info.output": svn_info['output']})
 
     # Get last changed revision for this repo
     if "Last Changed Rev: " in svn_info_output_string:

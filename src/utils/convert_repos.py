@@ -17,6 +17,7 @@ from utils.log import log
 
 # Import Python standard modules
 import multiprocessing
+import uuid
 
 
 def start(ctx: Context) -> None:
@@ -32,8 +33,11 @@ def start(ctx: Context) -> None:
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
 
+        # Generate a correlation ID, to link all events for each repo conversion job together in the logs
+        cid = str(uuid.uuid4())[:8]
+
         # Log initial status
-        log(ctx, f"{repo_key}; Starting repo conversion", "debug", log_concurrency_status=True)
+        log(ctx, f"{repo_key}; Starting repo conversion", "debug", correlation_id=cid, log_concurrency_status=True)
 
         # Get repo's configuration dict
         repo_config = ctx.repos[repo_key]
@@ -56,19 +60,24 @@ def start(ctx: Context) -> None:
             log(ctx, f"Starting repo type {repo_type}, name {repo_key}, server {max_concurrent_conversions_server_name}")
 
             # Create a wrapper function that handles semaphore cleanup
-            def conversion_wrapper(ctx, repo_key, max_concurrent_conversions_server_name, concurrency_manager):
+            def conversion_wrapper(ctx, repo_key, max_concurrent_conversions_server_name):
+
+                concurrency_manager: ConcurrencyManager = ctx.concurrency_manager
 
                 try:
+
                     svn.clone_svn_repo(ctx, repo_key)
+
                 finally:
-                    # Always release the semaphore when done
+
+                    # Always release the semaphore when done, regardless of success or fail
                     concurrency_manager.release_job_slot(repo_key, max_concurrent_conversions_server_name)
 
             # Start the process
             process = multiprocessing.Process(
                 target=conversion_wrapper,
                 name=f"clone_svn_repo_{repo_key}",
-                args=(ctx, repo_key, max_concurrent_conversions_server_name, concurrency_manager)
+                args=(ctx, repo_key, max_concurrent_conversions_server_name)
             )
             process.start()
 

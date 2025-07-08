@@ -2,7 +2,6 @@
 # Utility functions to execute external binaries, fork child processes, and track / cleanup child processes
 
 # Import repo-converter modules
-from email import message
 from utils.log import log
 from utils.context import Context
 from utils import lock
@@ -10,6 +9,7 @@ from utils import lock
 # Import Python standard modules
 from datetime import datetime, timedelta
 from typing import Union, Optional, Dict, Any, List
+import json
 import os
 import subprocess
 import textwrap
@@ -48,8 +48,25 @@ def get_pid_uptime(pid: int = 1) -> Optional[timedelta]:
     return pid_uptime
 
 
+def get_psutil_metrics(ctx: Context, process: psutil.Process) -> Dict:
+    """
+    Putting this in a function to deduplicate code
+    """
+
+    # Get most of the process attributes from the OS
+    process_dict = process.as_dict(attrs=ctx.process_attributes_to_fetch)
+
+    # Get the named tuples as dicts
+    process_dict["cpu_times"] = process.cpu_times()._asdict()
+    process_dict["memory_info_bytes"] = process.memory_info()._asdict()
+    process_dict["open_files"] = list(open_file._asdict() for open_file in process.open_files())
+    process_dict["threads"] = list(thread._asdict() for thread in process.threads())
+
+    return process_dict
+
+
 def log_process_status(ctx: Context,
-                        subprocess_psutils_dict: Dict[str, Any] = {},
+                        subprocess_psutils_dict: Dict = {},
                         subprocess_dict: Dict = {},
                         log_level: str = "",
                         ) -> None:
@@ -243,13 +260,13 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             # Create an instance of a Process object for the PID number
             # Raises psutil.NoSuchProcess if the PID has already finished
             process_to_wait_for = psutil.Process(process_pid_to_wait_for)
+            with process_to_wait_for.oneshot():
 
-            # Get the process attributes from the OS
-            subprocess_psutils_dict = process_to_wait_for.as_dict(attrs=ctx.process_attributes_to_fetch)
+                subprocess_psutils_dict = get_psutil_metrics(ctx, process_to_wait_for)
 
-            # This rarely fires, ex. if cleaning up processes at the beginning of a script execution and the process finished during the interval
-            if process_to_wait_for.status() == psutil.STATUS_ZOMBIE:
-                subprocess_dict["status_message"] = "is a zombie"
+                # This rarely fires, ex. if cleaning up processes at the beginning of a script execution and the process finished during the interval
+                if process_to_wait_for.status() == psutil.STATUS_ZOMBIE:
+                    subprocess_dict["status_message"] = "is a zombie"
 
             # Wait a short period, and capture the return status
             # Raises psutil.TimeoutExpired if the process is busy executing longer than the wait time
@@ -371,7 +388,9 @@ def subprocess_run(ctx: Context,
             # The .as_dict() function can take longer to run than some subprocesses,
             # so it may fail, trying to read metadata for procs which no longer exist in the OS
             # I really wish psutils had a way around this, to gather the data as it's created in .Popen
-            subprocess_psutils_dict = sub_process.as_dict(attrs=ctx.process_attributes_to_fetch)
+            with sub_process.oneshot():
+
+                subprocess_psutils_dict = get_psutil_metrics(ctx, sub_process)
 
             # psutil doesn't have a process group ID attribute, need to get it from the OS
             subprocess_dict["pgid"] = os.getpgid(subprocess_dict["pid"])
@@ -401,6 +420,7 @@ def subprocess_run(ctx: Context,
         # Get the process' stdout and/or stderr
         # Have to do this inside the try / except block, in case the output isn't valid
         subprocess_dict["output"] = output[0].splitlines()
+        subprocess_dict["output_line_count"] = len(subprocess_dict["output"])
 
         # Truncate the output for logging
         subprocess_dict["truncated_output"] = truncate_output(subprocess_dict["output"])
