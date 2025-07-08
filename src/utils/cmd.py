@@ -381,10 +381,12 @@ def subprocess_run(ctx: Context,
     elif isinstance(args, str):
         subprocess_dict["command"] = args
 
-    # If correlation ID is not provided, then generate one, to link start/end events in logs
-    if correlation_id is None:
-        correlation_id = str(uuid.uuid4())[:8]
-    subprocess_dict["correlation_id"] = correlation_id
+    # If correlation ID is provided, append to it, otherwise generate one, to link start/end events in logs
+    subprocess_correlation_id = str(uuid.uuid4())[:8]
+    if correlation_id:
+        subprocess_dict["correlation_id"] = correlation_id + "." + subprocess_correlation_id
+    else:
+        subprocess_dict["correlation_id"] = subprocess_correlation_id
 
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet

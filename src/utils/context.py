@@ -22,7 +22,7 @@ class Context:
     ## Static / empty
 
     # Child process tracking for convert_repos.py module's function calls
-    active_multiprocessing_jobs = []
+    active_repo_conversion_processes = []
 
     # Child process tracking for cmd.py module's external commands
     child_procs = {}
@@ -56,6 +56,9 @@ class Context:
 
     # repos-to-convert.yaml file contents
     repos = {}
+
+    # Space to store structure log information for repo sync jobs
+    repo_conversion_job_log_data = {}
 
     # Set of secrets to redact in logs
     secrets = set()

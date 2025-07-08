@@ -40,7 +40,7 @@ def clone_svn_repo(ctx: Context, repo_key: str) -> None:
     repo_config = ctx.repos[repo_key]
 
     # Debug logging for what values we have received for this repo
-    log(ctx, f"{repo_key}: ctx.repos[repo_key]","debug", {"repo_config": repo_config})
+    # log(ctx, f"{repo_key}: ctx.repos[repo_key]","debug", {"repo_config": repo_config})
 
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
     authors_file_path           = repo_config.get("authors-file-path"    , None    )

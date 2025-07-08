@@ -346,4 +346,4 @@ class ConcurrencyManager:
             log(self.ctx, f"{repo_key}; Released job slot for server {server_name}", "debug")
 
         except ValueError as e:
-            log(self.ctx, f"{repo_key}; Error releasing semaphores: {e}", "error")
+            log(self.ctx, f"{repo_key}; Error releasing job slot for server {server_name}: {e}", "error")

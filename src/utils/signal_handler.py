@@ -47,7 +47,7 @@ def signal_handler(ctx: Context, incoming_signal, frame) -> None:
 
     # Terminate any active multiprocessing jobs
     try:
-        terminate_multiprocessing_jobs(ctx, timeout=15)  # Shorter timeout during shutdown
+        terminate_multiprocessing_jobs_on_shutdown(ctx, timeout=15)  # Shorter timeout during shutdown
 
     except Exception as e:
         log(ctx, f"Error during multiprocessing job termination: {e}", "error")
@@ -93,15 +93,15 @@ def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
             break
 
 
-def terminate_multiprocessing_jobs(ctx: Context, timeout: int = 30) -> None:
+def terminate_multiprocessing_jobs_on_shutdown(ctx: Context, timeout: int = 30) -> None:
     """Terminate all active multiprocessing jobs gracefully."""
 
-    if not hasattr(ctx, 'active_multiprocessing_jobs'):
+    if not hasattr(ctx, 'active_repo_conversion_processes'):
         return
 
-    log(ctx, f"Terminating {len(ctx.active_multiprocessing_jobs)} active multiprocessing jobs", "info")
+    log(ctx, f"Terminating {len(ctx.active_repo_conversion_processes)} active multiprocessing jobs", "info")
 
-    for process, repo_key, server_hostname in ctx.active_multiprocessing_jobs[:]:  # Copy list to avoid modification during iteration
+    for process, repo_key, server_hostname in ctx.active_repo_conversion_processes[:]:  # Copy list to avoid modification during iteration
         try:
             if process.is_alive():
                 log(ctx, f"{repo_key}; Sending SIGTERM to multiprocessing job", "info")
@@ -119,7 +119,7 @@ def terminate_multiprocessing_jobs(ctx: Context, timeout: int = 30) -> None:
                     log(ctx, f"{repo_key}; Successfully terminated multiprocessing job", "info")
 
                     # Remove job from list
-                    ctx.active_multiprocessing_jobs.remove((process, repo_key, server_hostname))
+                    ctx.active_repo_conversion_processes.remove((process, repo_key, server_hostname))
 
                 else:
                     log(ctx, f"{repo_key}; Failed to terminate multiprocessing job", "error")
@@ -128,7 +128,7 @@ def terminate_multiprocessing_jobs(ctx: Context, timeout: int = 30) -> None:
 
             log(ctx, f"{repo_key}; Multiprocessing job already terminated", "debug")
             # Remove from list since it's already gone
-            ctx.active_multiprocessing_jobs.remove((process, repo_key, server_hostname))
+            ctx.active_repo_conversion_processes.remove((process, repo_key, server_hostname))
 
         except Exception as e:
             log(ctx, f"{repo_key}; Error terminating multiprocessing job: {e}", "error")

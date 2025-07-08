@@ -3,12 +3,8 @@
 ### 4. Implementation Strategy
 
 #### Phase 2: Gradual Enhancement
-- [ ] Identify high-value log messages for structured data enhancement
 - [ ] Add structured fields to key operations:
   - Repository operations: `repo_key`, `repo_type`, `server_hostname`
-  - Command execution: `command`, `pid`, `returncode`, `duration_ms`
-  - Concurrency: `active_conversions`, `queue_size`
-  - Performance: `memory_usage`, `cpu_time`
 
 #### Phase 3: Advanced Features
 - [ ] Add correlation IDs for tracking related operations

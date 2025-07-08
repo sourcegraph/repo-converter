@@ -252,7 +252,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
         # Handle the top-level global config key
         if server_key.lower() in ("global", "globals"):
             repos_global_config = repos_input[server_key]
-            log(ctx, f"Found global repo config under {server_key}: {repos_global_config}", "info")
+            # log(ctx, f"Found global repo config under {server_key}: {repos_global_config}", "debug")
             continue
 
         # Otherwise, the top-level keys are code host servers
@@ -299,7 +299,8 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
 
         else:
 
-            log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has a list of repos: {repos}", "debug")
+            # log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has a list of repos: {repos}", "debug")
+            pass
 
         # Okay, at this point, repos should be a list, of strings and / or dicts
         for repo in repos:
@@ -340,7 +341,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
             if isinstance(repo, str):
 
                 repo_key = repo
-                log(ctx, f"Repo {repo_key} is just a string and doesn't have any config of its own", "debug")
+                # log(ctx, f"Repo {repo_key} is just a string and doesn't have any config of its own", "debug")
 
             # If it's a dict, then it does define some repo-specific configs,
             # so grab these repo-specific configs,
@@ -354,7 +355,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
                 if repo[repo_key] is not None:
                     repo_dict = repo_dict | repo[repo_key]
 
-                log(ctx, f"Repo {repo_key} is a dict, and has some config of its own: {repo[repo_key]}", "debug")
+                # log(ctx, f"Repo {repo_key} is a dict, and has some config of its own: {repo[repo_key]}", "debug")
 
 
             # If the repo's settings didn't specify a destination-git-repo-name, then assume it from repo_key
