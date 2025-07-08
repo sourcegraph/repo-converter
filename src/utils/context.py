@@ -6,10 +6,10 @@
 
 # Import Python standard modules
 from datetime import datetime
-import json
 import os
 import psutil
 import time
+
 
 class Context:
     """
@@ -17,19 +17,15 @@ class Context:
     Encapsulates shared state that needs to be passed between different parts of the application.
     """
 
-    ## Class attributes
+    ### Class attributes
 
-    # repos-to-convert.yaml file contents
-    repos = {}
-
-    # Child process tracking for cmd.py module's external commands
-    child_procs = {}
+    ## Static / empty
 
     # Child process tracking for convert_repos.py module's function calls
     active_multiprocessing_jobs = []
 
-    # Set of secrets to redact in logs
-    secrets = set()
+    # Child process tracking for cmd.py module's external commands
+    child_procs = {}
 
     # Run count
     cycle = 0
@@ -37,11 +33,7 @@ class Context:
     # Namespace for our metadata in git repo config files
     git_config_namespace = "repo-converter"
 
-    # Container metadata (set per-instance in __init__)
-    container_id = None
-    start_datetime = None
-    start_timestamp = None
-
+    # Attributes we'd like to log for each process
     process_attributes_to_log = [
         "args",
         "cmdline",
@@ -62,8 +54,27 @@ class Context:
         "threads",
     ]
 
+    # repos-to-convert.yaml file contents
+    repos = {}
+
+    # Set of secrets to redact in logs
+    secrets = set()
+
+
+    ## Set on container startup
+
+    # Container metadata (set per-instance in __init__)
+    container_id = None
+    env_vars = None
+    resuid = None
+    start_datetime = None
+    start_timestamp = None
+
     # Subset of process_attributes_to_log, filled by list(psutil.Process().as_dict().keys()) in self.initialize_process_attributes_to_fetch()
     process_attributes_to_fetch = []
+
+    # Track concurrency state in the context object
+    concurrency_manager = None
 
 
     ## Class member functions
@@ -82,6 +93,7 @@ class Context:
 
         # Set container metadata (per-instance, not shared across instances)
         self.container_id = os.uname().nodename
+        self.resuid = os.getresuid()
         self.start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.start_timestamp = time.time()
 
@@ -114,16 +126,6 @@ class Context:
             Environment variable value or default
         """
         return self.env_vars.get(key, default)
-
-
-    def get_run_log_string(self):
-        """
-        Generate a standardized log string with container and run information.
-
-        Returns:
-            str: Formatted log string with container metadata
-        """
-        return f"container running since {self.start_datetime}; with env vars: {json.dumps(self.env_vars, indent = 4, sort_keys=True)}"
 
 
     def increment_cycle(self):

@@ -77,6 +77,7 @@ def _custom_json_renderer(logger, method_name, event_dict):
         "timestamp",
         "code",
         "container",
+        "image",
     ]
 
     # Define key orders for nested dictionaries

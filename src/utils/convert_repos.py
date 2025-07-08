@@ -19,23 +19,19 @@ from utils.log import log
 import multiprocessing
 
 
-def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
+def start(ctx: Context) -> None:
     """Main entry point for repo conversion with concurrency management."""
 
-    # Log initial status
-    status = concurrency_manager.get_status()
-    log(ctx, f"Starting convert_repos.start() with concurrency status: {status}", "info")
+    concurrency_manager: ConcurrencyManager = ctx.concurrency_manager
 
-    # Store active processes in context for signal handler access
-    if not hasattr(ctx, 'active_multiprocessing_jobs'):
-        ctx.active_multiprocessing_jobs = []
+    # Log a start event
+    log(ctx, f"Starting convert_repos.start()", "info", log_concurrency_status=True)
 
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
 
         # Log initial status
-        status = concurrency_manager.get_status()
-        log(ctx, f"{repo_key}; Starting repo conversion with concurrency status: {status}", "debug")
+        log(ctx, f"{repo_key}; Starting repo conversion", "debug", log_concurrency_status=True)
 
         # Get repo configuration
         repo_config = ctx.repos[repo_key]
@@ -81,8 +77,7 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
             ctx.active_multiprocessing_jobs.append(process_tuple)
 
     # Log final status
-    status = concurrency_manager.get_status()
-    log(ctx, f"Completed convert_repos.start() with concurrency status: {status}", "info")
+    log(ctx, f"Finishing convert_repos.start()", "info", log_concurrency_status=True)
 
     # Clean up any processes that may have failed to release their semaphores
     cleanup_stale_processes(ctx, concurrency_manager)
@@ -91,18 +86,16 @@ def start(ctx: Context, concurrency_manager: ConcurrencyManager) -> None:
 def cleanup_stale_processes(ctx: Context, concurrency_manager: ConcurrencyManager, timeout: int = 30) -> None:
     """Clean up any stale processes and their semaphores."""
 
-    if not hasattr(ctx, 'active_multiprocessing_jobs'):
-        return
-
     for process, repo_key, server_hostname in ctx.active_multiprocessing_jobs:
 
         try:
+
             # Only clean up processes that are done but may not have cleaned up properly
             if not process.is_alive() and process.exitcode is not None:
+
                 # Process is done but may not have released its semaphore
                 concurrency_manager.release_job_slot(repo_key, server_hostname)
                 log(ctx, f"{repo_key}; Cleaned up stale process semaphore", "debug")
 
         except Exception as e:
             log(ctx, f"{repo_key}; Error during stale process cleanup: {e}", "error")
-

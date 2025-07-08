@@ -15,15 +15,15 @@ def register_signal_handler(ctx: Context):
 
     try:
 
-        log(ctx, f"Registering signal handlers","debug")
-
         signal.signal(signal.SIGINT, lambda sig, frame: signal_handler(ctx, sig, frame))
         signal.signal(signal.SIGTERM, lambda sig, frame: signal_handler(ctx, sig, frame))
         signal.signal(signal.SIGCHLD, lambda sig, frame: sigchld_handler(ctx, sig, frame))
 
+        log(ctx, f"Registered signal handlers","debug")
+
     except Exception as exception:
 
-        log(ctx, f"Registering signal handler failed with exception: {type(exception)}, {exception.args}, {exception}","error")
+        log(ctx, f"Registering signal handlers failed with exception: {type(exception)}, {exception.args}, {exception}","critical")
 
 
 def signal_handler(ctx: Context, incoming_signal, frame) -> None:

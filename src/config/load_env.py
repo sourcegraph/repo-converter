@@ -3,6 +3,7 @@
 
 # Import repo-converter modules
 # context and logging are not available, as it would create a circular import
+# Loading and validating environment variables are separate modules, because validation uses context and logging
 
 # Import Python standard modules
 from os import environ
@@ -41,7 +42,7 @@ def load_env_vars() -> dict:
     # DEBUG INFO WARNING ERROR CRITICAL
     env_vars["LOG_LEVEL"]                               = str(environ.get("LOG_LEVEL"                               , "INFO" ))
     env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]   = int(environ.get("MAX_CONCURRENT_CONVERSIONS_PER_SERVER"   , 10 ))
-    env_vars["MAX_CONCURRENT_CONVERSIONS_TOTAL"]        = int(environ.get("MAX_CONCURRENT_CONVERSIONS_TOTAL"        , 10 ))
+    env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]        = int(environ.get("MAX_CONCURRENT_CONVERSIONS_GLOBAL"        , 10 ))
     # Max cycles of the main loop, then the container exits
     env_vars["MAX_CYCLES"]                              = int(environ.get("MAX_CYCLES"                              , 0 ))
     env_vars["MAX_RETRIES"]                             = int(environ.get("MAX_RETRIES"                             , 3 ))

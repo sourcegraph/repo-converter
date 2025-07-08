@@ -8,21 +8,20 @@ from utils.context import Context
 from utils.log import log
 
 # Import Python standard modules
-import os
 import time
 
 
 def main():
     """Main entry point for the repo-converter container"""
 
-    ### Initialization steps
+    ### Initialization
 
     # Load environment variables from the container's running environment into env_vars dict
     # Assuming the env vars can't be changed without restarting the container
-    env_vars = load_env.load_env_vars()
-
-    # Create initial context from env vars
-    ctx = Context(env_vars)
+    # Initialize context with env vars
+    ctx = Context(
+            load_env.load_env_vars()
+        )
 
     # Configure logging
     logger.configure_logger(ctx.env_vars["LOG_LEVEL"])
@@ -30,27 +29,22 @@ def main():
     # Validate env vars, now that we have logging available
     validate_env.validate_env_vars(ctx)
 
-    # DRY run log string
-    run_log_string = ctx.get_run_log_string()
-
-    # Get UIDs
-    resuid = str(os.getresuid())
-
     # Log the container start event
-    log(ctx, f"Starting container; running as resuid {resuid}; {run_log_string}", "INFO")
+    log(ctx, f"Starting container; running as resuid {ctx.resuid}", "info", log_env_vars = True)
 
     # Register signal handlers for graceful shutdown
     signal_handler.register_signal_handler(ctx)
 
     # Create semaphores for concurrency limits
-    concurrency_manager = concurrency.ConcurrencyManager(ctx)
+    # Store them back in the context object
+    ctx.concurrency_manager = concurrency.ConcurrencyManager(ctx)
 
     # Start concurrency_monitor
     # TODO: Sort out if this is needed / duplicative,
     # and if needed, does it need to be in a separate thread?
     # And if it needs to be in a separate thread, how to kill it when the main thread dies
     # So that the container can die and get restarted
-    concurrency_monitor.start_concurrency_monitor(ctx, concurrency_manager)
+    concurrency_monitor.start_concurrency_monitor(ctx)
 
     # Extract the env vars used repeatedly, to keep this DRY
     # These values are only used in the main function
@@ -64,7 +58,7 @@ def main():
         ctx.cycle += 1
 
         # Log the start of the run
-        log(ctx, f"Starting run", "info")
+        log(ctx, f"Starting run", "info", log_env_vars = True)
 
         # Load the repos to convert from file, in case the file has been changed while the container is running
         load_repos.load_from_file(ctx)
@@ -77,8 +71,8 @@ def main():
         git.git_global_config(ctx)
 
         # Run the main application logic
-        convert_repos.start(ctx, concurrency_manager)
-        # Add started repo conversion jobs to the context dict?
+        convert_repos.start(ctx)
+        # TODO: Add started repo conversion jobs to the context object?
 
         # Tidy up zombie processes which have already completed during this run through this loop
         cmd.status_update_and_cleanup_zombie_processes(ctx)
@@ -97,7 +91,7 @@ def main():
             break
 
     # Log the exit event
-    log(ctx, f"Stopping container; {run_log_string}", "warning")
+    log(ctx, "Stopping container", "info", log_env_vars = True)
 
 
 if __name__ == "__main__":

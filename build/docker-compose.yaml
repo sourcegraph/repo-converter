@@ -18,7 +18,7 @@ services:
       - CONCURRENCY_MONITOR_INTERVAL=10
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
       - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
-      - MAX_CONCURRENT_CONVERSIONS_TOTAL=100
+      - MAX_CONCURRENT_CONVERSIONS_GLOBAL=100
       - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
 #      - MAX_CYCLES=5
 #    image: ghcr.io/sourcegraph/repo-converter:HEAD
@@ -40,6 +40,8 @@ services:
     restart: always
     volumes:
       - ../src-serve-root/:/sourcegraph/src-serve-root:ro # Correct path
+    # ports:
+    #   - 8443:443
 
 networks:
   default:

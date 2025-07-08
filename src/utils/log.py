@@ -8,15 +8,21 @@ from utils.context import Context
 # Import Python standard modules
 from datetime import datetime
 import inspect
-import os
 import time
 
 # Import third party modules
 import structlog
 
 
-def log(ctx: Context, message: str, level_name: str = "DEBUG",
-        structured_data: dict = None, correlation_id: str = None) -> None:
+def log(
+        ctx: Context,
+        message: str,
+        level_name: str = "DEBUG",
+        structured_data: dict = None,
+        correlation_id: str = None,
+        log_env_vars: bool = False,
+        log_concurrency_status: bool = False,
+        ) -> None:
     """
     Enhanced logging function with structured data support.
 
@@ -37,22 +43,33 @@ def log(ctx: Context, message: str, level_name: str = "DEBUG",
     logger = structlog.get_logger()
 
     # Build structured data payload
-    structured_payload = _build_structured_payload(ctx, message, structured_data, correlation_id)
+    structured_payload = _build_structured_payload(
+        ctx,
+        structured_data,
+        correlation_id,
+        log_env_vars,
+        log_concurrency_status
+        )
 
     # Apply redaction to the entire payload
     redacted_payload = secret.redact(ctx, structured_payload)
 
-    # Log using structlog
+    # Log using structlog's logging commands, where the command is the log level's name
     getattr(logger, level_name.lower())(message, **redacted_payload)
 
 
-def _build_structured_payload(ctx: Context, message: str,
-                              structured_data: dict = None, correlation_id: str = None) -> dict:
+def _build_structured_payload(
+        ctx: Context,
+        structured_data: dict = None,
+        correlation_id: str = None,
+        log_env_vars: bool = False,
+        log_concurrency_status: bool = False,
+        ) -> dict:
     """Build the complete structured data payload for logging"""
 
-    now = datetime.now()
 
     current_timestamp = time.time()
+    now = datetime.fromtimestamp(current_timestamp)
 
     # Capture code location info
     code_location = _capture_code_location()
@@ -72,8 +89,6 @@ def _build_structured_payload(ctx: Context, message: str,
             "function": code_location["function"],
             "file": code_location["file"],
             "line": code_location["line"],
-            "build_tag": ctx.env_vars.get("BUILD_TAG_OR_COMMIT_FOR_LOGS", "unknown"),
-            "build_date": ctx.env_vars.get("BUILD_DATE", "unknown")
         },
 
         # Container-related fields grouped
@@ -81,6 +96,11 @@ def _build_structured_payload(ctx: Context, message: str,
             "uptime": _format_uptime(current_timestamp - ctx.start_timestamp),
             "start_datetime": ctx.start_datetime,
             "id": ctx.container_id
+        },
+
+        "image": {
+            "build_tag": ctx.env_vars.get("BUILD_TAG_OR_COMMIT_FOR_LOGS", "unknown"),
+            "build_date": ctx.env_vars.get("BUILD_DATE", "unknown")
         }
 
     }
@@ -88,6 +108,14 @@ def _build_structured_payload(ctx: Context, message: str,
     # Add correlation ID if provided
     if correlation_id:
         payload["correlation_id"] = correlation_id
+
+    # Add environment variables if instructed
+    if log_env_vars:
+        payload["env_vars"] = ctx.env_vars
+
+    # Add concurrency status if instructed
+    if log_concurrency_status:
+        payload["concurrency"] = ctx.concurrency_manager.get_status()
 
     # Merge any additional structured data
     if structured_data:

@@ -143,13 +143,14 @@ then
     if [[ "$1" == *"c"* ]]
     then
         echo "Clearing terminal"
-        clear
+        # clear
+        tput reset
     fi
 
     # Follow the container logs
     if [[ "$1" == *"f"* ]]
     then
-        podman-compose logs "$container_name" -f | jq
+        podman-compose logs "$container_name" -f #| jq
     fi
 
 fi

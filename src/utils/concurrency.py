@@ -23,10 +23,10 @@ class ConcurrencyManager:
         self.ctx = ctx
 
         # Create member attributes with shorter names
-        self.global_limit = self.ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_TOTAL"]
+        self.global_limit = self.ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]
         self.per_server_limit = self.ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]
 
-        # Create global semaphore for total concurrent jobs
+        # Create global semaphore to track all concurrent jobs
         self.global_semaphore = multiprocessing.Semaphore(self.global_limit)
 
         # Per-server semaphores
@@ -53,7 +53,14 @@ class ConcurrencyManager:
         # Ensure no two processes can write to active_jobs at the same
         self.active_jobs_lock = multiprocessing.Lock()
 
-        log(ctx, f"Initialized concurrency manager: MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit}, MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}", "debug")
+        structured_data_to_log = {
+            "concurrency": {
+                "MAX_CONCURRENT_CONVERSIONS_GLOBAL": self.global_limit,
+                "MAX_CONCURRENT_CONVERSIONS_PER_SERVER": self.per_server_limit
+            }
+        }
+
+        log(ctx, f"Initialized concurrency manager", "debug", structured_data_to_log)
 
 
     def acquire_job_slot(self, repo_key: str, server_hostname: str, timeout: float = 10.0) -> bool:
@@ -88,7 +95,7 @@ class ConcurrencyManager:
 
         ## Check global limit
         if self.global_semaphore.get_value() <= 0:
-            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_TOTAL={self.global_limit} reached, waiting for a slot", "info")
+            log(self.ctx, f"{repo_key}; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit} reached, waiting for a slot", "info")
 
 
         ## Acquire a slot in the the server-specific semaphore
@@ -207,16 +214,16 @@ class ConcurrencyManager:
         # Create status dict to be returned
         status = {
             "global": {
-                "active_slots": "",
-                "available_slots": "",
+                "active": "",
+                "available": "",
                 "limit": self.global_limit
             },
             "servers": {}
         }
 
         # Fill in global fields
-        status["global"]["active_slots"]      = self.global_limit - self.global_semaphore.get_value()
-        status["global"]["available_slots"]   = self.global_semaphore.get_value()
+        status["global"]["active"]      = self.global_limit - self.global_semaphore.get_value()
+        status["global"]["available"]   = self.global_semaphore.get_value()
 
         # Fill in servers fields
         # Get the lock on per_server_semaphores_lock,
@@ -239,8 +246,8 @@ class ConcurrencyManager:
                     active_jobs_list = list(self.active_jobs[server_hostname])
 
                 status["servers"][server_hostname] = {
-                    "active_slots": self.per_server_limit - per_server_semaphore.get_value(),
-                    "available_slots": per_server_semaphore.get_value(),
+                    "active": self.per_server_limit - per_server_semaphore.get_value(),
+                    "available": per_server_semaphore.get_value(),
                     "limit": self.per_server_limit,
                     "active_jobs": active_jobs_list
                 }
