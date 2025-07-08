@@ -18,6 +18,7 @@ from utils.log import log
 
 # Import Python standard modules
 import multiprocessing
+import os
 import uuid
 
 
@@ -79,10 +80,7 @@ def start(ctx: Context) -> None:
                 # Always release the semaphore when done, regardless of success or fail
                 concurrency_manager.release_job_slot(repo_key, server_name)
 
-                # Remove this repo from the active processes list
-                ctx.active_repo_conversion_processes = [(process, repo, server_name) for process, repo, server_name in ctx.active_repo_conversion_processes if repo != repo_key]
-
-                log(ctx, "Finishing repo conversion job", "debug", ctx.repo_conversion_job_log_data)
+                log(ctx, f"Finishing repo conversion job in pid={os.getpid()}", "debug", ctx.repo_conversion_job_log_data)
 
                 # log_concurrency_status=True causes an error inside this wrapper function
                 # log(ctx, "Finishing repo conversion job", "debug", ctx.repo_conversion_job_log_data, log_concurrency_status=True)
@@ -99,11 +97,12 @@ def start(ctx: Context) -> None:
         process_tuple = (process, repo_key, server_name)
         ctx.active_repo_conversion_processes.append(process_tuple)
 
+
+    # Clean up any completed processes
+    cleanup_completed_repo_conversion_processes(ctx)
+
     # Log final status
     log(ctx, f"Finishing convert_repos.start()", "info", ctx.repo_conversion_job_log_data, log_concurrency_status=True)
-
-    # Clean up any processes that may have failed to release their semaphores
-    cleanup_completed_repo_conversion_processes(ctx)
 
 
 def cleanup_completed_repo_conversion_processes(ctx: Context) -> None:
@@ -111,30 +110,7 @@ def cleanup_completed_repo_conversion_processes(ctx: Context) -> None:
     Clean up any stale processes and their semaphores.
     """
 
-    # Retrieve concurrency_manager from context
-    concurrency_manager: ConcurrencyManager = ctx.concurrency_manager
+    log(ctx, f"len(ctx.active_repo_conversion_processes): {len(ctx.active_repo_conversion_processes)}; ctx.active_repo_conversion_processes: {ctx.active_repo_conversion_processes}", "debug")
 
-    log(ctx, f"ctx.active_repo_conversion_processes: {ctx.active_repo_conversion_processes}", "debug")
-
-    process: multiprocessing.Process
-    for process, repo_key, server_name in ctx.active_repo_conversion_processes:
-
-        log(ctx, f"for process: {process}, repo_key: {repo_key}, server_name: {server_name}, process.is_alive(): {process.is_alive()}, process.exitcode: {process.exitcode}", "debug")
-
-        try:
-
-            log(ctx, f"if not process.is_alive() and process.exitcode is not None: {process.is_alive(), process.exitcode}", "debug")
-
-            # Only clean up processes that are done but may not have cleaned up properly
-            if not process.is_alive() and process.exitcode is not None:
-
-                # Process is done but may not have released its semaphore
-                concurrency_manager.release_job_slot(repo_key, server_name)
-
-                # Remove this repo from the active processes list
-                ctx.active_repo_conversion_processes = [(process, repo, server_name) for process, repo, server_name in ctx.active_repo_conversion_processes if repo != repo_key]
-
-                log(ctx, f"{repo_key}; Cleaned up stale process semaphore", "debug")
-
-        except Exception as e:
-            log(ctx, f"{repo_key}; Error during stale process cleanup: {e}", "error")
+    # TODO: Implement this cleanup function
+    pass
