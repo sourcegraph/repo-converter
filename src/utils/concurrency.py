@@ -5,6 +5,7 @@
 # Need to be careful with log(..., log_concurrency_status=True), as then the log module calls the get_status() function in this class and creates a deadlock
 
 # Import repo-converter modules
+from http import server
 from utils.context import Context
 from utils.log import log
 
@@ -21,12 +22,9 @@ class ConcurrencyManager:
 
     def __init__(self, ctx: Context):
 
-        # Create a copy of the Context, so that member functions can be called with self, instead of ctx
-        self.ctx = ctx
-
         # Create member attributes with shorter names
-        self.global_limit = self.ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]
-        self.per_server_limit = self.ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]
+        self.global_limit = ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]
+        self.per_server_limit = ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]
 
         # Create global semaphore to track all concurrent jobs
         self.global_semaphore = multiprocessing.Semaphore(self.global_limit)
@@ -48,32 +46,26 @@ class ConcurrencyManager:
         self.manager = multiprocessing.Manager()
 
         # Share a list of active jobs with concurrency_monitor
-        # Keys: server_name
-        # Values: [list of repos with active jobs]
-        self.active_jobs = self.manager.dict()
+        self.active_jobs = self.manager.dict() # server_name -> list of (repo_key, timestamp, correlation_id)
 
         # Ensure no two processes can write to active_jobs at the same
         self.active_jobs_lock = multiprocessing.Lock()
 
         # Track jobs waiting for a semaphore to become available, using a list for each server_name, not sure why
-        # TODO: Add correlation_id
         self.job_queue = self.manager.dict()  # server_name -> list of (repo_key, timestamp, correlation_id)
         self.job_queue_lock = multiprocessing.Lock()
 
-
-        structured_data_to_log = {
-            "concurrency": {
-                "MAX_CONCURRENT_CONVERSIONS_GLOBAL": self.global_limit,
-                "MAX_CONCURRENT_CONVERSIONS_PER_SERVER": self.per_server_limit
-            }
-        }
-
         # Log this, without log_concurrency_status=True, as that creates a race condition
-        log(ctx, f"Initialized concurrency manager", "debug", structured_data_to_log)
+        # structured_data_to_log = {
+        #     "concurrency": {
+        #         "MAX_CONCURRENT_CONVERSIONS_GLOBAL": self.global_limit,
+        #         "MAX_CONCURRENT_CONVERSIONS_PER_SERVER": self.per_server_limit
+        #     }
+        # }
+        # log(ctx, f"Initialized concurrency manager", "debug", structured_data_to_log)
 
 
-    # TODO: Add correlation_id
-    def acquire_job_slot(self, repo_key: str, server_name: str, timeout: float = 10.0) -> bool:
+    def acquire_job_slot(self, ctx: Context) -> bool:
         """
         Check if:
         - Repo already has a job in progress
@@ -85,9 +77,13 @@ class ConcurrencyManager:
         - Repo already has a job in progress
         """
 
+        # Get job information from context
+        correlation_id  = ctx.job["job"]["correlation_id"]
+        repo_key        = ctx.job["job"]["repo_key"]
+        server_name     = ctx.job["job"]["server_name"]
+
         ## Check if this repo already has a job in progress
         # TODO: Remove the duplicate logic in svn.py, and integrate the missing bits in here
-        server_active_jobs_list = []
         with self.active_jobs_lock:
 
             # active_jobs is a dict, with subdicts for each server_name, which contains a list of active jobs for that server
@@ -95,10 +91,10 @@ class ConcurrencyManager:
 
                 server_active_jobs_list = list(self.active_jobs[server_name])
 
-        if repo_key in server_active_jobs_list:
+                if any(repo == repo_key for repo, timestamp, correlation in server_active_jobs_list):
 
-            log(self.ctx, f"{repo_key}; {server_name}; Repo job already in progress, skipping", "info")
-            return False
+                    log(ctx, f"Skipping; Repo job already in progress; repo: {repo_key}, timestamp: {timestamp}; correlation_id: {correlation}", "info", ctx.job, correlation_id)
+                    return False
 
         ## Add this job to the dict of waiting jobs, just in case the blocking semaphore acquire takes a while
         with self.job_queue_lock:
@@ -107,30 +103,28 @@ class ConcurrencyManager:
                 self.job_queue[server_name] = self.manager.list()
 
             jobs_queued_list = list(self.job_queue[server_name])
-            # TODO: Add correlation_id
-            # jobs_queued_list.append((repo_key, time.time(), correlation_id))
-            jobs_queued_list.append((repo_key, time.time()))
+            jobs_queued_list.append((repo_key, time.time(), correlation_id))
 
             self.job_queue[server_name] = jobs_queued_list
 
         ## Check per-server limit
         # Get the semaphore object for this server
-        server_semaphore = self.get_server_semaphore(server_name)
+        server_semaphore = self._get_server_semaphore(ctx)
 
         # Check the semaphore value for number of remaining slots
         if server_semaphore.get_value() <= 0:
-            log(self.ctx, f"{repo_key}; Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit} for server {server_name}, waiting for a server slot", "info", log_concurrency_status=True)
+            log(ctx, f"Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info", ctx.job, log_concurrency_status=True)
 
         ## Check global limit
         if self.global_semaphore.get_value() <= 0:
-            log(self.ctx, f"{repo_key}; Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", log_concurrency_status=True)
+            log(ctx, f"Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", ctx.job, log_concurrency_status=True)
 
         ## Acquire a slot in the the server-specific semaphore
         # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
         # TODO: Determine if this would build an infinite queue of jobs, ballooning memory usage, if job execution time is longer than REPO_CONVERTER_INTERVAL_SECONDS
         if not server_semaphore.acquire(block=True):
 
-            log(self.ctx, f"{repo_key}; server_semaphore.acquire failed", "error")
+            log(ctx, f"server_semaphore.acquire failed", "error", ctx.job, correlation_id)
             return False
 
         ## Acquire a slot in the the global semaphore
@@ -141,13 +135,12 @@ class ConcurrencyManager:
             # Release the server semaphore since we couldn't get the global one
             server_semaphore.release()
 
-            log(self.ctx, f"{repo_key}; self.global_semaphore.acquire failed", "error")
+            log(ctx, f"self.global_semaphore.acquire failed", "error", ctx.job, correlation_id)
             return False
 
         ## Successfully acquired both semaphores
 
         # Add the active job to the active_jobs dict
-        server_active_jobs_list = []
         with self.active_jobs_lock:
 
             # If the server doesn't already have a list, then create one
@@ -158,9 +151,7 @@ class ConcurrencyManager:
             server_active_jobs_list = list(self.active_jobs[server_name])
 
             # Append the repo job
-            # TODO: Add correlation_id
-            # server_active_jobs_list.append((repo_key, time.time(), correlation_id))
-            server_active_jobs_list.append((repo_key, time.time()))
+            server_active_jobs_list.append((repo_key, time.time(), correlation_id))
 
             # Assign the list back to the manager list
             self.active_jobs[server_name] = server_active_jobs_list
@@ -169,19 +160,22 @@ class ConcurrencyManager:
         with self.job_queue_lock:
 
             jobs_queued_list = list(self.job_queue[server_name])
-            # TODO: Add correlation_id
-            # jobs_queued_list = [(repo, timestamp, correlation_id) for repo, timestamp, correlation_id in jobs_queued_list if repo != repo_key]
-            jobs_queued_list = [(repo, timestamp) for repo, timestamp in jobs_queued_list if repo != repo_key]
+            jobs_queued_list = [(repo, timestamp, correlation) for repo, timestamp, correlation in jobs_queued_list if repo != repo_key and correlation != correlation_id]
             self.job_queue[server_name] = jobs_queued_list
 
         # Log an update
-        log(self.ctx, f"{repo_key}; Acquired job slot for server {server_name}", "debug")
+        log(ctx, f"Acquired job slot", "debug", ctx.job, correlation_id)
 
         return True
 
 
-    def get_server_semaphore(self, server_name: str):
-        """Get or create a semaphore for the given server."""
+    def _get_server_semaphore(self, ctx: Context):
+        """
+        Get or create a semaphore for the given server.
+        """
+
+        correlation_id  = ctx.job["job"]["correlation_id"]
+        server_name     = ctx.job["job"]["server_name"]
 
         # Wait for the lock to be free
         with self.per_server_semaphores_lock:
@@ -194,13 +188,15 @@ class ConcurrencyManager:
                 # TODO: Get the limit for this server from the repos-to-convert.yaml file,
                 # but not sure if this value can be changed without restarting the container
                 self.per_server_semaphores[server_name] = multiprocessing.Semaphore(self.per_server_limit)
-                log(self.ctx, f"Created semaphore for server {server_name} with limit {self.per_server_limit}", "debug")
 
-            # Whether the server already had a semaphore in the dict, or one was just created for it, return the semaphore object
-            return self.per_server_semaphores[server_name]
+        # Can't log with log_concurrency_status=True, causes a deadlock
+        log(ctx, f"Created concurrency limit semaphore for server {server_name} with limit {self.per_server_limit}", "debug", ctx.job, correlation_id, log_concurrency_status=True)
+
+        # Whether the server already had a semaphore in the dict, or one was just created for it, return the semaphore object
+        return self.per_server_semaphores[server_name]
 
 
-    def get_status(self) -> dict:
+    def get_status(self, ctx: Context) -> dict:
         """
         Get current concurrency status for monitoring.
 
@@ -243,6 +239,9 @@ class ConcurrencyManager:
                     "limit": self.per_server_limit,
                 }
 
+                if server_name not in self.active_jobs.keys():
+                    continue
+
                 # Get the lock on the active_jobs dict as well,
                 # to ensure that the values are not changing as this is reading them
                 # Not sure why to get and release the same lock for each server,
@@ -251,31 +250,28 @@ class ConcurrencyManager:
 
                     # The active jobs dict, seems to have the server hostname as keys
                     # Copy the dict, to free up the lock ASAP
-                    # active_jobs_list = list(self.active_jobs[server_name]).sort()
+
                     active_jobs_list = list(self.active_jobs[server_name])
 
                     if len(active_jobs_list) > 0:
 
                         status_active_jobs_list = list()
 
-                        for repo, timestamp in active_jobs_list:
+                        for repo, timestamp, correlation_id in active_jobs_list:
 
                             active_jobs_count += 1
-                            timestamp = round(timestamp,2)
 
                             status_active_jobs_list.append(
                                 {
                                     "repo": repo,
-                                    "started_timestamp": timestamp,
+                                    "correlation_id": correlation_id,
+                                    "started_timestamp": "%.4f" % timestamp,
                                     "started_datetime": datetime.fromtimestamp(timestamp),
-                                    "running_time": round((time.time() - timestamp),2),
-                                    # TODO: Add correlation_id
-                                    # "correlation_id": correlation_id
+                                    "running_time_seconds": "%.4f" % (time.time() - timestamp),
                                 }
                             )
 
                         status["active_jobs"][server_name] = status_active_jobs_list
-
 
         status["active_jobs_count"] = active_jobs_count
 
@@ -290,9 +286,7 @@ class ConcurrencyManager:
 
                     status_jobs_queued_list = list()
 
-                    # TODO: Add correlation_id
-                    # for repo, timestamp, correlation_id in jobs_queued_list:
-                    for repo, timestamp in jobs_queued_list:
+                    for repo, timestamp, correlation_id in jobs_queued_list:
 
                         job_queue_count += 1
                         timestamp = round(timestamp,2)
@@ -300,11 +294,10 @@ class ConcurrencyManager:
                         status_jobs_queued_list.append(
                             {
                                 "repo": repo,
+                                "correlation_id": correlation_id,
                                 "queued_timestamp": timestamp,
                                 "queued_datetime": datetime.fromtimestamp(timestamp),
                                 "queue_wait_time": round((time.time() - timestamp),2),
-                                # TODO: Add correlation_id
-                                # "correlation_id": correlation_id
                             }
                         )
 
@@ -316,34 +309,41 @@ class ConcurrencyManager:
         return status
 
 
-    def release_job_slot(self, repo_key: str, server_name: str):
+    def release_job_slot(self, ctx: Context):
         """Release both global and server-specific semaphores."""
 
+        # Get job information from context
+        correlation_id  = ctx.job["job"]["correlation_id"]
+        repo_key        = ctx.job["job"]["repo_key"]
+        server_name     = ctx.job["job"]["server_name"]
+
         try:
-
-            # Release per-server semaphore
-            server_semaphore = self.get_server_semaphore(server_name)
-            server_semaphore.release()
-
-            # Release global semaphore
-            self.global_semaphore.release()
-
-            server_active_jobs_list = []
 
             with self.active_jobs_lock:
 
                 # Read it into a normal list
                 server_active_jobs_list = list(self.active_jobs[server_name])
 
-                # Remove the repo from the active_jobs list by filtering tuples
-                # TODO: Add correlation_id
-                # server_active_jobs_list = [(repo, timestamp, correlation_id) for repo, timestamp, correlation_id in server_active_jobs_list if repo != repo_key]
-                server_active_jobs_list = [(repo, timestamp) for repo, timestamp in server_active_jobs_list if repo != repo_key]
+                # Find the job in the active_jobs list
+                for repo, timestamp, correlation in server_active_jobs_list:
+
+                    # If found
+                    if repo == repo_key and correlation == correlation_id:
+
+                        # Release per-server semaphore
+                        server_semaphore = self._get_server_semaphore(ctx)
+                        server_semaphore.release()
+
+                        # Release global semaphore
+                        self.global_semaphore.release()
+
+                        # Remove the job from the active list
+                        server_active_jobs_list.remove((repo, timestamp, correlation_id))
 
                 # Overwrite the managed list
                 self.active_jobs[server_name] = server_active_jobs_list
 
-            log(self.ctx, f"{repo_key}; Released job slot for server {server_name}", "debug")
+            log(ctx, f"Released job slot", "debug", ctx.job, correlation_id)
 
         except ValueError as e:
-            log(self.ctx, f"{repo_key}; Error releasing job slot for server {server_name}: {e}", "error")
+            log(ctx, f"Error releasing job slot: {e}", "error", ctx.job, correlation_id)

@@ -29,6 +29,9 @@ class Context:
 
     # Run count
     cycle = 0
+    
+    # Shutdown flag for graceful termination
+    shutdown_flag = False
 
     # Namespace for our metadata in git repo config files
     git_config_namespace = "repo-converter"
@@ -58,7 +61,7 @@ class Context:
     repos = {}
 
     # Space to store structure log information for repo sync jobs
-    repo_conversion_job_log_data = {}
+    job = {}
 
     # Set of secrets to redact in logs
     secrets = set()

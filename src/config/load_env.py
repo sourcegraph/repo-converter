@@ -41,8 +41,9 @@ def load_env_vars() -> dict:
     env_vars["CREDENTIALS"]                             = str(environ.get("CREDENTIALS"                             , "" ))
     # DEBUG INFO WARNING ERROR CRITICAL
     env_vars["LOG_LEVEL"]                               = str(environ.get("LOG_LEVEL"                               , "INFO" ))
+    env_vars["LOG_RECENT_COMMITS"]                      = int(environ.get("LOG_RECENT_COMMITS"                      , 0  ))
     env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]   = int(environ.get("MAX_CONCURRENT_CONVERSIONS_PER_SERVER"   , 10 ))
-    env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]        = int(environ.get("MAX_CONCURRENT_CONVERSIONS_GLOBAL"        , 10 ))
+    env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]       = int(environ.get("MAX_CONCURRENT_CONVERSIONS_GLOBAL"       , 10 ))
     # Max cycles of the main loop, then the container exits
     env_vars["MAX_CYCLES"]                              = int(environ.get("MAX_CYCLES"                              , 0 ))
     env_vars["MAX_RETRIES"]                             = int(environ.get("MAX_RETRIES"                             , 3 ))
@@ -50,7 +51,8 @@ def load_env_vars() -> dict:
     # Paths inside the container, don't change unless also changing in compose file volume mapping
     env_vars["REPOS_TO_CONVERT"]                        = str(environ.get("REPOS_TO_CONVERT"                        , "/sourcegraph/repos-to-convert.yaml" ))
     env_vars["SRC_SERVE_ROOT"]                          = str(environ.get("SRC_SERVE_ROOT"                          , "/sourcegraph/src-serve-root" ))
-
+    env_vars["TRUNCATED_OUTPUT_MAX_LINE_LENGTH"]        = int(environ.get("TRUNCATED_OUTPUT_MAX_LINE_LENGTH"        , 200 ))
+    env_vars["TRUNCATED_OUTPUT_MAX_LINES"]              = int(environ.get("TRUNCATED_OUTPUT_MAX_LINES"              , 11 ))
 
     # String to use in log events
     # Prefer the tag if available

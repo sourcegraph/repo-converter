@@ -8,6 +8,7 @@
 # This module uses different multiprocessing logic than cmd.py,
 # because this module spawns new child processes targeting Python functions,
 # whereas cmd.py spawns new child processes to call external binaries
+# The zombie process cleanup routine in cmd.py should cleanup these processes as well
 
 # Import repo-converter modules
 from multiprocessing import process
@@ -24,14 +25,14 @@ import uuid
 
 def start(ctx: Context) -> None:
     """
-    Main entry point for repo conversion with concurrency management.
+    Main entry point between main module and repo conversion jobs, with concurrency management
     """
 
     # Retrieve concurrency_manager from context
     concurrency_manager: ConcurrencyManager = ctx.concurrency_manager
 
     # Log a start event
-    log(ctx, f"Starting convert_repos.start()", "info", log_concurrency_status=True)
+    log(ctx, f"Starting convert_repos.start", "info", log_concurrency_status=True)
 
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
@@ -43,23 +44,27 @@ def start(ctx: Context) -> None:
         repo_type = repo_config.get("type", "").lower()
 
         # Generate a correlation ID, to link all events for each repo conversion job together in the logs
+        correlation_id = str(uuid.uuid4())[:8]
+
         # Set log context / structured data
-        ctx.repo_conversion_job_log_data = {
-            "repo_conversion_job": {
-                "id": str(uuid.uuid4())[:8],
-                "repo": repo_key,
+        # Overwrite fresh for each job
+        # Each conversion_wrapper child process gets its own copy of the context
+        ctx.job = {
+            "job": {
+                "correlation_id": correlation_id,
+                "repo_key": repo_key,
                 "repo_type": repo_type,
-                "server-name": server_name
+                "server_name": server_name
             }
         }
 
         # Log initial status
-        log(ctx, "Starting repo conversion job", "debug", ctx.repo_conversion_job_log_data, log_concurrency_status=True)
+        log(ctx, "Starting repo conversion job", "debug", ctx.job, correlation_id, log_concurrency_status=True)
 
         # Try to acquire concurrency slot
         # This will block and wait till a slot is available
-        if not concurrency_manager.acquire_job_slot(repo_key, server_name):
-            log(ctx, "Could not acquire concurrency slot, skipping", "info", ctx.repo_conversion_job_log_data, log_concurrency_status=True)
+        if not concurrency_manager.acquire_job_slot(ctx):
+            log(ctx, "Could not acquire concurrency slot, skipping", "info", ctx.job, correlation_id, log_concurrency_status=True)
             continue
 
         # Create a wrapper function that handles semaphore cleanup
@@ -73,44 +78,25 @@ def start(ctx: Context) -> None:
                 if repo_type in ("svn", "subversion"):
 
                     # Start the conversion process
-                    svn.clone_svn_repo(ctx, repo_key)
+                    svn.clone_svn_repo(ctx)
 
             finally:
 
                 # Always release the semaphore when done, regardless of success or fail
-                concurrency_manager.release_job_slot(repo_key, server_name)
-
-                log(ctx, f"Finishing repo conversion job in pid={os.getpid()}", "debug", ctx.repo_conversion_job_log_data)
+                concurrency_manager.release_job_slot(ctx)
 
                 # log_concurrency_status=True causes an error inside this wrapper function
-                # log(ctx, "Finishing repo conversion job", "debug", ctx.repo_conversion_job_log_data, log_concurrency_status=True)
+                # log(ctx, "Finishing repo conversion job", "debug", ctx.job, log_concurrency_status=True)
+                log(ctx, f"Finishing repo conversion job in pid={os.getpid()}", "debug", ctx.job, correlation_id)
 
         # Start the process
-        process = multiprocessing.Process(
+        # Do not store any reference to the process, otherwise it may cling on as a zombie,
+        # and we have enough other process checking / cleanup infra to handle these
+        multiprocessing.Process(
             target=conversion_wrapper,
             name=f"clone_svn_repo_{repo_key}",
             args=(ctx, repo_key, server_name)
-        )
-        process.start()
-
-        # Store in context for signal handler access and cleanup
-        process_tuple = (process, repo_key, server_name)
-        ctx.active_repo_conversion_processes.append(process_tuple)
-
-
-    # Clean up any completed processes
-    cleanup_completed_repo_conversion_processes(ctx)
+        ).start()
 
     # Log final status
-    log(ctx, f"Finishing convert_repos.start()", "info", ctx.repo_conversion_job_log_data, log_concurrency_status=True)
-
-
-def cleanup_completed_repo_conversion_processes(ctx: Context) -> None:
-    """
-    Clean up any stale processes and their semaphores.
-    """
-
-    log(ctx, f"len(ctx.active_repo_conversion_processes): {len(ctx.active_repo_conversion_processes)}; ctx.active_repo_conversion_processes: {ctx.active_repo_conversion_processes}", "debug")
-
-    # TODO: Implement this cleanup function
-    pass
+    log(ctx, f"Finishing convert_repos.start", "info", log_concurrency_status=True)

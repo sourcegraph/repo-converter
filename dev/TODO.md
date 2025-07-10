@@ -1,5 +1,20 @@
 # TODO:
 
+1. Renew Entitle requests
+2. Finish the structured logging, with repo / sync job details
+    1. Job start, with batch size
+    2. Each command start
+    3. Each command finish, with results
+    4. Job finish, with results, from each command, including total run time, run times for each step, and percents of total
+3. Update customer production to gather log events on which repos take how long, and why
+
+Ask Amp
+- What does SVN log get used for?
+- Why would it take so long to run?
+- How do you suggest we work around this?
+- Should we keep a local file to track commit metadata?
+
+
 - Logging
 
     - Objective:
@@ -14,8 +29,6 @@
         - Decorator Pattern: Command execution decorator automatically captures all command-related data (args, timing, stdout/stderr, exit codes).
         - The architecture uses a context stack pattern where different operational contexts (git operations, command execution) automatically push their metadata, making all relevant data available to every log statement within that context.
 
-    - Sort keys in logs for process and psutils subdicts
-
     - Get details pertinent to which events are emitting logs into structured log keys
         - Git Commands
             - Repo
@@ -28,9 +41,35 @@
 
     - Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
 
+    - Sort keys in logs for process and psutils subdicts
+        - Have plumbing, now need to see which attributes we're actually logging, sort them in the needed order
+
     - How to get process execution times from logs, and analyze them
 
-    - How to make code location output in logs more useful than just the line of the log event?
+    - Log a repo status update table?
+        - Repo name
+        - URL
+        - Status (up to date / out of date)
+        - Last run's status (success / fail / timeout)
+        - Progress (% of commits)
+        - Commits converted
+        - Commits remaining
+        - Total commits
+        - Local commit
+        - Remote commit
+        - Size on disk
+    - Find a way to output a whole stack trace for each ERROR (and higher) log event
+    - Log structure to include file / line number, module / function names
+        - Need to make this more useful
+    - Find a tool to search / filter through logs
+        - See Slack thread with Eng
+    - Log levels
+        - proc events in DEBUG logs make DEBUG level logging too noisy
+        - Increase log levels of everything else?
+        - Create a new lower log level named proc?
+    - Debug log the list of servers and repos found in config file at the start of each run, so we can see it in the last ~1k log lines?
+
+    - Set up log schema and workspace settings for RedHat's [YAML](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) VS Code extension
 
 - SVN
 
@@ -53,6 +92,8 @@
 
 2025-07-01; 15:09:44.641140; 924a81c; 3fef96dbf2ce; run 576; DEBUG; pid 101567; still running; running for 3:07:58.451094; psutils_process_dict: {'args': '', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/lucene', '--revision', '1059418:HEAD'], 'cpu_times': pcputimes(user=471.92, system=0.45, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_info': pmem(rss=11436032, vms=22106112, shared=9076736, text=323584, lib=0, data=2150400, dirty=0), 'memory_percent': 0.13784979013949392, 'name': 'svn', 'net_connections_count': 1, 'net_connections': '13.90.137.153:443:CLOSE_WAIT', 'num_fds': 5, 'open_files': [], 'pid': 101567, 'ppid': 101556, 'status': 'running', 'threads': [pthread(id=101567, user_time=471.92, system_time=0.45)]};
 
+
+        - Add new routine to run git log and svn log, to compare and ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
 
         - Keep an svn log file in a .git/sourcegraph directory in each repo
         - When to run the next svn log file? When the last commit ID number in the svn log file has been converted
@@ -242,32 +283,10 @@ version:
         - src serve-git and repo-converter both run as root, which is not ideal
         - Need to create a new user on the host, add it to the host's sourcegraph group, get the UID, and configure the runAs user for the containers with this UID
 
-- Logging
-    - Log a repo status update table?
-        - Repo name
-        - URL
-        - Status (up to date / out of date)
-        - Last run's status (success / fail / timeout)
-        - Progress (% of commits)
-        - Commits converted
-        - Commits remaining
-        - Total commits
-        - Local commit
-        - Remote commit
-        - Size on disk
-    - Find a way to output a whole stack trace for each ERROR (and higher) log event
-    - Log structure to include file / line number, module / function names
-        - Need to make this more useful
-    - Find a tool to search / filter through logs
-        - See Slack thread with Eng
-    - Log levels
-        - proc events in DEBUG logs make DEBUG level logging too noisy
-        - Increase log levels of everything else?
-        - Create a new lower log level named proc?
-    - Debug log the list of servers and repos found in config file at the start of each run, so we can see it in the last ~1k log lines?
-
 - Add git-to-p4 converter
     - Run it in MSP, to build up our Perforce test depots from public OSS repos
+
+- Switch zombie process cleanup / running process checker to the same logic as concurrency_monitor, in its own thread, on its own interval?
 
 - Git clone
     - SSH clone

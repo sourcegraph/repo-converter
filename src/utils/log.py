@@ -81,7 +81,7 @@ def _build_structured_payload(
         "cycle": ctx.cycle,
         "date": now.date().isoformat(),
         "time": now.time().isoformat(),
-        "timestamp": round(current_timestamp,4),
+        "timestamp": "%.4f" % current_timestamp, # Round to 4 digits, keeping trailing 0s, if any
 
         # Code/build-related fields grouped
         "code": {
@@ -115,7 +115,7 @@ def _build_structured_payload(
 
     # Add concurrency status if instructed
     if log_concurrency_status:
-        payload["concurrency"] = ctx.concurrency_manager.get_status()
+        payload["concurrency"] = ctx.concurrency_manager.get_status(ctx)
 
     # Merge any additional structured data
     if structured_data:

@@ -22,11 +22,16 @@ def start_concurrency_monitor(ctx: Context) -> None:
 
     def concurrency_monitor_loop() -> None:
 
-        while True:
+        while not ctx.shutdown_flag:
 
             try:
 
                 log(ctx, f"Concurrency status", "debug", log_concurrency_status=True)
+
+            except (BrokenPipeError, ConnectionResetError) as exception:
+                # These errors occur during shutdown when manager connections are closed
+                log(ctx, f"Connection error in concurrency monitor (likely during shutdown): {exception}", "debug")
+                break
 
             except Exception as exception:
                 log(ctx, f"Error in concurrency monitor: {exception}", "error")
@@ -39,4 +44,4 @@ def start_concurrency_monitor(ctx: Context) -> None:
     monitor_thread = threading.Thread(target=concurrency_monitor_loop, daemon=True, name="concurrency_monitor")
     monitor_thread.start()
 
-    log(ctx, f"Started concurrency monitor on {interval}s interval", "debug")
+    # log(ctx, f"Started concurrency monitor on {interval}s interval", "debug")

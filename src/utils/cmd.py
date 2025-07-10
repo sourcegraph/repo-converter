@@ -107,9 +107,9 @@ def log_process_status(ctx: Context,
     """
     Log detailed process status information including PID, runtime, and process metadata.
 
-    Called by subprocess_run and status_update_and_cleanup_zombie_processes
+    Called by run_subprocess and status_update_and_cleanup_zombie_processes
 
-    For each piece of data I want to output, how do I pass it from subprocess_run into this function?
+    For each piece of data I want to output, how do I pass it from run_subprocess into this function?
 
     Args:
         ctx: Context object for logging
@@ -144,7 +144,7 @@ def log_process_status(ctx: Context,
         subprocess_dict_input.pop("log_level", "")
 
     # Gather the log message
-    log_message = f"Process {subprocess_dict_input.pop('status_message', 'status')}"
+    status_message = f"Process {subprocess_dict_input.pop('status_message', 'status')}"
 
     # If there's a correlation_id, then pass it into the log function args
     correlation_id = subprocess_dict_input.pop("correlation_id", None)
@@ -171,7 +171,8 @@ def log_process_status(ctx: Context,
             subprocess_dict_input["running_time"] = running_time
 
     except psutil.NoSuchProcess:
-        log_message = "Process finished on status check"
+        status_message = "Process finished"
+        subprocess_dict_input["status_message_reason"] = "on status check"
 
     # Round memory_percent to 4 digits
     if "memory_percent" in psutils_dict_input.keys():
@@ -208,7 +209,7 @@ def log_process_status(ctx: Context,
 
     # Truncate long lists of open files, ex. git svn fetch processes
     if "open_files" in psutils_dict_input.keys() and len(psutils_dict_input["open_files"]) > 0:
-        psutils_dict_output["open_files"] = truncate_output(psutils_dict_input["open_files"])
+        psutils_dict_output["open_files"] = truncate_output(ctx, psutils_dict_input["open_files"])
 
     # Copy the remaining attributes to be logged, without overwriting any already copied over
     for key in ctx.psutils_process_attributes_to_fetch:
@@ -220,7 +221,7 @@ def log_process_status(ctx: Context,
     structured_log_dict["psutils"] = psutils_dict_output
 
     # Log the event
-    log(ctx, log_message, log_level, structured_log_dict, correlation_id)
+    log(ctx, status_message, log_level, structured_log_dict, correlation_id)
 
 
 def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
@@ -306,10 +307,12 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             # Wait a short period, and capture the return status
             # Raises psutil.TimeoutExpired if the process is busy executing longer than the wait time
             subprocess_dict["return_status"] = str(process_to_wait_for.wait(0.1))
-            subprocess_dict["status_message"] = f"finished with return status: {subprocess_dict['return_status']}"
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "on cleanup"
 
         except psutil.NoSuchProcess as exception:
-            subprocess_dict["status_message"] = "finished on wait"
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "on wait"
 
         except psutil.TimeoutExpired as exception:
 
@@ -328,7 +331,8 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             subprocess_dict["status_message"] = "still running"
 
         except Exception as exception:
-            subprocess_dict["status_message"] = f"raised an exception while waiting: {type(exception)}, {exception.args}, {exception}"
+            subprocess_dict["status_message"] = "raised an exception while waiting"
+            subprocess_dict["status_message_reason"] = f"{type(exception)}, {exception.args}, {exception}"
 
         if "pid" not in subprocess_psutils_dict.keys() and "pid" not in subprocess_dict.keys():
             subprocess_dict["pid"] = process_pid_to_wait_for
@@ -336,7 +340,7 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
         log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
 
-def subprocess_run(ctx: Context,
+def run_subprocess(ctx: Context,
                   args: Union[str, List[str]],
                   password: Optional[str] = None,
                   echo_password: Optional[bool] = None,
@@ -368,12 +372,13 @@ def subprocess_run(ctx: Context,
     # Dict for anything other functions need to consume,
     # which isn't set in subprocess_psutils_dict
     subprocess_dict                         = {}
-    subprocess_dict["output"]               = None
-    subprocess_dict["pid"]                  = None
-    subprocess_dict["return_code"]          = None
-    subprocess_dict["status_message"]       = "starting"
-    subprocess_dict["success"]              = None
-    subprocess_dict["truncated_output"]     = None
+    subprocess_dict["output"]               = None          # For consumption by the calling function
+    subprocess_dict["pid"]                  = None          # In case psutils doesn't get a pid in subprocess_psutils_dict
+    subprocess_dict["return_code"]          = None          # Integer exit code
+    subprocess_dict["status_message"]       = "starting"    # starting / started / finished
+    subprocess_dict["status_message_reason"]= None          # Reason for process failure
+    subprocess_dict["success"]              = None          # true / false; if false, the reason field should have a value
+    subprocess_dict["truncated_output"]     = None          # For logging
 
     # Normalize args as a string for log output
     if isinstance(args, list):
@@ -411,7 +416,7 @@ def subprocess_run(ctx: Context,
             text        = True,
         )
 
-        subprocess_dict["status_message"] = "started"
+        subprocess_dict["status_message"] = "started " # Including trailing space to even out columns in output
 
         # Try to read process metadata, and catch exceptions when the process finishes faster than its metadata can be read
         try:
@@ -435,7 +440,9 @@ def subprocess_run(ctx: Context,
         # Process finished before we could get detailed info
         except (psutil.NoSuchProcess, ProcessLookupError, FileNotFoundError) as exception:
 
-            subprocess_dict["status_message"] = "finished before getting process metadata"
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "before getting process metadata"
+
             if not quiet:
                 subprocess_dict["log_level"] = "info"
 
@@ -460,19 +467,21 @@ def subprocess_run(ctx: Context,
         subprocess_dict["output_line_count"] = len(subprocess_dict["output"])
 
         # Truncate the output for logging
-        subprocess_dict["truncated_output"] = truncate_output(subprocess_dict["output"])
+        subprocess_dict["truncated_output"] = truncate_output(ctx, subprocess_dict["output"])
 
         # If the process exited successfully, set the status_message now
         # Have to do this inside the try / except block, in case the sub_process object doesn't have a .returncode attribute
         subprocess_dict["return_code"] = sub_process.returncode
         if subprocess_dict["return_code"] == 0:
 
-            subprocess_dict["status_message"] = "succeeded"
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "succeeded"
             subprocess_dict["success"] = True
 
         else:
 
-            subprocess_dict["status_message"] = "failed"
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "failed"
             subprocess_dict["success"] = False
             if not quiet:
                 subprocess_dict["log_level"] = "error"
@@ -482,7 +491,9 @@ def subprocess_run(ctx: Context,
     # not necessarily any below processes the subprocess created
     except subprocess.CalledProcessError as exception:
 
-        subprocess_dict["status_message"] = f"raised an exception: {type(exception)}, {exception.args}, {exception}"
+        subprocess_dict["status_message"] = "finished"
+        subprocess_dict["status_message_reason"] = f"raised an exception: {type(exception)}, {exception.args}, {exception}"
+
         subprocess_dict["success"] = False
         if not quiet:
             subprocess_dict["log_level"] = "error"
@@ -504,7 +515,8 @@ def subprocess_run(ctx: Context,
 
             # Change the log_level so the failed process doesn't log as an error
             subprocess_dict["log_level"] = "warning"
-            subprocess_dict["status_message"] = "failed due to a lock file"
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "failed due to a lock file"
 
     if not (quiet and subprocess_dict["log_level"] == "debug"):
         log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
@@ -512,12 +524,14 @@ def subprocess_run(ctx: Context,
     return subprocess_dict
 
 
-def truncate_output(output: List[str]) -> List[str]:
+def truncate_output(ctx, output: List[str]) -> List[str]:
     """
     Truncate subprocess output to prevent excessively long log entries.
 
     Limits both the total number of lines and the length of individual lines
     to keep log output manageable while preserving the most recent output.
+
+    If the output is longer than max_output_total_characters, it's probably just a list of all files converted, so truncate it
 
     Args:
         output: List of output lines from subprocess
@@ -527,27 +541,63 @@ def truncate_output(output: List[str]) -> List[str]:
 
     Note:
         Uses configurable limits for total characters, lines, and line length.
-        Keeps the last N lines rather than the first N to preserve recent output.
+        Keeps the first and last max/2 lines
     """
 
-    # If the output is longer than max_output_total_characters, it's probably just a list of all files converted, so truncate it
-    max_output_total_characters = 1000
-    max_output_line_characters  = 200
-    max_output_lines            = 10
+    truncated_output: List[str] = []
 
-    if len(str(output)) > max_output_total_characters:
+    # Truncate the number of lines
+    subprocess_output_lines     = len(output)
+    truncated_output_max_lines  = ctx.env_vars["TRUNCATED_OUTPUT_MAX_LINES"]
 
-        subprocess_output_lines = len(output)
+    if subprocess_output_lines <= truncated_output_max_lines:
 
-        # If the output list is longer than max_output_lines lines, truncate it
-        output = output[-max_output_lines:]
-        output.append(f"...TRUNCATED FROM {subprocess_output_lines} LINES TO {max_output_lines} LINES FOR LOGGING")
+        # Remove any empty lines from the output
+        truncated_output = [x for x in output if x]
 
-        # Truncate really long lines
-        for i in range(len(output)):
+    else:
+        # Divide truncated_output_max_lines by 2, via integer division
+        half_truncated_output_max_lines = truncated_output_max_lines // 2
 
-            if len(output[i]) > max_output_line_characters:
-                subprocess_output_line_length = len(output[i])
-                output[i] = textwrap.shorten(output[i], width=max_output_line_characters, placeholder=f"...LINE TRUNCATED FROM {subprocess_output_line_length} CHARACTERS TO {max_output_line_characters} CHARACTERS FOR LOGGING")
+        # head -n truncated_output_max_lines/2, ignoring empty lines
+        first_half: List[str] = []
+        for line in output:
 
-    return output
+            if line:
+                first_half.append(line)
+
+            if len(first_half) >= half_truncated_output_max_lines:
+                break
+
+        # tail -n truncated_output_max_lines/2, ignoring empty lines
+        second_half: List[str] = []
+        for line in reversed(output):
+
+            if line:
+                second_half.append(line)
+
+            if len(second_half) >= half_truncated_output_max_lines:
+                break
+
+        # Add the first and second halves together, with truncated message in the middle
+        truncated_output = [
+            *first_half,
+            f"...TRUNCATED FROM {subprocess_output_lines} LINES TO {truncated_output_max_lines} LINES FOR LOGS...",
+            *second_half
+        ]
+
+    # Truncate long lines
+    truncated_output_max_line_length = ctx.env_vars["TRUNCATED_OUTPUT_MAX_LINE_LENGTH"]
+    for i in range(len(truncated_output)):
+
+        if len(truncated_output[i]) > truncated_output_max_line_length:
+
+            subprocess_output_line_length = len(truncated_output[i])
+
+            truncated_output[i] = textwrap.shorten(
+                truncated_output[i],
+                width=truncated_output_max_line_length,
+                placeholder=f"...LINE TRUNCATED FROM {subprocess_output_line_length} CHARACTERS TO {truncated_output_max_line_length} CHARACTERS FOR LOGS"
+            )
+
+    return truncated_output

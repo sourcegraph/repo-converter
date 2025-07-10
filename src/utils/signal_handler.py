@@ -19,7 +19,7 @@ def register_signal_handler(ctx: Context):
         signal.signal(signal.SIGTERM, lambda sig, frame: signal_handler(ctx, sig, frame))
         signal.signal(signal.SIGCHLD, lambda sig, frame: sigchld_handler(ctx, sig, frame))
 
-        log(ctx, f"Registered signal handlers","debug")
+        # log(ctx, f"Registered signal handlers","debug")
 
     except Exception as exception:
 

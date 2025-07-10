@@ -66,7 +66,7 @@ def clear_lock_files(ctx: Context, psutils_process_dict) -> bool:
                 log(ctx, f"pid {pid} failed; {command} failed to start due to finding a lock file in the repo at {lock_file_path}, but no other process is running with {psutils_process_command}; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
                 cmd_rm_lock_file = ["rm", "-f", lock_file_path]
-                cmd.subprocess_run(ctx, cmd_rm_lock_file)
+                cmd.run_subprocess(ctx, cmd_rm_lock_file)
 
                 return_value = True
 

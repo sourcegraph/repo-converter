@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Configure logger, without importing Context module
 
-# Try to use canonical log lines wherever possible, ex. at the end of each subprocess_run execution
+# Try to use canonical log lines wherever possible, ex. at the end of each run_subprocess execution
 # https://brandur.org/canonical-log-lines#what-are-they
 # A canonical line is a big log line that gets emitted at the end of a request
 # It's filled with all of the fields needed to understand that request's key information
@@ -66,15 +66,15 @@ def _custom_json_renderer(logger, method_name, event_dict):
 
     # Define the desired key order for top-level keys
     top_level_key_order = [
-        "level",
+        "timestamp",
+        "cycle",
         "message",
         "correlation_id",
-        "cycle",
+        "level",
         "process",
         "psutils",
         "date",
         "time",
-        "timestamp",
         "code",
         "container",
         "image",
