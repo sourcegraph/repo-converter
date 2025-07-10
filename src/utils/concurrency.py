@@ -5,7 +5,6 @@
 # Need to be careful with log(..., log_concurrency_status=True), as then the log module calls the get_status() function in this class and creates a deadlock
 
 # Import repo-converter modules
-from http import server
 from utils.context import Context
 from utils.log import log
 
@@ -89,12 +88,12 @@ class ConcurrencyManager:
             # active_jobs is a dict, with subdicts for each server_name, which contains a list of active jobs for that server
             if server_name in self.active_jobs:
 
-                server_active_jobs_list = list(self.active_jobs[server_name])
+                for repo, timestamp, correlation in list(self.active_jobs[server_name]):
 
-                if any(repo == repo_key for repo, timestamp, correlation in server_active_jobs_list):
+                    if repo == repo_key:
 
-                    log(ctx, f"Skipping; Repo job already in progress; repo: {repo_key}, timestamp: {timestamp}; correlation_id: {correlation}", "info", ctx.job, correlation_id)
-                    return False
+                        log(ctx, f"Skipping; Repo job already in progress; repo: {repo_key}, timestamp: {timestamp}; correlation_id: {correlation}", "info", ctx.job, correlation_id)
+                        return False
 
         ## Add this job to the dict of waiting jobs, just in case the blocking semaphore acquire takes a while
         with self.job_queue_lock:
@@ -113,11 +112,11 @@ class ConcurrencyManager:
 
         # Check the semaphore value for number of remaining slots
         if server_semaphore.get_value() <= 0:
-            log(ctx, f"Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info", ctx.job, log_concurrency_status=True)
+            log(ctx, f"Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info", ctx.job)
 
         ## Check global limit
         if self.global_semaphore.get_value() <= 0:
-            log(ctx, f"Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", ctx.job, log_concurrency_status=True)
+            log(ctx, f"Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", ctx.job)
 
         ## Acquire a slot in the the server-specific semaphore
         # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
@@ -190,7 +189,7 @@ class ConcurrencyManager:
                 self.per_server_semaphores[server_name] = multiprocessing.Semaphore(self.per_server_limit)
 
         # Can't log with log_concurrency_status=True, causes a deadlock
-        log(ctx, f"Created concurrency limit semaphore for server {server_name} with limit {self.per_server_limit}", "debug", ctx.job, correlation_id, log_concurrency_status=True)
+        log(ctx, f"Created concurrency limit semaphore for server {server_name} with limit {self.per_server_limit}", "debug", ctx.job, correlation_id)
 
         # Whether the server already had a semaphore in the dict, or one was just created for it, return the semaphore object
         return self.per_server_semaphores[server_name]

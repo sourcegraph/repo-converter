@@ -72,7 +72,6 @@ def main():
 
         # Run the main application logic
         convert_repos.start(ctx)
-        # TODO: Add started repo conversion jobs to the context object?
 
         # Tidy up zombie processes which have already completed during this run through this loop
         cmd.status_update_and_cleanup_zombie_processes(ctx)
@@ -92,7 +91,7 @@ def main():
 
     # Set shutdown flag to stop background threads gracefully
     ctx.shutdown_flag = True
-    
+
     # Log the exit event
     log(ctx, "Stopping container", "info", log_env_vars = True)
 
