@@ -67,22 +67,26 @@ def _custom_json_renderer(logger, method_name, event_dict):
     # Define the desired key order for top-level keys
     # Any keys not listed here will be sorted alphabetically
     top_level_key_order = [
+
+        # Metadata useful for sorting lines
         "date",
         "time",
         "cycle",
+
+        # Important data
         "message",
         "level",
         "correlation_id",
-        "job",
-        "repos",
-        "process",
-        "env_vars",
+
+        # Details in structured metadata, which we want higher than all unlisted metadata
         "concurrency",
+        "env_vars",
+        "job",
+        "process",
         "psutils",
-        "code",
-        "container",
-        "image",
-        "timestamp",
+        "repos",
+
+        # All other top level keys get sorted alphabetically at the bottom
     ]
 
     # Define key orders for nested dictionaries
@@ -104,6 +108,8 @@ def _custom_json_renderer(logger, method_name, event_dict):
     # Rename 'event' to 'message'
     if "event" in event_dict:
         event_dict["message"] = event_dict.pop("event")
+
+    # TODO: Ensure the ctx.job dict is logged, if present
 
     # Sort top level keys,
     # Also sorts (almost) all subdicts alphabetically

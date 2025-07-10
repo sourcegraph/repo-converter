@@ -1,11 +1,12 @@
 # TODO:
 
-1. Renew Entitle requests
-2. Finish the structured logging, with repo / sync job details
-    2. Each command start
-    3. Each command finish, with results
-    4. Job finish, with results, from each command, including total run time, run times for each step, and percents of total
-3. Update customer production to gather log events on which repos take how long, and why
+- Better success validation before updating git config with latest rev
+
+
+1. Finish the structured logging, with repo / sync job details
+    1. Job finish, with results, from each command, including total run time, run times for each step, and percents of total
+2. Update customer production, gather log events on which repos take how long, and why
+3. Renew Entitle requests
 
 Ask Amp
 - What does SVN log get used for?
@@ -17,9 +18,9 @@ Ask Amp
 - Logging
 
     - Objective:
-        - Make the code run faster in the customer's environment
+        - Make the conversion process go faster, and more stable, in the customer's environment
     - How do we achieve this?
-        - Identify which commands are taking a long time, and why
+        - Identify which commands are taking a long time, or failing, and why
     - Okay, how?
         - Adopt structured logging, and a log parsing method to get this data
 
@@ -30,11 +31,6 @@ Ask Amp
 
     - Get details pertinent to which events are emitting logs into structured log keys
         - Git Commands
-            - Repo status (up to date / out of date)
-            - Commits behind to catch up
-            - Batch size
-            - Local rev
-            - Remote rev
             - Remote server response errors, ex. svn: E175012: Connection timed out
 
     - Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
@@ -42,7 +38,7 @@ Ask Amp
     - How to get process execution times from logs, and analyze them
 
         ```bash
-        (echo '"date","time","timestamp","execution_time_seconds","return_code","status_message_reason","args"'; jq -r 'select(.message == "Process finished" and (.process.args // "" | contains("svn"))) | [.date, .time, .timestamp, .process.execution_time_seconds, .process.return_code, .process.status_message_reason, .process.args] | @csv' "2025-07-10-06-02-12.495184.json") > output.csv
+        (echo '"date","time","timestamp", "cycle", "correlation_id", "execution_time_seconds","return_code","status_message_reason","args"'; podman logs repo-converter | jq -r 'select(.message == "Process finished" and (.process.args // "" | contains("svn"))) | [.date, .time, .timestamp, .cycle, .correlation_id, .process.execution_time_seconds, .process.return_code, .process.status_message_reason, .process.args] | @csv') | pbcopy
         ```
 
     - Log a repo status update table?

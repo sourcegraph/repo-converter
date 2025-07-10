@@ -17,16 +17,17 @@ services:
     environment:
       - CONCURRENCY_MONITOR_INTERVAL=10
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
-      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
-      - MAX_CONCURRENT_CONVERSIONS_GLOBAL=100
-      - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
-#      - MAX_CYCLES=5
+      - LOG_RECENT_COMMITS=5
+      - MAX_CONCURRENT_CONVERSIONS_GLOBAL=1
+      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=1
+      # - MAX_CYCLES=5
+      - REPO_CONVERTER_INTERVAL_SECONDS=10 # Default is 3600 seconds (1 hour)
 #    image: ghcr.io/sourcegraph/repo-converter:HEAD
     image: repo-converter:build
     restart: never
     userns_mode: keep-id
     volumes:
-      - ../dev/toprc:/root/.config/procps/toprc # Add `top` config file
+      - ../dev/toprc:/root/.config/procps/toprc:z # `top` config file
       - ../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
       - ../src-serve-root/:/sourcegraph/src-serve-root:z
 

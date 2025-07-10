@@ -4,7 +4,7 @@
 # Import repo-converter modules
 from utils.log import log
 from utils.context import Context
-from utils import lock
+from utils import lockfiles
 
 # Import Python standard modules
 from datetime import datetime, timedelta
@@ -97,19 +97,16 @@ def get_psutil_metrics(ctx: Context, process: psutil.Process) -> Dict:
     return psutils_metrics_dict
 
 
-def log_process_status(ctx: Context,
-                        subprocess_psutils_dict: Dict = {},
-                        subprocess_dict: Dict = {},
-                        log_level: str = "",
-                        ) -> None:
-
-
+def log_process_status(
+        ctx: Context,
+        subprocess_psutils_dict: Dict = {},
+        subprocess_dict: Dict = {},
+        log_level: str = "",
+    ) -> None:
     """
     Log detailed process status information including PID, runtime, and process metadata.
 
     Called by run_subprocess and status_update_and_cleanup_zombie_processes
-
-    For each piece of data I want to output, how do I pass it from run_subprocess into this function?
 
     Args:
         ctx: Context object for logging
@@ -120,7 +117,6 @@ def log_process_status(ctx: Context,
     Effects:
         Logs process status information via the logging system
     """
-
 
     # log(ctx, f"log_process_status: subprocess_dict: {json.dumps(subprocess_dict, indent = 4, sort_keys=True, default=str)}; subprocess_psutils_dict: {json.dumps(subprocess_psutils_dict, indent = 4, sort_keys=True, default=str)}", "debug")
 
@@ -145,9 +141,6 @@ def log_process_status(ctx: Context,
 
     # Gather the log message
     status_message = f"Process {subprocess_dict_input.pop('status_message', 'status')}"
-
-    # If there's a correlation_id, then pass it into the log function args
-    correlation_id = subprocess_dict_input.pop("correlation_id", None)
 
     # Remove the full output, to keep the truncated output
     subprocess_dict_input.pop("output", "")
@@ -222,7 +215,7 @@ def log_process_status(ctx: Context,
     structured_log_dict["psutils"] = psutils_dict_output
 
     # Log the event
-    log(ctx, status_message, log_level, structured_log_dict, correlation_id)
+    log(ctx, status_message, log_level, structured_log_dict)
 
 
 def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
@@ -327,7 +320,7 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             # repo
             # command
             # url
-            # correlation_id
+            # process.id
 
             subprocess_dict["status_message"] = "still running"
 
@@ -346,8 +339,7 @@ def run_subprocess(
         args: Union[str, List[str]],
         password: Optional[str] = None,
         echo_password: Optional[bool] = None,
-        quiet: bool = False,
-        correlation_id: Optional[str] = None,
+        quiet: Optional[bool] = False,
         name: Optional[str] = None
     ) -> Dict[str, Any]:
     """
@@ -364,7 +356,7 @@ def run_subprocess(
         password: Optional password for stdin
         echo_password: Whether to echo password
         quiet: Suppress non-error logging
-        correlation_id: Optional correlation ID to link related operations
+        Name: Optional command name to make logging events easier to find
 
     Notes:
         Use log_process_status() in this function, to format and print process stats
@@ -380,8 +372,8 @@ def run_subprocess(
     subprocess_dict["output"]               = None          # For consumption by the calling function
     subprocess_dict["pid"]                  = None          # In case psutils doesn't get a pid in subprocess_psutils_dict
     subprocess_dict["return_code"]          = None          # Integer exit code
-    subprocess_dict["status_message"]       = "starting"    # starting / started / finished
     subprocess_dict["status_message_reason"]= None          # Reason for process failure
+    subprocess_dict["status_message"]       = "starting"    # starting / started / finished
     subprocess_dict["success"]              = None          # true / false; if false, the reason field should have a value
     subprocess_dict["truncated_output"]     = None          # For logging
 
@@ -391,12 +383,9 @@ def run_subprocess(
     elif isinstance(args, str):
         subprocess_dict["args"] = args
 
-    # If correlation ID is provided, append to it, otherwise generate one, to link start/end events in logs
-    subprocess_correlation_id = str(uuid.uuid4())[:8]
-    if correlation_id:
-        subprocess_dict["correlation_id"] = correlation_id + "." + subprocess_correlation_id
-    else:
-        subprocess_dict["correlation_id"] = subprocess_correlation_id
+    # Generate a correlation ID for this subprocess run
+    subprocess_id = str(uuid.uuid4())[:8]
+    subprocess_dict["id"] = subprocess_id
 
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet
@@ -516,7 +505,7 @@ def run_subprocess(
         if any(
             "git" in subprocess_dict["args"],
             "svn" in subprocess_dict["args"]
-        ) and lock.clear_lock_files(ctx, subprocess_psutils_dict):
+        ) and lockfiles.clear_lock_files(ctx, subprocess_psutils_dict):
 
             # Change the log_level so the failed process doesn't log as an error
             subprocess_dict["log_level"] = "warning"

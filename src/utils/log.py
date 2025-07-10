@@ -48,7 +48,7 @@ def log(
         structured_data,
         correlation_id,
         log_env_vars,
-        log_concurrency_status
+        log_concurrency_status,
         )
 
     # Apply redaction to the entire payload
@@ -60,7 +60,7 @@ def log(
 
 def _build_structured_payload(
         ctx: Context,
-        structured_data: dict = None,
+        structured_data: dict = {},
         correlation_id: str = None,
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
@@ -84,12 +84,7 @@ def _build_structured_payload(
         "timestamp": "%.4f" % current_timestamp, # Round to 4 digits, keeping trailing 0s, if any
 
         # Code/build-related fields grouped
-        "code": {
-            "module": code_location["module"],
-            "function": code_location["function"],
-            "file": code_location["file"],
-            "line": code_location["line"],
-        },
+        "code": code_location,
 
         # Container-related fields grouped
         "container": {
@@ -105,7 +100,8 @@ def _build_structured_payload(
 
     }
 
-    # Add correlation ID if provided
+    # If a correlation_id is passed to the log() function, then use it as a top-level key
+    # Other correlation_ids can be logged under other subdicts, ex. job, process
     if correlation_id:
         payload["correlation_id"] = correlation_id
 
@@ -117,38 +113,68 @@ def _build_structured_payload(
     if log_concurrency_status:
         payload["concurrency"] = ctx.concurrency_manager.get_status(ctx)
 
-    # Merge any additional structured data
+    # Merge any additional structured data passed in as parameters
     if structured_data:
         payload.update(structured_data)
+
+    # Merge any job data from the context
+    if ctx.job.get("job", {}):
+        payload.update(ctx.job)
 
     return payload
 
 
-def _capture_code_location(skip_frames: int = 3) -> dict:
-    """Automatically capture code location information"""
+def _capture_code_location(skip_frames: int = 3, parent_frames: int = 2) -> dict:
+    """
+    Automatically capture code location information
+
+    Args:
+        skip_frames: Number of stack frames to skip to reach the caller
+        parent_frames: Number of parent frames to capture above the caller
+    """
+
+    code_location = {}
 
     try:
 
         frame = inspect.currentframe()
 
-        for _ in range(skip_frames):
+        for i in range(skip_frames):
             if frame.f_back:
                 frame = frame.f_back
 
-        return {
-            "module": frame.f_globals.get('__name__', 'unknown'),
+        code_location["caller"] = {
+            "module": frame.f_globals.get("__name__", "unknown"),
             "function": frame.f_code.co_name,
             "file": frame.f_code.co_filename,
-            "line": frame.f_lineno
+            "line": frame.f_lineno,
         }
 
+        for i in range(parent_frames):
+
+            if frame.f_back:
+                frame = frame.f_back
+
+                if frame.f_globals.get("__name__", "unknown") in ("__main__", "unknown") \
+                    and frame.f_code.co_name in ("<module>") \
+                    and "main.py" in frame.f_code.co_filename:
+
+                    break
+
+                code_location[f"parent_{i+1}"] = {
+                    "module": frame.f_globals.get("__name__", "unknown"),
+                    "function": frame.f_code.co_name,
+                    "file": frame.f_code.co_filename,
+                    "line": frame.f_lineno,
+                }
+
     except (AttributeError, TypeError):
-        return {
-            "module": "unknown",
-            "function": "unknown",
-            "file": "unknown",
-            "line": 0
-        }
+        pass
+
+    finally:
+        del frame
+
+    return code_location
 
 
 def _format_uptime(uptime_seconds: float) -> str:

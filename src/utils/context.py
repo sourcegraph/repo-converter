@@ -29,7 +29,7 @@ class Context:
 
     # Run count
     cycle = 0
-    
+
     # Shutdown flag for graceful termination
     shutdown_flag = False
 
@@ -65,6 +65,14 @@ class Context:
 
     # Set of secrets to redact in logs
     secrets = set()
+
+    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
+    # TODO: Add more field names for more repo types as needed in repos-to-convert.yaml
+    url_fields = [
+        "repo-url",
+        "repo-parent-url",
+        "svn-repo-code-root",
+    ]
 
 
     ## Set on container startup

@@ -380,9 +380,24 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
 
 def sanitize_inputs(ctx: Context, repos_input: dict) -> dict:
     """
-    TODO: Sanitize inputs here, ex.
-    Trim trailing '/' from URLs
+    TODO: Sanitize inputs here
     """
+
+    # Trim trailing '/' from URLs
+    url_fields = ctx.url_fields
+
+    for repo in repos_input:
+
+        # Loop through the list
+        for url_field in url_fields:
+
+            repo_url = str(repos_input[repo].get(url_field, ""))
+
+            # If this key has a value
+            if repo_url:
+
+                # Strip starting and trailing '/'
+                repos_input[repo][url_field] = repo_url.strip('/')
 
     return repos_input
 
@@ -396,20 +411,13 @@ def validate_inputs(ctx: Context, repos_input: dict) -> dict:
     integers >= 0
     """
 
+    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
+    url_fields = ctx.url_fields
 
     for repo in repos_input:
 
         ## Ensure each repo has a "max_concurrent_conversions_server_name" attribute, for the purposes of enforcing MAX_CONCURRENT_CONVERSIONS_PER_SERVER; does not need to be a valid address for network connections
         max_concurrent_conversions_server_name = ""
-
-        # TODO: Make the repos-to-convert.yaml key more generic for other code host types
-
-        # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
-        url_fields = [
-            "repo-url"
-            "repo-parent-url",
-            "svn-repo-code-root",
-        ]
 
         # Loop through the list
         for url_field in url_fields:
