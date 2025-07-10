@@ -65,89 +65,89 @@ def _custom_json_renderer(logger, method_name, event_dict):
     """
 
     # Define the desired key order for top-level keys
+    # Any keys not listed here will be sorted alphabetically
     top_level_key_order = [
-        "timestamp",
-        "cycle",
-        "message",
-        "correlation_id",
-        "level",
-        "process",
-        "psutils",
         "date",
         "time",
+        "cycle",
+        "message",
+        "level",
+        "correlation_id",
+        "job",
+        "repos",
+        "process",
+        "env_vars",
+        "concurrency",
+        "psutils",
         "code",
         "container",
         "image",
+        "timestamp",
     ]
 
     # Define key orders for nested dictionaries
-    process_key_order = [
-        "status_message",
-        "command",
-        "return_code",
-        "execution_time_seconds",
-        "execution_time",
-        "success",
-        "start_time",
-        "end_time",
-        "pid",
-        "pgid",
-        "output_line_count",
-        "truncated_output"
-    ]
-
-    psutils_key_order = [
-        # "status",
-        # "cmdline",
-        # "pid",
-        # "ppid",
-        # "create_time",
-        # "cpu_times",
-        # "cpu_percent",
-        # "memory_percent",
-        # "memory_info_bytes",
-        # "net_connections_count"
-        # "net_connections"
-        # "num_fds",
-        # "threads",
-    ]
+    # process_key_order = [
+    #     "status_message",
+    #     "args",
+    #     "return_code",
+    #     "execution_time_seconds",
+    #     "execution_time",
+    #     "success",
+    #     "start_time",
+    #     "end_time",
+    #     "pid",
+    #     "pgid",
+    #     "output_line_count",
+    #     "truncated_output"
+    # ]
 
     # Rename 'event' to 'message'
     if "event" in event_dict:
         event_dict["message"] = event_dict.pop("event")
 
-    # Create ordered dictionary starting with known keys
-    ordered_dict = {}
+    # Sort top level keys,
+    # Also sorts (almost) all subdicts alphabetically
+    event_dict = sort_dict_by_key_order(event_dict, top_level_key_order)
 
-    # Sort nested dictionaries first
-    if "process" in event_dict and isinstance(event_dict["process"], dict):
-        event_dict["process"] = sort_dict_by_key_order(event_dict["process"], process_key_order)
+    # # Sort nested dictionaries
+    # if "process" in event_dict and isinstance(event_dict["process"], dict):
+    #     event_dict["process"] = sort_dict_by_key_order(event_dict["process"])
 
-    if "psutils" in event_dict and isinstance(event_dict["psutils"], dict):
-        event_dict["psutils"] = sort_dict_by_key_order(event_dict["psutils"], psutils_key_order)
+    # if "psutils" in event_dict and isinstance(event_dict["psutils"], dict):
+    #     event_dict["psutils"] = sort_dict_by_key_order(event_dict["psutils"])
 
-    # Add keys in preferred order
-    for key in top_level_key_order:
-        if key in event_dict:
-            ordered_dict[key] = event_dict.pop(key)
-
-    # Add any remaining keys at the end
-    ordered_dict.update(event_dict)
-
-    return json.dumps(ordered_dict, default=str)
+    return json.dumps(event_dict, default=str)
 
 
-def sort_dict_by_key_order(d, key_order):
-    """Sort dictionary by preferred key order"""
-    if not isinstance(d, dict):
-        return d
-    ordered = {}
+def sort_dict_by_key_order(input_dict: dict, key_order: list[str] = []):
+
+    """
+    Sort dictionary by preferred key order
+
+    If no key order is provided, then just sort dict keys in alphabetical order
+
+    Uses recursion to sort subdicts
+    """
+
+    output_dict = {}
+
     # Add keys in preferred order
     for key in key_order:
-        if key in d:
-            ordered[key] = d[key]
-    # Add remaining keys at the end
-    for key, value in d.items():
-        if key not in ordered:
-            ordered[key] = value
-    return ordered
+        if key in input_dict:
+            output_dict[key] = input_dict.pop(key)
+
+    # Add any remaining keys at the end, sorted alphabetically
+    output_dict.update(
+        dict(
+            sorted(
+                input_dict.items()
+            )
+        )
+    )
+
+    # If the dict has subdicts, then sort their keys too, by recursion
+    for item in output_dict:
+        if isinstance(output_dict[item], dict) and item not in ("concurrency", "code"):
+            output_dict[item] = sort_dict_by_key_order(output_dict[item])
+
+    return output_dict

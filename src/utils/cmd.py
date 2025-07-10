@@ -194,18 +194,19 @@ def log_process_status(ctx: Context,
 
             if connections_count > 0:
 
-                connections_string = ""
+                connections_list = []
 
                 for connection in connections:
 
                     # raddr=addr(ip='1.2.3.4', port=80), status='ESTABLISHED'),
-                    connections_string += ":".join(map(str,connection.raddr))
-                    connections_string += ":"
-                    connections_string += connection.status
-                    connections_string += ", "
 
-                # Save back to the dict, chopping off the trailing comma and space
-                psutils_dict_input["net_connections"] = connections_string[:-2]
+                    connections_string = ":".join(map(str,connection.raddr))
+                    connections_string += f":{connection.status}"
+
+                    connections_list.append(connections_string)
+
+                # Save the list of connections back to the dict
+                psutils_dict_input["net_connections"] = connections_list
 
     # Truncate long lists of open files, ex. git svn fetch processes
     if "open_files" in psutils_dict_input.keys() and len(psutils_dict_input["open_files"]) > 0:
@@ -382,9 +383,9 @@ def run_subprocess(ctx: Context,
 
     # Normalize args as a string for log output
     if isinstance(args, list):
-        subprocess_dict["command"] = " ".join(args)
+        subprocess_dict["args"] = " ".join(args)
     elif isinstance(args, str):
-        subprocess_dict["command"] = args
+        subprocess_dict["args"] = args
 
     # If correlation ID is provided, append to it, otherwise generate one, to link start/end events in logs
     subprocess_correlation_id = str(uuid.uuid4())[:8]
@@ -488,7 +489,7 @@ def run_subprocess(ctx: Context,
 
     # Catching the CalledProcessError exception,
     # only to catch in case that the subprocess' sub_process _itself_ raised an exception
-    # not necessarily any below processes the subprocess created
+    # not necessarily any below processes the subprocess createdsubprocess_dict["command"]
     except subprocess.CalledProcessError as exception:
 
         subprocess_dict["status_message"] = "finished"
@@ -509,8 +510,8 @@ def run_subprocess(ctx: Context,
 
         # Only check lock files for git or svn commands
         if any(
-            "git" in subprocess_dict["command"],
-            "svn" in subprocess_dict["command"]
+            "git" in subprocess_dict["args"],
+            "svn" in subprocess_dict["args"]
         ) and lock.clear_lock_files(ctx, subprocess_psutils_dict):
 
             # Change the log_level so the failed process doesn't log as an error

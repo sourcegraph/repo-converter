@@ -2,7 +2,6 @@
 
 1. Renew Entitle requests
 2. Finish the structured logging, with repo / sync job details
-    1. Job start, with batch size
     2. Each command start
     3. Each command finish, with results
     4. Job finish, with results, from each command, including total run time, run times for each step, and percents of total
@@ -31,7 +30,6 @@ Ask Amp
 
     - Get details pertinent to which events are emitting logs into structured log keys
         - Git Commands
-            - Repo
             - Repo status (up to date / out of date)
             - Commits behind to catch up
             - Batch size
@@ -41,10 +39,11 @@ Ask Amp
 
     - Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
 
-    - Sort keys in logs for process and psutils subdicts
-        - Have plumbing, now need to see which attributes we're actually logging, sort them in the needed order
-
     - How to get process execution times from logs, and analyze them
+
+        ```bash
+        (echo '"date","time","timestamp","execution_time_seconds","return_code","status_message_reason","args"'; jq -r 'select(.message == "Process finished" and (.process.args // "" | contains("svn"))) | [.date, .time, .timestamp, .process.execution_time_seconds, .process.return_code, .process.status_message_reason, .process.args] | @csv' "2025-07-10-06-02-12.495184.json") > output.csv
+        ```
 
     - Log a repo status update table?
         - Repo name

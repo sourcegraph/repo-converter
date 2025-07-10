@@ -369,6 +369,12 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
             # Save the repo to the return dict
             repos_output[repo_key] = repo_dict
 
+
+    # Sort the repos in the dict, and the keys within each repo
+    repos_output = dict(sorted(repos_output.items()))
+    for repo in repos_output.keys():
+        repos_output[repo] = dict(sorted(repos_output[repo].items()))
+
     return repos_output
 
 
