@@ -20,6 +20,8 @@ def clone_svn_repo(ctx: Context) -> None:
     correlation_id = ctx.job["job"]["correlation_id"]
     repo_key = ctx.job["job"]["repo_key"]
 
+    ctx.job["job"]["reason"] = ""
+
     # Get env vars
     max_retries     = ctx.env_vars["MAX_RETRIES"]
     src_serve_root  = ctx.env_vars['SRC_SERVE_ROOT']
@@ -151,7 +153,7 @@ def clone_svn_repo(ctx: Context) -> None:
 
             # Get running processes, both as a list and string
             ps_command = ["ps", "--no-headers", "-e", "--format", "pid,args"]
-            running_processes = cmd.run_subprocess(ctx, ps_command, quiet=True, correlation_id=correlation_id)["output"]
+            running_processes = cmd.run_subprocess(ctx, ps_command, quiet=True, correlation_id=correlation_id, name="ps")["output"]
             running_processes_string = " ".join(running_processes)
 
             # Define the list of strings we're looking for in the running processes' commands
@@ -239,7 +241,7 @@ def clone_svn_repo(ctx: Context) -> None:
 
         svn_remote_url = ""
 
-        cmd_git_get_svn_url_output = cmd.run_subprocess(ctx, cmd_git_get_svn_url, quiet=True, correlation_id=correlation_id)
+        cmd_git_get_svn_url_output = cmd.run_subprocess(ctx, cmd_git_get_svn_url, quiet=True, correlation_id=correlation_id, name="cmd_git_get_svn_url_output")
 
         if "output" in cmd_git_get_svn_url_output.keys() and len(cmd_git_get_svn_url_output["output"]) > 0:
 
@@ -269,7 +271,7 @@ def clone_svn_repo(ctx: Context) -> None:
     ## Run commands
     # Run the svn info command to test logging in to the SVN server, for network connectivity and credentials
     # Capture the output so we know the max revision in this repo's history
-    svn_info = cmd.run_subprocess(ctx, cmd_svn_info, password, arg_svn_echo_password, correlation_id=correlation_id)
+    svn_info = cmd.run_subprocess(ctx, cmd_svn_info, password, arg_svn_echo_password, correlation_id=correlation_id, name="svn_info")
     svn_info_output_string = " ".join(svn_info["output"])
 
     if svn_info["return_code"] != 0:
@@ -290,7 +292,7 @@ def clone_svn_repo(ctx: Context) -> None:
 
             time.sleep(retry_delay_seconds)
 
-            svn_info = cmd.run_subprocess(ctx, cmd_svn_info, password, arg_svn_echo_password, correlation_id=correlation_id)
+            svn_info = cmd.run_subprocess(ctx, cmd_svn_info, password, arg_svn_echo_password, correlation_id=correlation_id, name="svn_info_retry")
             svn_info_output_string = " ".join(svn_info["output"])
 
         if svn_info["return_code"] != 0:
@@ -313,6 +315,7 @@ def clone_svn_repo(ctx: Context) -> None:
     # Get last changed revision for this repo
     if "Last Changed Rev: " in svn_info_output_string:
         last_changed_rev = svn_info_output_string.split("Last Changed Rev: ")[1].split(" ")[0]
+        ctx.job["job"]["last_changed_rev"] = last_changed_rev
     else:
         log(ctx, f"'Last Changed Rev:' not found in svn info output: {svn_info_output_string}", "error", ctx.job, correlation_id)
         return
@@ -323,13 +326,18 @@ def clone_svn_repo(ctx: Context) -> None:
 
         #  TypeError: 'NoneType' object is not subscriptable
         try:
-            previous_batch_end_revision = cmd.run_subprocess(ctx, cmd_git_get_batch_end_revision, correlation_id=correlation_id)["output"][0]
+            previous_batch_end_revision = cmd.run_subprocess(ctx, cmd_git_get_batch_end_revision, correlation_id=correlation_id, name="cmd_git_get_batch_end_revision")["output"][0]
         except Exception as exception:
             previous_batch_end_revision = "1"
 
+        ctx.job["job"]["local_rev"] = previous_batch_end_revision
+
         if previous_batch_end_revision == last_changed_rev:
 
-            log(ctx, f"up to date; skipping; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}", "info", ctx.job, correlation_id)
+            ctx.job["job"]["repo_state"] = "Skipping"
+            ctx.job["job"]["reason"] = "Up to date"
+
+            log(ctx, f"Up to date; skipping", "info", ctx.job, correlation_id)
 
             log_recent_commits = ctx.env_vars["LOG_RECENT_COMMITS"]
 
@@ -338,7 +346,7 @@ def clone_svn_repo(ctx: Context) -> None:
                 # Output the n most recent commits to visually verify the local git repo is up to date with the remote repo
                 cmd_svn_log_recent_revs = cmd_svn_log + ["--limit", f"{log_recent_commits}"]
 
-                ctx.job["svn_log_output"] = cmd.run_subprocess(ctx, cmd_svn_log_recent_revs, password, arg_svn_echo_password, quiet=True, correlation_id=correlation_id)["output"]
+                ctx.job["svn_log_output"] = cmd.run_subprocess(ctx, cmd_svn_log_recent_revs, password, arg_svn_echo_password, quiet=True, correlation_id=correlation_id, name="svn_log_recent_commits")["output"]
 
                 log(ctx, f"LOG_RECENT_COMMITS={log_recent_commits}", "debug", ctx.job, correlation_id)
 
@@ -347,7 +355,7 @@ def clone_svn_repo(ctx: Context) -> None:
 
             # Run git garbage collection and cleanup branches, even if repo is already up to date
             # TODO: Sort out why git gc is a command in the cmd module, but cleaning up branches and tags is in the git module
-            cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, correlation_id=correlation_id)
+            cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, correlation_id=correlation_id, name="cmd_git_garbage_collection")
             git.cleanup_branches_and_tags(ctx, local_repo_path, cmd_git_default_branch, git_default_branch)
 
             return
@@ -356,19 +364,25 @@ def clone_svn_repo(ctx: Context) -> None:
 
             # Write and run the command
             cmd_svn_log_remaining_revs = cmd_svn_log + ["--revision", f"{previous_batch_end_revision}:HEAD"]
-            svn_log = cmd.run_subprocess(ctx, cmd_svn_log_remaining_revs, password, arg_svn_echo_password, correlation_id=correlation_id)
+            svn_log = cmd.run_subprocess(ctx, cmd_svn_log_remaining_revs, password, arg_svn_echo_password, correlation_id=correlation_id, name="cmd_svn_log_remaining_revs")
 
-            # Parse the output to get the number of remaining revisions
+            # Parse the output to get the number of remaining revs
             svn_log_output_string = " ".join(svn_log["output"])
             remaining_revs_count = svn_log_output_string.count("revision=")
+            fetching_batch_count = min(remaining_revs_count,fetch_batch_size)
 
             # Log the results
-            log(ctx, f"out of date; local rev {previous_batch_end_revision}, remote rev {last_changed_rev}, {remaining_revs_count} revs remaining to catch up, fetching next batch of {min(remaining_revs_count,fetch_batch_size)} revisions; svn log command run time {svn_log['execution_time']}", "info", ctx.job, correlation_id)
+            ctx.job["job"]["repo_state"]            = "Updating"
+            ctx.job["job"]["reason"]                = "Out of date"
+            ctx.job["job"]["remaining_revs"]    = remaining_revs_count
+            ctx.job["job"]["fetching_batch_count"]  = fetching_batch_count
+
+            log(ctx, f"Out of date; updating", "info", ctx.job, correlation_id)
 
 
     if ctx.job["job"]["repo_state"] == "create":
 
-        log(ctx, f"didn't find a local clone, creating one", "info", ctx.job, correlation_id)
+        log(ctx, f"Didn't find a local clone, initializing a new local clone", "info", ctx.job, correlation_id)
 
         # Create the repo path if it doesn't exist
         if not os.path.exists(local_repo_path):
@@ -400,34 +414,34 @@ def clone_svn_repo(ctx: Context) -> None:
                     cmd_git_svn_init    += ["--branches", branch]
 
         # Initialize the repo
-        cmd.run_subprocess(ctx, cmd_git_svn_init, password, arg_svn_echo_password, correlation_id=correlation_id)
+        cmd.run_subprocess(ctx, cmd_git_svn_init, password, arg_svn_echo_password, correlation_id=correlation_id, name="cmd_git_svn_init")
 
         # Configure the bare clone
         if bare_clone:
-            cmd.run_subprocess(ctx, cmd_git_bare_clone, correlation_id=correlation_id)
+            cmd.run_subprocess(ctx, cmd_git_bare_clone, correlation_id=correlation_id, name="cmd_git_bare_clone")
 
         # Initialize this config with a 0 value
-        cmd_git_set_batch_end_revision_with_value = cmd_git_set_batch_end_revision + [str(0)]
-        cmd.run_subprocess(ctx, cmd_git_set_batch_end_revision_with_value, correlation_id=correlation_id)
+        cmd_git_initialize_batch_end_revision_with_zero_value = cmd_git_set_batch_end_revision + [str(0)]
+        cmd.run_subprocess(ctx, cmd_git_initialize_batch_end_revision_with_zero_value, correlation_id=correlation_id, name="cmd_git_initialize_batch_end_revision_with_zero_value")
 
 
     ## Back to steps we do for both Create and Update states, so users can update the below parameters without having to restart the clone from scratch
     # TODO: Check if these configs are already set the same before trying to set them
 
     # Set the default branch local to this repo, after init
-    cmd.run_subprocess(ctx, cmd_git_default_branch, correlation_id=correlation_id)
+    cmd.run_subprocess(ctx, cmd_git_default_branch, correlation_id=correlation_id, name="cmd_git_default_branch")
 
     # Configure the authors file, if provided
     if authors_file_path:
         if os.path.exists(authors_file_path):
-            cmd.run_subprocess(ctx, cmd_git_authors_file, correlation_id=correlation_id)
+            cmd.run_subprocess(ctx, cmd_git_authors_file, correlation_id=correlation_id, name="cmd_git_authors_file")
         else:
             log(ctx, f"authors file not found at {authors_file_path}, skipping configuring it", "warning", ctx.job, correlation_id)
 
     # Configure the authors program, if provided
     if authors_prog_path:
         if os.path.exists(authors_prog_path):
-            cmd.run_subprocess(ctx, cmd_git_authors_prog, correlation_id=correlation_id)
+            cmd.run_subprocess(ctx, cmd_git_authors_prog, correlation_id=correlation_id, name="cmd_git_authors_prog")
         else:
             log(ctx, f"authors prog not found at {authors_prog_path}, skipping configuring it", "warning", ctx.job, correlation_id)
 
@@ -450,7 +464,7 @@ def clone_svn_repo(ctx: Context) -> None:
             # Try to retrieve repo-converter.batch-end-revision from git config
             # previous_batch_end_revision = git config --get repo-converter.batch-end-revision
             # Need to fail gracefully
-            previous_batch_end_revision = cmd.run_subprocess(ctx, cmd_git_get_batch_end_revision, correlation_id=correlation_id)["output"]
+            previous_batch_end_revision = cmd.run_subprocess(ctx, cmd_git_get_batch_end_revision, correlation_id=correlation_id, name="cmd_git_get_batch_end_revision")["output"]
 
             if previous_batch_end_revision:
 
@@ -460,7 +474,7 @@ def clone_svn_repo(ctx: Context) -> None:
 
             # If this is a new repo, get the first changed revision number for this repo from the svn server log
             cmd_svn_log_batch_start_revision = cmd_svn_log + ["--limit", "1", "--revision", "1:HEAD"]
-            svn_log_batch_start_revision = cmd.run_subprocess(ctx, cmd_svn_log_batch_start_revision, password, arg_svn_echo_password, correlation_id=correlation_id)["output"]
+            svn_log_batch_start_revision = cmd.run_subprocess(ctx, cmd_svn_log_batch_start_revision, password, arg_svn_echo_password, correlation_id=correlation_id, name="cmd_svn_log_batch_start_revision")["output"]
             batch_start_revision = int(" ".join(svn_log_batch_start_revision).split("revision=\"")[1].split("\"")[0])
 
         # Get the revision number to end with
@@ -468,24 +482,30 @@ def clone_svn_repo(ctx: Context) -> None:
 
             # Get the batch size'th revision number for the rev to end this batch range
             cmd_svn_log_batch_end_revision = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{batch_start_revision}:HEAD"]
-            cmd_svn_log_batch_end_revision_output = cmd.run_subprocess(ctx, cmd_svn_log_batch_end_revision, password, arg_svn_echo_password, correlation_id=correlation_id)["output"]
+            cmd_svn_log_batch_end_revision_output = cmd.run_subprocess(ctx, cmd_svn_log_batch_end_revision, password, arg_svn_echo_password, correlation_id=correlation_id, name="cmd_svn_log_batch_end_revision")["output"]
 
             try:
 
+
                 # While we're at it, update the batch starting rev to the first real rev number after the previous end rev +1
                 batch_start_revision = int(" ".join(cmd_svn_log_batch_end_revision_output).split("revision=\"")[1].split("\"")[0])
+
+                ctx.job["job"]["batch_start_revision"] = "batch_start_revision"
 
                 # Reverse the output so we can get the last revision number
                 cmd_svn_log_batch_end_revision_output.reverse()
                 batch_end_revision = int(" ".join(cmd_svn_log_batch_end_revision_output).split("revision=\"")[1].split("\"")[0])
 
+
+                ctx.job["job"]["batch_end_revision"] = "batch_end_revision"
+
             except IndexError as exception:
-                log(ctx, f"IndexError when getting batch start or end revisions for batch size {fetch_batch_size}, skipping this run to retry next run", "warning", ctx.job, correlation_id)
+                log(ctx, f"IndexError when getting batch start or end revs for batch size {fetch_batch_size}, skipping this run to retry next run", "warning", ctx.job, correlation_id)
                 return
 
-                # log(ctx, f"IndexError when getting batch start or end revisions for batch size {fetch_batch_size}; running the fetch without the batch size limit; exception: {type(exception)}, {exception.args}, {exception}", "warning", ctx.job, correlation_id)
+                # log(ctx, f"IndexError when getting batch start or end revs for batch size {fetch_batch_size}; running the fetch without the batch size limit; exception: {type(exception)}, {exception.args}, {exception}", "warning", ctx.job, correlation_id)
                 #  <class 'IndexError'>, ('list index out of range',), list index out of range
-                # Need to handle the issue where revisions seem to be out of order on the server
+                # Need to handle the issue where revs seem to be out of order on the server
 
         # If we were successful getting both starting and ending revision numbers
         if batch_start_revision and batch_end_revision:
@@ -509,22 +529,52 @@ def clone_svn_repo(ctx: Context) -> None:
     # Start the fetch
     cmd_git_svn_fetch_string_may_have_batch_range = " ".join(cmd_git_svn_fetch)
     log(ctx, f"fetching with {cmd_git_svn_fetch_string_may_have_batch_range}", "info", ctx.job, correlation_id)
-    git_svn_fetch_result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, password, correlation_id=correlation_id)
+    git_svn_fetch_result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, password, correlation_id=correlation_id, name="cmd_git_svn_fetch")
+
+
+    # TODO: Find more effective ways to validate that the git svn fetch succeeded
+
+    error_messages = [
+        "Can't create session",
+        "Unable to connect to a repository at URL",
+        "Error running context",
+        "Connection refused",
+    ]
+    success = True
+
+    for error_message in error_messages:
+
+        if error_message in str(git_svn_fetch_result["output"]):
+
+            success = False
+
+            if "reason" not in ctx.job["job"].keys():
+                ctx.job["job"]["reason"] = f"{error_message}"
+            else:
+                ctx.job["job"]["reason"] += f" {error_message}"
+
+    if not success:
+        log(ctx, f"git svn fetch failed", "error", ctx.job, correlation_id)
+        ctx.job["job"]["reason"] = ""
 
     # If the fetch succeed, and if we have a batch_end_revision
-    if git_svn_fetch_result["return_code"] == 0 and batch_end_revision:
+    if git_svn_fetch_result["return_code"] == 0 and batch_end_revision and success:
+
+        # TODO: Validate that the git svn fetch succeeded
+
+        # Get the end revision number from git log
 
         # Store the ending revision number
         cmd_git_set_batch_end_revision_with_value = cmd_git_set_batch_end_revision + [str(batch_end_revision)]
-        cmd.run_subprocess(ctx, cmd_git_set_batch_end_revision_with_value, correlation_id=correlation_id)
+        cmd.run_subprocess(ctx, cmd_git_set_batch_end_revision_with_value, correlation_id=correlation_id, name="cmd_git_set_batch_end_revision_with_value")
 
-        log(ctx, f"git fetch complete; run time {git_svn_fetch_result['execution_time']}", "info", ctx.job, correlation_id)
+        log(ctx, f"git svn fetch complete", "info", ctx.job, correlation_id)
 
     else:
 
-        log(ctx, f"git fetch failed; run time {git_svn_fetch_result['execution_time']}", "error", ctx.job, correlation_id)
+        log(ctx, f"git svn fetch failed", "error", ctx.job, correlation_id)
 
     # Run Git garbage collection before handing off to cleanup branches and tags
-    cmd.run_subprocess(ctx, cmd_git_garbage_collection, correlation_id=correlation_id)
+    cmd.run_subprocess(ctx, cmd_git_garbage_collection, correlation_id=correlation_id, name="cmd_git_garbage_collection")
 
     git.cleanup_branches_and_tags(ctx, local_repo_path, cmd_git_default_branch, git_default_branch)

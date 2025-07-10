@@ -341,12 +341,15 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
         log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
 
-def run_subprocess(ctx: Context,
-                  args: Union[str, List[str]],
-                  password: Optional[str] = None,
-                  echo_password: Optional[bool] = None,
-                  quiet: bool = False,
-                  correlation_id: Optional[str] = None) -> Dict[str, Any]:
+def run_subprocess(
+        ctx: Context,
+        args: Union[str, List[str]],
+        password: Optional[str] = None,
+        echo_password: Optional[bool] = None,
+        quiet: bool = False,
+        correlation_id: Optional[str] = None,
+        name: Optional[str] = None
+    ) -> Dict[str, Any]:
     """
     Middleware function to
     - Take a CLI command as an args string or list of strings
@@ -373,6 +376,7 @@ def run_subprocess(ctx: Context,
     # Dict for anything other functions need to consume,
     # which isn't set in subprocess_psutils_dict
     subprocess_dict                         = {}
+    subprocess_dict["name"]                 = name          # For command logging
     subprocess_dict["output"]               = None          # For consumption by the calling function
     subprocess_dict["pid"]                  = None          # In case psutils doesn't get a pid in subprocess_psutils_dict
     subprocess_dict["return_code"]          = None          # Integer exit code
