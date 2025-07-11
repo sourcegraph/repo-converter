@@ -174,6 +174,16 @@
 
 ## Processes
 
+- How do I get more information about the child PID which was reaped in these lines, in `./src/utils/signal_handler.py`?
+    ```python
+    if os.WIFEXITED(status) and os.WEXITSTATUS(status) != 0:
+        log(ctx, f"SIGCHLD handler reaped child PID {pid} with exit code {os.WEXITSTATUS(status)}", "warning")
+    ```
+    - Maintain a list of processes, with their metadata, from when they're launched, and updated on an interval, then look up that information in the signal handler
+        - Track PIDs when launching: Store process metadata (command, start time, purpose) in a dict when creating child processes
+        - Cross-reference with active processes: Check if the PID exists in ctx.active_repo_conversion_processes
+    - Use process monitoring libraries
+
 - Multiprocessing / state / zombie cleanup
     - Learn more about multiprocessing pools
     - Implement better multiprocessing status and state tracking
@@ -251,7 +261,7 @@
 ## Notes
 
 - Authors file
-    - java -jar /sourcegraph/svn-migration-scripts.jar authors https://svn.apache.org/repos/asf/eagle > authors.txt
+    - java -jar /sg/svn-migration-scripts.jar authors https://svn.apache.org/repos/asf/eagle > authors.txt
     - Kinda useful, surprisingly fast
 
 - git list all config for a repo

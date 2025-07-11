@@ -311,7 +311,7 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
         except psutil.TimeoutExpired as exception:
 
             # Ignore logging main function processes which are still running
-            if "cmdline" in subprocess_psutils_dict.keys() and subprocess_psutils_dict["cmdline"] == ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]:
+            if "cmdline" in subprocess_psutils_dict.keys() and subprocess_psutils_dict["cmdline"] == ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]:
                 continue
 
             # TODO: This is the log event that we're really looking for,

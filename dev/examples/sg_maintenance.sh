@@ -23,7 +23,7 @@
 # However, since migrating to Bazel, the script has been built into the gitserver Go binary,
 # and is no longer on gitserver's volume to find and execute manually,
 # so, customers need to copy this script from here, and paste it into their
-# gitserver's sourcegraph user's home directory, at /home/sourcegraph/sg_maintenance.sh
+# gitserver's sourcegraph user's home directory, at /home/sg/sg_maintenance.sh
 
 # The customizations are to make the script more ergonomic to execute manually
 # for customers who have disabled Git's garbage collection

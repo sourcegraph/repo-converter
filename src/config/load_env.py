@@ -20,7 +20,7 @@ def load_env_vars() -> dict:
     # so it's fine to hard code the path in his file, as long as the file path in the build matches
     # Do not overwrite any existing env vars with the same name (default behaviour),
     # so that env vars provided at container start time take precedence
-    dotenv_path="/sourcegraph/repo-converter/build/.env"
+    dotenv_path="/sg/repo-converter/build/.env"
     load_dotenv(dotenv_path=dotenv_path, override=False)
 
     # Create empty env_vars dict to return at function exit
@@ -49,8 +49,8 @@ def load_env_vars() -> dict:
     env_vars["MAX_RETRIES"]                             = int(environ.get("MAX_RETRIES"                             , 3 ))
     env_vars["REPO_CONVERTER_INTERVAL_SECONDS"]         = int(environ.get("REPO_CONVERTER_INTERVAL_SECONDS"         , 3600 ))
     # Paths inside the container, don't change unless also changing in compose file volume mapping
-    env_vars["REPOS_TO_CONVERT"]                        = str(environ.get("REPOS_TO_CONVERT"                        , "/sourcegraph/repos-to-convert.yaml" ))
-    env_vars["SRC_SERVE_ROOT"]                          = str(environ.get("SRC_SERVE_ROOT"                          , "/sourcegraph/src-serve-root" ))
+    env_vars["REPOS_TO_CONVERT"]                        = str(environ.get("REPOS_TO_CONVERT"                        , "/sg/repos-to-convert.yaml" ))
+    env_vars["SRC_SERVE_ROOT"]                          = str(environ.get("SRC_SERVE_ROOT"                          , "/sg/src-serve-root" ))
     env_vars["TRUNCATED_OUTPUT_MAX_LINE_LENGTH"]        = int(environ.get("TRUNCATED_OUTPUT_MAX_LINE_LENGTH"        , 200 ))
     env_vars["TRUNCATED_OUTPUT_MAX_LINES"]              = int(environ.get("TRUNCATED_OUTPUT_MAX_LINES"              , 11 ))
 

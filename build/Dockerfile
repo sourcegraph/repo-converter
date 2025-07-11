@@ -45,8 +45,8 @@ RUN apt-get update && \
     systemctl enable cron && \
     systemctl start cron
 
-# cd to /sourcegraph/repo-converter in the image
-WORKDIR /sourcegraph/repo-converter
+# cd to /sg/repo-converter in the image
+WORKDIR /sg/repo-converter
 
 # Copy the requirements file into the image
 COPY build/requirements.txt build/requirements.txt
@@ -87,4 +87,4 @@ RUN useradd -u 1000 -m sourcegraph
 USER sourcegraph
 
 # Start the container
-CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]
+CMD ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]

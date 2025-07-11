@@ -61,9 +61,9 @@ def load_config_from_environment_variables():
     environment_variables_dict["LOG_LEVEL"]                         = str(os.environ.get("LOG_LEVEL"                        , "INFO" ))
     environment_variables_dict["REPO_CONVERTER_INTERVAL_SECONDS"]   = int(os.environ.get("REPO_CONVERTER_INTERVAL_SECONDS"  , 3600 ))
     # Path inside the container to find this file, only change to match if the right side of the volume mapping changes
-    environment_variables_dict["REPOS_TO_CONVERT"]                  = str(os.environ.get("REPOS_TO_CONVERT"                 , "/sourcegraph/repos-to-convert.yaml" ))
+    environment_variables_dict["REPOS_TO_CONVERT"]                  = str(os.environ.get("REPOS_TO_CONVERT"                 , "/sg/repos-to-convert.yaml" ))
     # Path inside the container to find this directory, only change to match if the right side of the volume mapping changes
-    environment_variables_dict["SRC_SERVE_ROOT"]                    = str(os.environ.get("SRC_SERVE_ROOT"                   , "/sourcegraph/src-serve-root" ))
+    environment_variables_dict["SRC_SERVE_ROOT"]                    = str(os.environ.get("SRC_SERVE_ROOT"                   , "/sg/src-serve-root" ))
 
     # Image build info
     environment_variables_dict["BUILD_BRANCH"]                      = str(os.environ.get("BUILD_BRANCH"                     , "" ))
@@ -1231,8 +1231,8 @@ def check_lock_files(args, process_dict):
     list_of_process_and_lock_file_path_tuples = [
         ("Git garbage collection"       , ".git/gc.pid"                                     ), # fatal: gc is already running on machine '75c377aedbaf' pid 3700 (use --force if not)
         ("svn config"                   , ".git/svn/.metadata.lock"                         ), # error: could not lock config file .git/svn/.metadata: File exists config svn-remote.svn.branches-maxRev 125551: command returned error: 255
-        ("git svn fetch git-svn"        , ".git/svn/refs/remotes/git-svn/index.lock"        ), # fatal: Unable to create '/sourcegraph/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/git-svn/index.lock': File exists.
-        ("git svn fetch origin trunk"   , ".git/svn/refs/remotes/origin/trunk/index.lock"   ), # fatal: Unable to create '/sourcegraph/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/origin/trunk/index.lock': File exists
+        ("git svn fetch git-svn"        , ".git/svn/refs/remotes/git-svn/index.lock"        ), # fatal: Unable to create '/sg/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/git-svn/index.lock': File exists.
+        ("git svn fetch origin trunk"   , ".git/svn/refs/remotes/origin/trunk/index.lock"   ), # fatal: Unable to create '/sg/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/origin/trunk/index.lock': File exists
     ]
 
     # TypeError: can only join an iterable

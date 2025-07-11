@@ -7,9 +7,9 @@ services:
     container_name: cloud-agent
     image: index.docker.io/sourcegraph/src-tunnel-agent:latest
     volumes:
-      - ../../config/cloud-agent-service-account-key.json:/sourcegraph/cloud-agent-service-account-key.json:ro
-      - ../../config/cloud-agent-config.yaml:/sourcegraph/cloud-agent-config.yaml:ro
-    command: ["-config=/sourcegraph/cloud-agent-config.yaml"]
+      - ../../config/cloud-agent-service-account-key.json:/sg/cloud-agent-service-account-key.json:ro
+      - ../../config/cloud-agent-config.yaml:/sg/cloud-agent-config.yaml:ro
+    command: ["-config=/sg/cloud-agent-config.yaml"]
     restart: always
     networks:
       - default
@@ -18,8 +18,8 @@ services:
     container_name: repo-converter
     image: ghcr.io/sourcegraph/repo-converter:latest
     volumes:
-      - ../../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
-      - ../../src-serve-root/:/sourcegraph/src-serve-root
+      - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
+      - ../../src-serve-root/:/sg/src-serve-root
     restart: always
     # environment:
       # - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
@@ -30,8 +30,8 @@ services:
     container_name: src-serve-git.local
     image:  index.docker.io/sourcegraph/src-cli:latest
     volumes:
-      - ../../src-serve-root/:/sourcegraph/src-serve-root:ro
-    command: "serve-git -addr :443 /sourcegraph/src-serve-root"
+      - ../../src-serve-root/:/sg/src-serve-root:ro
+    command: "serve-git -addr :443 /sg/src-serve-root"
     restart: always
     networks:
       - default
