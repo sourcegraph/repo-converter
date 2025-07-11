@@ -25,7 +25,7 @@ def redact(ctx: Context, input):
         isinstance(input, type(None)) or
         isinstance(input, type(bool)) or
         len(secrets_set) == 0 or
-        all(secret not in input for secret in secrets_set)
+        not any(secret in str(input) for secret in secrets_set)
     ):
 
         return input

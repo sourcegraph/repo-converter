@@ -502,10 +502,10 @@ def run_subprocess(
     if not subprocess_dict["success"]:
 
         # Only check lock files for git or svn commands
-        if any(
+        if any([
             "git" in subprocess_dict["args"],
             "svn" in subprocess_dict["args"]
-        ) and lockfiles.clear_lock_files(ctx, subprocess_psutils_dict):
+        ]) and lockfiles.clear_lock_files(ctx, subprocess_psutils_dict):
 
             # Change the log_level so the failed process doesn't log as an error
             subprocess_dict["log_level"] = "warning"
