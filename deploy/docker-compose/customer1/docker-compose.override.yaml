@@ -6,7 +6,7 @@
 services:
 
   repo-converter:
-    image: ghcr.io/sourcegraph/repo-converter:v0.3.0
+    image: ghcr.io/sourcegraph/repo-converter:v0.3.1
     volumes:
       - ../../../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
       - ../../../dev/toprc:/root/.config/procps/toprc
