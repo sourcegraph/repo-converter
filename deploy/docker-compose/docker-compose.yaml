@@ -4,37 +4,37 @@
 services:
 
   cloud-agent:
+    command: ["-config=/sg/cloud-agent-config.yaml"]
     container_name: cloud-agent
     image: index.docker.io/sourcegraph/src-tunnel-agent:latest
+    networks:
+      - default
+    restart: always
     volumes:
       - ../../config/cloud-agent-service-account-key.json:/sg/cloud-agent-service-account-key.json:ro
       - ../../config/cloud-agent-config.yaml:/sg/cloud-agent-config.yaml:ro
-    command: ["-config=/sg/cloud-agent-config.yaml"]
-    restart: always
-    networks:
-      - default
 
   repo-converter:
     container_name: repo-converter
     image: ghcr.io/sourcegraph/repo-converter:latest
-    volumes:
-      - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
-      - ../../src-serve-root/:/sg/src-serve-root
-    restart: always
     # environment:
       # - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
       # - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
+    restart: always
+    volumes:
+      - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
+      - ../../src-serve-root/:/sg/src-serve-root
 
   src-serve-git:
+    command: "serve-git -addr :443 /sg/src-serve-root"
     # Uses a valid hostname as container_name, to trick the cloud agent and code host config into finding this container on the Docker network
     container_name: src-serve-git.local
     image:  index.docker.io/sourcegraph/src-cli:latest
-    volumes:
-      - ../../src-serve-root/:/sg/src-serve-root:ro
-    command: "serve-git -addr :443 /sg/src-serve-root"
-    restart: always
     networks:
       - default
+    restart: always
+    volumes:
+      - ../../src-serve-root/:/sg/src-serve-root:ro
 
 networks:
   default:

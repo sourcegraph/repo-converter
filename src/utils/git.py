@@ -281,10 +281,10 @@ def git_global_config(ctx: Context) -> None:
     """
 
     cmd_git_safe_directory = ["git", "config", "--global", "--replace-all", "safe.directory", "\"*\""]
-    cmd.run_subprocess(ctx, cmd_git_safe_directory, quiet=True, name="cmd_git_safe_directory")
+    cmd.run_subprocess(ctx, cmd_git_safe_directory, name="cmd_git_safe_directory")
 
     cmd_git_default_branch = ["git", "config", "--global", "--replace-all", "init.defaultBranch", "main"]
-    cmd.run_subprocess(ctx, cmd_git_default_branch, quiet=True, name="cmd_git_default_branch")
+    cmd.run_subprocess(ctx, cmd_git_default_branch, name="cmd_git_default_branch")
 
 
 def set_config(ctx: Context, local_repo_path: str, key: str, value: str) -> bool:

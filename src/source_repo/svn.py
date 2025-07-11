@@ -319,6 +319,9 @@ def clone_svn_repo(ctx: Context) -> None:
 
         #  TypeError: 'NoneType' object is not subscriptable
         try:
+            # This command seems to fail more than the other time this same command is run,
+            # but this command works just fine when copied from the error logs and pasted into the terminal
+            # file permissions maybe?
             previous_batch_end_revision = int(cmd.run_subprocess(ctx, cmd_git_get_batch_end_revision, name="cmd_git_get_batch_end_revision")["output"][0])
         except Exception as exception:
             previous_batch_end_revision = 1

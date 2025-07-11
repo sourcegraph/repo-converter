@@ -7,13 +7,13 @@ services:
 
   repo-converter:
     image: ghcr.io/sourcegraph/repo-converter:marc-fixes
+    environment:
+      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
+      - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
     volumes:
+      - ../../../../src-serve-root/:/sg/src-serve-root
       - ../../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
       - ../../../dev/toprc:/root/.config/procps/toprc
-      - ../../../../src-serve-root/:/sg/src-serve-root
-    environment:
-      - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
-      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
 
   src-serve-git:
     container_name: src-serve-git-ubuntu.local
