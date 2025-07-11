@@ -597,7 +597,8 @@ def clone_svn_repo(ctx: Context) -> None:
                 ctx.job["job"]["reason"] += f" {error_message}"
 
     # If the fetch succeed, and if we have a batch_end_revision
-    if git_svn_fetch_result["return_code"] == 0 and batch_end_revision and success:
+    # if git_svn_fetch_result["return_code"] == 0 and batch_end_revision and success:
+    if git_svn_fetch_result["return_code"] == 0 and batch_end_revision:
 
         # TODO: Validate that the git svn fetch succeeded
 
