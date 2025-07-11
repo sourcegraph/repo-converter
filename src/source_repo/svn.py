@@ -560,10 +560,6 @@ def clone_svn_repo(ctx: Context) -> None:
             else:
                 ctx.job["job"]["reason"] += f" {error_message}"
 
-    if not success:
-        log(ctx, f"git svn fetch failed", "error")
-        ctx.job["job"]["reason"] = ""
-
     # If the fetch succeed, and if we have a batch_end_revision
     if git_svn_fetch_result["return_code"] == 0 and batch_end_revision and success:
 

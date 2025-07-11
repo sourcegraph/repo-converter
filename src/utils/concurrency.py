@@ -19,41 +19,10 @@ class ConcurrencyManager:
     Enforces both global and per-server limits using semaphores.
     """
 
-    # Create a manager object to share and sync data between processes
-    manager = multiprocessing.Manager()
-
-    # # Create member attributes with shorter names
-    # global_limit = ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]
-    # per_server_limit = ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]
-
-    # # Update global semaphore with the global_limit from the env vars
-    global_semaphore = multiprocessing.Semaphore()
-
-    # Per-server semaphores
-    # Created dynamically as needed, as the repos-to-convert.yaml file can be changed,
-    # and new servers can be added, while the container is running
-    # Keys: server_name
-    # Values: semaphore object, which seems to be an integer, counting down from (MAX_CONCURRENT_CONVERSIONS_PER_SERVER - 1) to 0
-    # Can't create this as a type manager.dict(), that throws an error
-    per_server_semaphores = {}
-    # Protect the per_server_semaphores dict, by ensuring no two processes can write to it at the same time
-    # This seems unnecessary, as only the convert_repos.start() function in the main process should be calling these functions
-    per_server_semaphores_lock = multiprocessing.Lock()
-
-    # Share a list of active jobs with concurrency_monitor
-    active_jobs = manager.dict() # server_name -> list of (active_job_id, active_job_repo, active_job_timestamp)
-    # Ensure no two processes can write to active_jobs at the same
-    active_jobs_lock = multiprocessing.Lock()
-
-    # Track jobs waiting for a semaphore to become available, using a list for each server_name, not sure why
-    queued_jobs = manager.dict()  # server_name -> list of (queued_job_id, queued_job_repo, queued_job_timestamp)
-    queued_jobs_lock = multiprocessing.Lock()
-
-
     def __init__(self, ctx: Context):
 
-        # # Create a manager object to share and sync data between processes
-        # self.manager = multiprocessing.Manager()
+        # Create a manager object to share and sync data between processes
+        self.manager = multiprocessing.Manager()
 
         # Create member attributes with shorter names
         self.global_limit = ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]
@@ -62,25 +31,25 @@ class ConcurrencyManager:
         # Update global semaphore with the global_limit from the env vars
         self.global_semaphore = multiprocessing.Semaphore(self.global_limit)
 
-        # # Per-server semaphores
-        # # Created dynamically as needed, as the repos-to-convert.yaml file can be changed,
-        # # and new servers can be added, while the container is running
-        # # Keys: server_name
-        # # Values: semaphore object, which seems to be an integer, counting down from (MAX_CONCURRENT_CONVERSIONS_PER_SERVER - 1) to 0
-        # # Can't create this as a type self.manager.dict(), that throws an error
-        # self.per_server_semaphores = {}
-        # # Protect the per_server_semaphores dict, by ensuring no two processes can write to it at the same time
-        # # This seems unnecessary, as only the convert_repos.start() function in the main process should be calling these functions
-        # self.per_server_semaphores_lock = multiprocessing.Lock()
+        # Per-server semaphores
+        # Created dynamically as needed, as the repos-to-convert.yaml file can be changed,
+        # and new servers can be added, while the container is running
+        # Keys: server_name
+        # Values: semaphore object, which seems to be an integer, counting down from (MAX_CONCURRENT_CONVERSIONS_PER_SERVER - 1) to 0
+        # Can't create this as a type self.manager.dict(), that throws an error
+        self.per_server_semaphores = {}
+        # Protect the per_server_semaphores dict, by ensuring no two processes can write to it at the same time
+        # This seems unnecessary, as only the convert_repos.start() function in the main process should be calling these functions
+        self.per_server_semaphores_lock = multiprocessing.Lock()
 
-        # # Share a list of active jobs with concurrency_monitor
-        # self.active_jobs = self.manager.dict() # server_name -> list of (active_job_id, active_job_repo, active_job_timestamp)
-        # # Ensure no two processes can write to active_jobs at the same
-        # self.active_jobs_lock = multiprocessing.Lock()
+        # Share a list of active jobs with concurrency_monitor
+        self.active_jobs = self.manager.dict() # server_name -> list of (active_job_id, active_job_repo, active_job_timestamp)
+        # Ensure no two processes can write to active_jobs at the same
+        self.active_jobs_lock = multiprocessing.Lock()
 
-        # # Track jobs waiting for a semaphore to become available, using a list for each server_name, not sure why
-        # self.queued_jobs = self.manager.dict()  # server_name -> list of (queued_job_id, queued_job_repo, queued_job_timestamp)
-        # self.queued_jobs_lock = multiprocessing.Lock()
+        # Track jobs waiting for a semaphore to become available, using a list for each server_name, not sure why
+        self.queued_jobs = self.manager.dict()  # server_name -> list of (queued_job_id, queued_job_repo, queued_job_timestamp)
+        self.queued_jobs_lock = multiprocessing.Lock()
 
         # Log this, without log_concurrency_status=True, as that creates a race condition
         # structured_data_to_log = {
@@ -313,36 +282,6 @@ class ConcurrencyManager:
         # Fill in details for queued jobs
         with self.queued_jobs_lock:
 
-            # Check if manager is still alive before accessing shared objects
-            # Why would self.manager not still be alive??? What shuts it down?
-            if self.manager is None or self.manager._state.value != multiprocessing.managers.State.STARTED:
-                log(ctx, "Yep", "debug")
-                return status
-
-            if len(self.queued_jobs.keys()) < 1:
-                return status
-
-# Process clone_svn_repo_crunch:
-# Traceback (most recent call last):
-#   File "/usr/lib/python3.10/multiprocessing/process.py", line 314, in _bootstrap
-#     self.run()
-#   File "/usr/lib/python3.10/multiprocessing/process.py", line 108, in run
-#     self._target(*self._args, **self._kwargs)
-#   File "/sourcegraph/repo-converter/src/utils/convert_repos.py", line 84, in conversion_wrapper
-#     ctx.concurrency_manager.release_job_slot(ctx)
-#   File "/sourcegraph/repo-converter/src/utils/concurrency.py", line 358, in release_job_slot
-#     log(ctx, f"Released job slot", "debug", log_concurrency_status=True)
-#   File "/sourcegraph/repo-converter/src/utils/log.py", line 46, in log
-#     structured_payload = _build_structured_payload(
-#   File "/sourcegraph/repo-converter/src/utils/log.py", line 114, in _build_structured_payload
-#     payload["concurrency"] = ctx.concurrency_manager.get_status(ctx)
-#   File "/sourcegraph/repo-converter/src/utils/concurrency.py", line 294, in get_status
-#     for server_name in self.queued_jobs:
-#   File "<string>", line 2, in __iter__
-#   File "/usr/lib/python3.10/multiprocessing/managers.py", line 824, in _callmethod
-#     proxytype = self._manager._registry[token.typeid][-1]
-# AttributeError: 'NoneType' object has no attribute '_registry'
-
             for server_name in self.queued_jobs:
 
                 queued_jobs_list = self.queued_jobs[server_name]
@@ -410,7 +349,7 @@ class ConcurrencyManager:
                 # Overwrite the managed list
                 self.active_jobs[server_name] = server_active_jobs_list
 
-            log(ctx, f"Released job slot", "debug", log_concurrency_status=True)
+            log(ctx, f"Released job slot", "debug")
 
         except ValueError as e:
-            log(ctx, f"Error releasing job slot: {e}", "error", log_concurrency_status=True)
+            log(ctx, f"Error releasing job slot: {e}", "error")
