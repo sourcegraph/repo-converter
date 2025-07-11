@@ -202,7 +202,7 @@ def log_process_status(
                 psutils_dict_input["net_connections"] = connections_list
 
     # Truncate long lists of open files, ex. git svn fetch processes
-    if "open_files" in psutils_dict_input.keys() and len(psutils_dict_input["open_files"]) > 0:
+    if psutils_dict_input.get("open_files", ""):
         psutils_dict_output["open_files"] = truncate_output(ctx, psutils_dict_input["open_files"])
 
     # Copy the remaining attributes to be logged, without overwriting any already copied over
