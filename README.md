@@ -1,15 +1,18 @@
 # repo-converter
 
 ## Experimental - This is not a supported Sourcegraph product
+
 This repo was created for Sourcegraph Implementation Engineering deployments, and is not intended, designed, built, or supported for use in any other scenario. Feel free to open issues or PRs, but responses are best effort.
 
 ## Why
+
 - Sourcegraph was built with Git-native support, but customers have a variety of version control systems
 - Sourcegraph has integrated the p4-fusion FOSS project into the product to support Perforce more directly
 - Other version control systems are left up to the customer to convert to Git
 - This project builds a framework to convert repos from other VCS to Git
 
 ## Deployment
+
 For Sourcegraph Cloud customers, they'll need to run the repo-converter, src serve-git, and the Sourcegraph Cloud Private Access Agent on a container platform with connectivity to both their code hosts, and their Sourcegraph Cloud instance. This can be done quite securely, as the src serve-git API endpoint does not need any ports exposed outside of the container network Running src serve-git and the agent together on the same container network allows the agent to use the container platform's local DNS service to reach src serve-git, and prevents src serve-git's unauthenticated HTTP endpoint from needing to be opened outside of the container network.
 
 For Self-hosted Sourcegraph customers, they'll need to run the repo-converter and src serve-git together in a location that can reach their code hosts, and their Sourcegraph instance can reach the src serve-git API.
@@ -19,6 +22,7 @@ The repo-converter and src serve-git containers need to share a storage volume, 
 Deploying via containers allows for easier upgrades, troubleshooting, monitoring, logging, flexibility of hosting, etc. than running the binaries directly on the OS.
 
 ## Requirements
+
 1. Container host
     1. Docker Compose or Kubernetes
     2. Networking
@@ -45,6 +49,7 @@ Deploying via containers allows for easier upgrades, troubleshooting, monitoring
         1. Future, depending on availability of third party TFVC API clients
 
 ## Setup with Sourcegraph Cloud - Sourcegraph Staff Only
+
 1. Add the needed entries to the sourcegraphConnect targetGroups list in the Cloud instance's config.yaml, and get your PR approved and merged
 ```yaml
         - dnsName: src-serve-git-ubuntu.local
@@ -84,11 +89,18 @@ Deploying via containers allows for easier upgrades, troubleshooting, monitoring
 ## Configuration
 
 ### Environment Variables
+
 - Env vars are used for configs which need the container to restart to get new values
+- See `./src/config/load_env.py` for the list of environment variables, their data types, and default values
+- See `./src/config/validate_env.py` for any validation rules
 
 ### ./config/repos-to-convert.yaml
+
 - The contents of this file can be changed while the container is running, and the current version will be read at the start of each main loop in main.py
 - Note, the syntax in the below examples is quite out of date, but the explanations of each may still be useful
+- See `./config/example-repos-to-convert.yaml` for an example of the config layout
+- See `./src/config/load_repos.py` for the list of config keys
+- TODO: Move the config schema to a separate file, and read it into the code
 
 ```YAML
 xmlbeans:
@@ -168,6 +180,7 @@ xmlbeans:
 ```
 
 ## Performance
+
 1. The default interval and batch size are set for sane polling for new repo commits during regular operations, but would be quite slow for initial cloning
 2. For initial cloning, adjust:
     1. The `REPO_CONVERTER_INTERVAL_SECONDS` environment variable
@@ -191,3 +204,8 @@ services:
 allura:
   fetch-batch-size: 1000
 ```
+
+## Contributions
+
+- Pull requests are always welcome
+- See `./dev/TODO.md` for the list of tasks to be done
