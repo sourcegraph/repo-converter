@@ -543,8 +543,8 @@ def clone_svn_repo(ctx: Context) -> None:
     git_repository_state_valid, git_repository_state_message = validate_git_repository_state(ctx, local_repo_path)
     log(ctx, f"validate_git_repository_state result: {git_repository_state_valid}; message: {git_repository_state_message}", "debug")
 
-    revision_range_valid, revision_range_message = validate_revision_range(ctx, local_repo_path)
-    log(ctx, f"validate_revision_range result: {revision_range_valid}; message: {revision_range_message}", "debug")
+    # revision_range_valid, revision_range_message = validate_revision_range(ctx, local_repo_path)
+    # log(ctx, f"validate_revision_range result: {revision_range_valid}; message: {revision_range_message}", "debug")
 
 
 
