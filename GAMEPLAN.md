@@ -1,333 +1,325 @@
-# Game Plan: Python Structured Logging Implementation
+# Revision Tracking System Implementation Gameplan
 
-### 4. Implementation Strategy
+## Overview
+Implement a comprehensive revision tracking system to optimize SVN to Git conversion by caching revision information and tracking conversion states. This eliminates the need to run slow `svn log` commands repeatedly.
 
-#### Phase 2: Gradual Enhancement
-- [ ] Add structured fields to key operations:
-  - Repository operations: `repo_key`, `repo_type`, `server_hostname`
+## Goals
+1. **Store SVN revision data**: Store revision numbers from SVN log XML output
+2. **Track conversion states**: Monitor which revisions are converted, failed, excluded, or pending
+3. **Optimize performance**: Avoid repeated slow SVN log commands
+4. **Enable incremental conversion**: Only convert revisions that need conversion
+5. **Provide recovery**: Handle failed conversions and retry logic
 
-#### Phase 3: Advanced Features
-- [ ] Add correlation IDs for tracking related operations
-- [ ] Add structured error context (stack traces, error codes)
-- [ ] Create log filtering (aggregation?) utilities
-
-### 5. Automatic Field Collection Architecture
-
-#### Core Logger Enhancement Strategy
-**Automatic Context Injection**: Enhance the logging system to automatically capture contextual information without requiring manual field specification in each log call.
-
-
-#### Command Context Auto-Capture
-**Architecture**: Decorator-based command logging that automatically captures execution metadata.
-
-The `@log_command_execution` decorator is a Python decorator that wraps command execution functions to automatically capture and log execution metadata without requiring manual logging code in every command function.
-
-##### Decorator Implementation
-```python
-def log_command_execution(func):
-    """Decorator that automatically logs command execution details"""
-    def wrapper(*args, **kwargs):
-        # Extract command info from function arguments
-        ctx, command, args_list = args[0], args[1], args[2]
-
-        # Start timing and capture initial state
-        start_time = time.time()
-        process_info = {
-            "command": command,
-            "args": args_list,
-            "command_full": f"{command} {' '.join(args_list)}",
-            "start_time": datetime.utcnow().isoformat(),
-            "pid": None
-        }
-
-        # Push command context to logging system
-        logger.push_context(process_info)
-
-        try:
-            # Execute the actual command function
-            result = func(*args, **kwargs)
-
-            # Capture success metrics
-            end_time = time.time()
-            execution_data = {
-                "end_time": datetime.utcnow().isoformat(),
-                "execution_time_ms": int((end_time - start_time) * 1000),
-                "success": True,
-                "returncode": getattr(result, 'returncode', 0),
-                "stdout_lines": len(result.stdout.splitlines()) if result.stdout else 0,
-                "stderr_lines": len(result.stderr.splitlines()) if result.stderr else 0,
-                "stdout_preview": result.stdout[:200] if result.stdout else "",
-                "stderr_preview": result.stderr[:200] if result.stderr else "",
-                "memory_peak_kb": _get_memory_usage()
-            }
-
-            # Log successful completion
-            log(ctx, f"Command completed: {command}", "INFO")
-            return result
-
-        except Exception as e:
-            # Capture error metrics
-            end_time = time.time()
-            error_data = {
-                "end_time": datetime.utcnow().isoformat(),
-                "execution_time_ms": int((end_time - start_time) * 1000),
-                "success": False,
-                "error_type": type(e).__name__,
-                "error_message": str(e)
-            }
-
-            # Log failed execution
-            log(ctx, f"Command failed: {command}", "ERROR")
-            raise  # Re-raise the exception
-
-        finally:
-            # Always clean up context
-            logger.pop_context()
-
-    return wrapper
+## File Structure
+```
+<local_repo_path>/.git/
+└── svn-revisions.json          # Main revision tracking file
 ```
 
-##### Usage Example
-```python
-@log_command_execution
-def run_git_command(ctx, command, args):
-    """Run a git command with automatic logging"""
-    # This function focuses on command execution only
-    # All logging metadata is handled by the decorator
+## Data Structure
 
-    full_command = [command] + args
-    result = subprocess.run(
-        full_command,
-        capture_output=True,
-        text=True,
-        cwd=ctx.repo_path
-    )
-
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, full_command)
-
-    return result
-
-# Usage (unchanged from current code)
-result = run_git_command(ctx, "git", ["clone", "--depth", "1", repo_url])
-```
-
-##### Automatic Structured Fields Captured
-Every decorated function execution automatically adds these fields to ALL log entries within that function:
-```python
-{
-    "command": "git",
-    "args": ["clone", "--depth", "1", "https://github.com/user/repo.git"],
-    "command_full": "git clone --depth 1 https://github.com/user/repo.git",
-    "pid": 12345,
-    "start_time": "2025-06-30T14:23:45.123456Z",
-    "end_time": "2025-06-30T14:23:47.456789Z",
-    "execution_time_ms": 2333,
-    "returncode": 0,
-    "success": true,
-    "stdout_lines": 15,
-    "stderr_lines": 0,
-    "stdout_preview": "Cloning into 'repo'...",  # First 200 chars
-    "stderr_preview": "",
-    "memory_peak_kb": 45234
-}
-```
-
-##### Benefits of Decorator Pattern
-- **Zero Code Changes**: Existing command functions work unchanged
-- **Automatic Metrics**: Timing, success/failure, output sizes captured automatically
-- **Consistent Logging**: Every command gets the same metadata structure
-- **Error Handling**: Exceptions are logged with context before re-raising
-- **Context Propagation**: All logs within the decorated function include command context
-
-#### Git Operation Context Auto-Capture
-**Architecture**: Context manager that automatically injects git-specific metadata for git operations.
-
-```python
-with git_operation_context(repo_path, operation="sync") as git_ctx:
-    # All logs within this block auto-include:
-    {
-        "repo_key": "customer-xyz/main-repo",
-        "repo_type": "git",
-        "repo_path": "/tmp/repos/customer-xyz/main-repo",
-        "remote_url": "https://github.com/customer-xyz/main-repo.git",
-        "local_rev": "a1b2c3d4",
-        "remote_rev": "e5f6g7h8",
-        "commits_behind": 3,
-        "repo_status": "out_of_date",
-        "batch_size": 50,
-        "operation": "sync",
-        "server_hostname": "git.company.com"
-    }
-```
-
-#### Automatic Error Context Capture
-```python
-# On exception, auto-capture error context:
-{
-    "error_type": "subprocess.CalledProcessError",
-    "error_code": "SVN_E175012",
-    "error_message": "Connection timed out",
-    "remote_error": "svn: E175012: Connection timed out",
-    "traceback": "...",
-    "correlation_id": "uuid-1234-5678"
-}
-```
-
-### 6. Implementation Architecture Details
-
-#### Enhanced Logger Class Structure with Structlog
-```python
-import structlog
-from structlog.processors import JSONRenderer
-
-class StructuredLogger:
-    def __init__(self):
-        self.base_context = self._capture_container_metadata()
-        self.context_stack = []  # For nested contexts
-
-        # Configure structlog for JSON Lines output
-        structlog.configure(
-            processors=[
-                structlog.stdlib.filter_by_level,
-                structlog.processors.add_log_level,
-                structlog.processors.add_logger_name,
-                self._add_automatic_context,  # Custom processor for auto-context
-                structlog.processors.JSONRenderer()
-            ],
-            wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            cache_logger_on_first_use=True,
-        )
-        self.logger = structlog.get_logger()
-
-    def log(self, ctx, message, level="DEBUG", extra=None):
-        # Auto-inject all context layers
-        structured_data = {
-            **self.base_context,           # Container metadata
-            **self._capture_code_location(), # File/line/function
-            **self._capture_timing(),       # Timestamps
-            **self._merge_context_stack(),  # Git/command contexts
-            **(extra or {})                # Manual overrides
-        }
-        # Apply redaction and emit via structlog
-        redacted_data = self._redact_sensitive_data(structured_data)
-        getattr(self.logger, level.lower())(message, **redacted_data)
-```
-
-#### Context Manager Pattern for Automatic Metadata
-```python
-# Git operations automatically inject metadata
-@contextmanager
-def git_operation_context(repo_path, operation):
-    git_metadata = _inspect_git_repo(repo_path)
-    logger.push_context(git_metadata)
-    try:
-        yield git_metadata
-    finally:
-        logger.pop_context()
-
-# Command execution automatically captured
-@contextmanager
-def command_execution_context(command, args):
-    cmd_metadata = {
-        "command": command,
-        "args": args,
-        "start_time": datetime.utcnow().isoformat(),
-        "pid": None  # Set when process starts
-    }
-    logger.push_context(cmd_metadata)
-    try:
-        yield cmd_metadata
-    finally:
-        # Update with execution results
-        cmd_metadata.update({
-            "end_time": datetime.utcnow().isoformat(),
-            "execution_time_ms": ...,
-            # other completion data
-        })
-        logger.pop_context()
-```
-
-#### Automatic Code Location Capture
-```python
-def _capture_code_location(self, skip_frames=2):
-    frame = inspect.currentframe()
-    for _ in range(skip_frames):
-        frame = frame.f_back
-
-    return {
-        "module": frame.f_globals.get('__name__', 'unknown'),
-        "function": frame.f_code.co_name,
-        "file": os.path.basename(frame.f_code.co_filename),
-        "line": frame.f_lineno
-    }
-```
-
-### 7. Benefits
-- **Machine readable**: Enable log aggregation, alerting, dashboards
-- **Searchable**: Query by specific fields (repo_key, error_type, etc.)
-- **Backwards compatible**: Existing log API unchanged
-- **Security maintained**: `redact()` function continues to work
-- **Performance insights**: Duration, memory usage tracking
-- **Debugging**: Correlation IDs link related operations
-
-### 8. Migration Strategy
-- **Zero-disruption deployment**: Existing `log(ctx, message, level)` calls work unchanged
-- **Automatic enhancement**: New structured fields appear automatically without code changes
-- **Direct implementation**: Deploy structured logging as the primary output format
-- **Validation**: Test structured logging output matches expected schema and includes all required fields
-
-### 9. Implementation Priority & Phases
-
-#### Phase 1: Foundation (Week 1-2)
-1. **Logger infrastructure**: Enhanced `StructuredLogger` class with context stack
-2. **Automatic basics**: Code location, timing, container metadata capture
-3. **Backwards compatibility**: Ensure existing log calls work identically
-
-#### Phase 2: Command & Git Context (Week 3-4)
-1. **Command decorator**: `@log_command_execution` for automatic command metadata
-2. **Git context manager**: `git_operation_context()` for repository operations
-3. **Error enhancement**: Automatic error context capture and correlation IDs
-
-#### Phase 3: Advanced Features (Week 5-6)
-1. **Performance monitoring**: Memory usage, execution timing, queue metrics
-3. **Correlation tracing**: Link related operations across function boundaries
-
-### 10. Example Usage Patterns
-
-#### Current Code (Unchanged)
-```python
-# Existing code continues to work exactly as before
-log(ctx, "Starting repo sync", "INFO")
-```
-
-#### Enhanced Automatic Output
+### Revision State File Format (svn-revisions.json)
 ```json
 {
-  "timestamp": "2025-06-30T14:23:45.123456Z",
-  "unix_timestamp": 1719763425.123456,
-  "level": "INFO",
-  "message": "Starting repo sync",
-  "module": "repo_converter.sync_manager",
-  "function": "sync_repository",
-  "file": "sync_manager.py",
-  "line": 89,
-  "build_tag": "v2.1.4",
-  "container_uptime_seconds": 3600
+    "repo_metadata": {
+        "repo_url": "https://svn.example.com/repo",
+        "last_svn_check": "2025-01-10T12:00:00Z",
+        "last_git_update": "2025-01-10T12:00:00Z",
+        "total_revisions_count": 2500,
+        "converted_revisions_count": 1200,
+        "pending_revisions_count": 1000,
+        "failed_revisions_count": 5,
+        "excluded_revisions_count": 295
+    },
+    "revisions": {
+        "1": {
+            "state": "converted",
+            "git_commit": "abc123def456",
+            "timestamp": "2025-01-10T10:00:00Z",
+        },
+        "2": {
+            "state": "excluded",
+            "timestamp": "2025-01-10T10:00:00Z",
+        },
+        "1377700": {
+            "state": "converted",
+            "git_commit": "def789ghi012",
+            "timestamp": "2025-01-10T11:30:00Z",
+        },
+        "1881028": {
+            "state": "pending",
+            "timestamp": "2025-01-10T12:00:00Z",
+        }
+    }
 }
 ```
 
-#### With Context Managers (Automatic)
-```python
-# Git context automatically captured for all logs in this block
-with git_operation_context("/tmp/repos/acme-corp/main", "sync"):
-    log(ctx, "Checking for updates", "DEBUG")  # Auto-includes git metadata
+### Revision States
+- **`converted`**: Successfully converted to Git repository
+- **`pending`**: Discovered but not yet converted
+- **`failed`**: Last conversion attempt failed
+- **`excluded`**: Excluded by user configuration
+- **`processing`**: Currently being processed (temporary state)
 
-    # Command context automatically captured
-    with command_execution_context("git", ["fetch", "origin"]):
-        result = run_git_command(...)  # Auto-includes command metadata
-        log(ctx, "Fetch completed", "INFO")
+## Implementation Steps
+
+### Step 1: Core Infrastructure Functions
+**File**: `src/source_repo/svn.py`
+
+#### 1.1 XML Parsing Function
+```python
+def parse_svn_log_xml(xml_content: str) -> List[int]:
+    """Parse SVN log XML and extract revision numbers"""
 ```
 
-This architecture provides comprehensive structured logging with minimal code changes and maximum automation.
+#### 1.2 Revision State File Management
+```python
+def get_revision_state_file_path(local_repo_path: str) -> str:
+    """Get path to revision state file"""
+
+def load_revision_state(ctx: Context, local_repo_path: str) -> dict:
+    """Load revision state from file, create if not exists"""
+
+def save_revision_state(ctx: Context, local_repo_path: str, state: dict) -> None:
+    """Save revision state to file with backup"""
+
+def backup_revision_state(ctx: Context, local_repo_path: str) -> None:
+    """Create backup of current revision state"""
+```
+
+#### 1.3 Revision Discovery and Caching
+```python
+def discover_all_revisions(ctx: Context, svn_remote_repo_code_root_url: str,
+                          username: str, password: str) -> List[int]:
+    """Get all revision numbers from SVN server and store results"""
+
+def store_svn_log_output(ctx: Context, local_repo_path: str,
+                        xml_content: str) -> None:
+    """Store SVN log XML output in a file to avoid repeated queries"""
+```
+
+### Step 2: Git Repository Analysis
+**File**: `src/source_repo/svn.py`
+
+#### 2.1 Git Conversion Verification
+```python
+def get_converted_revisions_from_git(ctx: Context, local_repo_path: str) -> Set[int]:
+    """Analyze Git log to find which SVN revisions are already converted"""
+
+def verify_revision_converted(ctx: Context, local_repo_path: str, revision: int) -> bool:
+    """Verify specific revision is properly converted in Git"""
+
+def get_git_commit_for_revision(ctx: Context, local_repo_path: str, revision: int) -> str:
+    """Get Git commit hash for a specific SVN revision"""
+```
+
+#### 2.2 State Synchronization
+```python
+def sync_revision_states_with_git(ctx: Context, local_repo_path: str) -> None:
+    """Synchronize revision states with actual Git repository state"""
+
+def mark_revisions_as_converted(ctx: Context, local_repo_path: str,
+                               revisions: List[int]) -> None:
+    """Mark revisions as converted after successful Git conversion"""
+```
+
+### Step 3: User Configuration Integration
+**File**: `src/source_repo/svn.py`
+
+#### 3.1 Exclusion Rules
+```python
+def apply_exclusion_rules(ctx: Context, local_repo_path: str,
+                         exclusion_patterns: List[str]) -> None:
+    """Apply user-defined exclusion rules to mark revisions as excluded"""
+
+def check_revision_excluded(ctx: Context, revision: int,
+                           exclusion_config: dict) -> bool:
+    """Check if revision should be excluded based on config"""
+```
+
+### Step 4: Batch Processing Optimization
+**File**: `src/source_repo/svn.py`
+
+#### 4.1 Intelligent Batch Selection
+```python
+def get_next_conversion_batch(ctx: Context, local_repo_path: str,
+                             batch_size: int) -> List[int]:
+    """Get next batch of revisions to convert, prioritizing by revision number"""
+```
+
+#### 4.2 Progress Tracking
+```python
+def log_conversion_progress(ctx: Context, local_repo_path: str) -> None:
+    """Log detailed progress information"""
+```
+
+### Step 5: Error Handling and Recovery
+**File**: `src/source_repo/svn.py`
+
+#### 5.1 Failure Management
+```python
+def mark_revision_failed(ctx: Context, local_repo_path: str, revision: int,
+                        error_message: str) -> None:
+    """Mark revision as failed with error details"""
+
+def retry_failed_revisions(ctx: Context, local_repo_path: str,
+                          max_retries: int = 3) -> None:
+    """Retry previously failed revisions"""
+
+def cleanup_stale_processing_states(ctx: Context, local_repo_path: str) -> None:
+    """Clean up revisions stuck in 'processing' state"""
+```
+
+### Step 6: Main Logic Integration
+**File**: `src/source_repo/svn.py`
+
+#### 6.1 Modified clone_svn_repo Function
+```python
+def clone_svn_repo(ctx: Context) -> None:
+    # ... existing setup code ...
+
+    # NEW: Initialize revision tracking
+    revision_state = load_revision_state(ctx, local_repo_path)
+
+    # NEW: Check if we need to discover revisions
+    if should_discover_revisions(ctx, revision_state):
+        discover_and_store_revision_numbers(ctx, local_repo_path, svn_remote_repo_code_root_url)
+
+    # NEW: Get next batch to convert
+    next_batch = get_next_conversion_batch(ctx, local_repo_path, fetch_batch_size)
+
+    if not next_batch:
+        log(ctx, "No revisions need conversion, repository is up to date", "info")
+        return
+
+    # NEW: Convert batch and update states
+    convert_revision_batch(ctx, local_repo_path, next_batch)
+
+    # ... rest of existing logic ...
+```
+
+#### 6.2 New Helper Functions
+```python
+def should_discover_revisions(ctx: Context, revision_state: dict) -> bool:
+    """Run svn info command to determine if we need to run SVN discovery"""
+
+def discover_and_store_revision_numbers(ctx: Context, local_repo_path: str,
+                                svn_url: str) -> None:
+    """Discover all revisions and update locally stored list of revisions"""
+
+def convert_revision_batch(ctx: Context, local_repo_path: str,
+                          revisions: List[int]) -> None:
+    """Convert a batch of revisions and update tracking"""
+```
+
+### Step 7: Performance Monitoring
+**File**: `src/source_repo/svn.py`
+
+#### 7.1 Metrics Collection
+```python
+def collect_conversion_metrics(ctx: Context, local_repo_path: str) -> dict:
+    """Collect performance metrics for conversion process"""
+
+def log_performance_summary(ctx: Context, local_repo_path: str) -> None:
+    """Log performance summary and recommendations"""
+```
+
+## Implementation Order
+
+### Phase 1: Core Infrastructure (Priority: High)
+1. **Step 1.1**: XML parsing function
+2. **Step 1.2**: Revision state file management
+3. **Step 2.1**: Git conversion verification
+4. **Step 5.3**: Cleanup stale states
+
+### Phase 2: Discovery and Caching (Priority: High)
+1. **Step 1.3**: Revision discovery and caching
+2. **Step 2.2**: State synchronization
+3. **Step 4.1**: Batch selection logic
+
+### Phase 3: Integration (Priority: Medium)
+1. **Step 6.1**: Main logic integration
+2. **Step 6.2**: Helper functions
+3. **Step 4.2**: Progress tracking
+
+### Phase 4: Advanced Features (Priority: Low)
+1. **Step 3.1**: Exclusion rules
+2. **Step 5.1**: Failure management
+3. **Step 7.1**: Performance monitoring
+
+## Testing Strategy
+
+### Unit Tests
+- Test XML parsing with various SVN log formats
+- Test revision state file operations
+- Test Git log analysis functions
+- Test batch optimization logic
+
+### Integration Tests
+- Test full conversion workflow with tracking
+- Test recovery from failures
+- Test performance improvements
+
+### Edge Cases
+- Handle empty SVN repositories
+- Handle corrupted state files
+- Handle network failures during discovery
+- Handle Git repository corruption
+
+## Performance Expectations
+
+### Before Implementation
+- Multiple `svn log` commands per conversion cycle
+- No caching of revision information
+- Limited failure recovery
+
+### After Implementation
+- Single `svn log` command for initial discovery
+- Locally stored revision numbers
+- Intelligent batch processing
+- Comprehensive failure recovery
+- Progress tracking and ETA
+
+## Configuration Options
+
+Using existing configuration from `repos-to-clone.yaml`:
+```yaml
+  fetch-batch-size: 100
+```
+
+Using existing configuration from environment variables:
+```python
+env_vars["MAX_RETRIES"]
+```
+
+Add new configs to `repos-to-clone.yaml`:
+```yaml
+  exclude-revisions:
+    - 1
+    - 99
+```
+
+## Monitoring and Logging
+
+### Log Messages
+- Revision discovery progress
+- Conversion batch progress
+- State synchronization results
+- Performance metrics
+- Error details with recovery actions
+
+### Debug Information
+- Revision state file changes
+- Git log analysis results
+- Batch optimization decisions
+
+## Migration Strategy
+
+### For Existing Repositories
+1. Run state synchronization on first execution
+2. Analyze existing Git repository to populate converted states
+3. Discover remaining revisions from SVN
+4. Continue with optimized workflow
+
+### Backward Compatibility
+- Rebuild tracking state file if it's corrupted

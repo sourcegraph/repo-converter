@@ -577,7 +577,7 @@ def truncate_output(ctx, output: List[str]) -> List[str]:
         truncated_output = [
             *first_half,
             f"...TRUNCATED FROM {subprocess_output_lines} LINES TO {truncated_output_max_lines} LINES FOR LOGS...",
-            *second_half
+            *reversed(second_half)
         ]
 
     # Truncate long lines

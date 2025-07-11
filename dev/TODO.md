@@ -1,18 +1,22 @@
 # TODO:
 
+- Update customer production, gather log events on which repos take how long, and why
 - Better success validation before updating git config with latest rev
-
-
-1. Finish the structured logging, with repo / sync job details
-    1. Job finish, with results, from each command, including total run time, run times for each step, and percents of total
-2. Update customer production, gather log events on which repos take how long, and why
-3. Renew Entitle requests
-
-Ask Amp
-- What does SVN log get used for?
-- Why would it take so long to run?
-- How do you suggest we work around this?
-- Should we keep a local file to track commit metadata?
+- Implement proper type validation with clear error messages
+- Improve zombie process detection and cleanup
+- Implement better error handling for process management
+- Break down `clone_svn_repo()` into smaller, focused methods
+- Implement proper state management for create/update/running
+- Add better error handling with specific error types
+- Fix batch processing logic
+- Use GitPython more extensively?
+- Implement better multiprocessing status and state tracking
+- Add proper docstrings to all classes and methods
+- Create usage documentation
+- Document configuration options
+- Implement TODOs strewn around the code
+- Decorators and context managers for logging context?
+- Error enhancement Automatic error context capture and correlation IDs
 
 
 - Logging
@@ -96,6 +100,29 @@ Ask Amp
         - Do we need to keep a log file of svn commands, svn server URL, repo name, execution times, response codes, response size?
         - Run git svn log --xml to store the repo's log on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
         - XML parsing library to store and update a local subversion log file?
+
+
+- Different approach
+    - https://kevin.deldycke.com/2012/how-to-create-local-copy-svn-repository
+
+    - Create an empty local SVN repository:
+        rm -rf ./svn-repo
+        svnadmin create ./svn-repo
+        sed -i 's/# password-db = passwd/password-db = passwd/' ./svn-repo/conf/svnserve.conf
+        echo "kevin = kevin" >> ./svn-repo/conf/passwd
+        kill `ps -ef | grep svnserve | grep -v grep | awk '{print $2}'`
+        svnserve --daemon --listen-port 3690 --root ./svn-repo
+
+    - Give the synchronization utility permission our local repository:
+        echo "#!/bin/sh" > ./svn-repo/hooks/pre-revprop-change
+        chmod 755 ./svn-repo/hooks/pre-revprop-change
+
+    - Initialize the synchronization between the remote server (https://svn.example.com/svn/internal-project) and the local SVN (svn://localhost:3690):
+        svnsync init --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" svn://localhost:3690 https://svn.example.com/svn/internal-project
+
+    - Once all of this configuration is done, we can start dumping the content of the remote repository to our local copy:
+        svnsync --non-interactive --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" sync svn://localhost:3690
+
 
 
 - repos-to-convert.yaml
@@ -312,3 +339,15 @@ version:
 
     - Decent example of converting commit messages
         - https://github.com/seantis/git-svn-trac/blob/master/git-svn-trac.py
+
+# Context Managers
+```python
+# Git context automatically captured for all logs in this block
+with git_operation_context("/tmp/repos/acme-corp/main", "sync"):
+    log(ctx, "Checking for updates", "DEBUG")  # Auto-includes git metadata
+
+    # Command context automatically captured
+    with command_execution_context("git", ["fetch", "origin"]):
+        result = run_git_command(...)  # Auto-includes command metadata
+        log(ctx, "Fetch completed", "INFO")
+```

@@ -1,4 +1,4 @@
-# Agent Guidelines for Implementation Bridges Codebase
+# Agent Guidelines for repo-converter Project
 - The purpose of this project is to convert repos from other repo types (ex. Subversion) to Git
 - It runs in a Podman container
 - src/main.py is the entrypoint for the container
