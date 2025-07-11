@@ -8,6 +8,7 @@ from utils.log import log
 
 # Import Python standard modules
 from sys import exit
+from urllib.parse import urlparse
 import json
 
 # Import third party modules
@@ -53,7 +54,9 @@ def load_from_file(ctx: Context) -> None:
     ctx.repos = repos
 
     log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
-    log(ctx, f"Repos to convert: {json.dumps(ctx.repos, indent = 4, sort_keys=True)}", "debug")
+
+    repos_to_log = {"repos": ctx.repos}
+    log(ctx, "Repos to convert", "debug", repos_to_log)
 
 
 def check_types(ctx: Context, repos: dict) -> dict:
@@ -249,7 +252,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
         # Handle the top-level global config key
         if server_key.lower() in ("global", "globals"):
             repos_global_config = repos_input[server_key]
-            log(ctx, f"Found global repo config under {server_key}: {repos_global_config}", "info")
+            # log(ctx, f"Found global repo config under {server_key}: {repos_global_config}", "debug")
             continue
 
         # Otherwise, the top-level keys are code host servers
@@ -271,7 +274,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
         repo_type = server_config_dict["type"]
 
         # If the type key isn't a supported type, error, and skip the server
-        if repo_type not in source_repo_types:
+        if repo_type.lower() not in source_repo_types:
             log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has type: {repo_type}, which is not in the set of supported repo types: {source_repo_types}, skipping", "error")
             continue
 
@@ -296,7 +299,8 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
 
         else:
 
-            log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has a list of repos: {repos}", "debug")
+            # log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has a list of repos: {repos}", "debug")
+            pass
 
         # Okay, at this point, repos should be a list, of strings and / or dicts
         for repo in repos:
@@ -337,7 +341,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
             if isinstance(repo, str):
 
                 repo_key = repo
-                log(ctx, f"Repo {repo_key} is just a string and doesn't have any config of its own", "debug")
+                # log(ctx, f"Repo {repo_key} is just a string and doesn't have any config of its own", "debug")
 
             # If it's a dict, then it does define some repo-specific configs,
             # so grab these repo-specific configs,
@@ -351,7 +355,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
                 if repo[repo_key] is not None:
                     repo_dict = repo_dict | repo[repo_key]
 
-                log(ctx, f"Repo {repo_key} is a dict, and has some config of its own: {repo[repo_key]}", "debug")
+                # log(ctx, f"Repo {repo_key} is a dict, and has some config of its own: {repo[repo_key]}", "debug")
 
 
             # If the repo's settings didn't specify a destination-git-repo-name, then assume it from repo_key
@@ -365,14 +369,35 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
             # Save the repo to the return dict
             repos_output[repo_key] = repo_dict
 
+
+    # Sort the repos in the dict, and the keys within each repo
+    repos_output = dict(sorted(repos_output.items()))
+    for repo in repos_output.keys():
+        repos_output[repo] = dict(sorted(repos_output[repo].items()))
+
     return repos_output
 
 
 def sanitize_inputs(ctx: Context, repos_input: dict) -> dict:
     """
-    TODO: Sanitize inputs here, ex.
-    Trim trailing '/' from URLs
+    TODO: Sanitize inputs here
     """
+
+    # Trim trailing '/' from URLs
+    url_fields = ctx.url_fields
+
+    for repo in repos_input:
+
+        # Loop through the list
+        for url_field in url_fields:
+
+            repo_url = str(repos_input[repo].get(url_field, ""))
+
+            # If this key has a value
+            if repo_url:
+
+                # Strip starting and trailing '/'
+                repos_input[repo][url_field] = repo_url.strip('/')
 
     return repos_input
 
@@ -386,8 +411,46 @@ def validate_inputs(ctx: Context, repos_input: dict) -> dict:
     integers >= 0
     """
 
+    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
+    url_fields = ctx.url_fields
+
+    for repo in repos_input:
+
+        ## Ensure each repo has a "max_concurrent_conversions_server_name" attribute, for the purposes of enforcing MAX_CONCURRENT_CONVERSIONS_PER_SERVER; does not need to be a valid address for network connections
+        max_concurrent_conversions_server_name = ""
+
+        # Loop through the list
+        for url_field in url_fields:
+
+            repo_url = repos_input[repo].get(url_field, "")
+
+            if repo_url:
+
+                try:
+                    parsed = urlparse(repo_url)
+                    if parsed.hostname:
+                        max_concurrent_conversions_server_name = parsed.hostname
+                        break
+
+                except Exception as e:
+                    log(ctx, f"urlparse failed to parse URL {repo_url}: {e}", "warning")
+
+        # Fallback to code-host-name if provided
+        if not max_concurrent_conversions_server_name:
+            max_concurrent_conversions_server_name = repos_input[repo].get("code-host-name", "")
+
+        # Last resort: use "unknown"
+        if not max_concurrent_conversions_server_name:
+            max_concurrent_conversions_server_name = "unknown"
+            log(ctx, f"Could not determine server host for repo config: {repo}", "warning")
+
+        # Set the value
+        repos_input[repo]["max-concurrent-conversions-server-name"] = max_concurrent_conversions_server_name
+
+
 
     return repos_input
+
 
 def validate_required_inputs(ctx: Context, repos_input: dict) -> dict:
     """

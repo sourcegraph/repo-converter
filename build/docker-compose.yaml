@@ -17,17 +17,19 @@ services:
     environment:
       - CONCURRENCY_MONITOR_INTERVAL=10
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
-      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
-      - MAX_CONCURRENT_CONVERSIONS_TOTAL=100
-      - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
-#      - MAX_CYCLES=5
+      - LOG_RECENT_COMMITS=5
+      - MAX_CONCURRENT_CONVERSIONS_GLOBAL=1
+      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=1
+      # - MAX_CYCLES=5
+      - REPO_CONVERTER_INTERVAL_SECONDS=10 # Default is 3600 seconds (1 hour)
 #    image: ghcr.io/sourcegraph/repo-converter:HEAD
     image: repo-converter:build
     restart: never
+    userns_mode: keep-id
     volumes:
-      - ../dev/toprc:/root/.config/procps/toprc # Add `top` config file
+      - ../dev/toprc:/root/.config/procps/toprc:z # `top` config file
       - ../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
-      - ../src-serve-root/:/sourcegraph/src-serve-root
+      - ../src-serve-root/:/sourcegraph/src-serve-root:z
 
   src-serve-git:
     # Uses a valid hostname as container_name, to trick the cloud agent and code host config into finding this container on the Docker network
@@ -39,6 +41,13 @@ services:
     restart: always
     volumes:
       - ../src-serve-root/:/sourcegraph/src-serve-root:ro # Correct path
+    # ports:
+    #   - 8443:443
 
 networks:
   default:
+
+# Podman extensions
+x-podman:
+  # Disable the creation of a pod, to allow userns configs on containers
+  in_pod: false

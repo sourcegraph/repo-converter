@@ -1,10 +1,133 @@
 # TODO:
 
+- Update customer production, gather log events on which repos take how long, and why
+- Better success validation before updating git config with latest rev
+- Implement proper type validation with clear error messages
+- Improve zombie process detection and cleanup
+- Implement better error handling for process management
+- Break down `clone_svn_repo()` into smaller, focused methods
+- Implement proper state management for create/update/running
+- Add better error handling with specific error types
+- Fix batch processing logic
+- Use GitPython more extensively?
+- Implement better multiprocessing status and state tracking
+- Add proper docstrings to all classes and methods
+- Create usage documentation
+- Document configuration options
+- Implement TODOs strewn around the code
+- Decorators and context managers for logging context?
+- Error enhancement Automatic error context capture and correlation IDs
+
+
+- Logging
+
+    - Objective:
+        - Make the conversion process go faster, and more stable, in the customer's environment
+    - How do we achieve this?
+        - Identify which commands are taking a long time, or failing, and why
+    - Okay, how?
+        - Adopt structured logging, and a log parsing method to get this data
+
+    - Amp's suggestion
+        - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
+        - Decorator Pattern: Command execution decorator automatically captures all command-related data (args, timing, stdout/stderr, exit codes).
+        - The architecture uses a context stack pattern where different operational contexts (git operations, command execution) automatically push their metadata, making all relevant data available to every log statement within that context.
+
+    - Get details pertinent to which events are emitting logs into structured log keys
+        - Git Commands
+            - Remote server response errors, ex. svn: E175012: Connection timed out
+
+    - Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
+
+    - How to get process execution times from logs, and analyze them
+
+        ```bash
+        (echo '"date","time","timestamp", "cycle", "correlation_id", "execution_time_seconds","return_code","status_message_reason","args"'; podman logs repo-converter | jq -r 'select(.message == "Process finished" and (.process.args // "" | contains("svn"))) | [.date, .time, .timestamp, .cycle, .correlation_id, .process.execution_time_seconds, .process.return_code, .process.status_message_reason, .process.args] | @csv') | pbcopy
+        ```
+
+    - Log a repo status update table?
+        - Repo name
+        - URL
+        - Status (up to date / out of date)
+        - Last run's status (success / fail / timeout)
+        - Progress (% of commits)
+        - Commits converted
+        - Commits remaining
+        - Total commits
+        - Local commit
+        - Remote commit
+        - Size on disk
+    - Find a way to output a whole stack trace for each ERROR (and higher) log event
+    - Log structure to include file / line number, module / function names
+        - Need to make this more useful
+    - Find a tool to search / filter through logs
+        - See Slack thread with Eng
+    - Log levels
+        - proc events in DEBUG logs make DEBUG level logging too noisy
+        - Increase log levels of everything else?
+        - Create a new lower log level named proc?
+    - Debug log the list of servers and repos found in config file at the start of each run, so we can see it in the last ~1k log lines?
+
+    - Set up log schema and workspace settings for RedHat's [YAML](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) VS Code extension
+
+- SVN
+
+    - `svn info` commands
+        - Lightweight, takes a ~second to run
+        - Tests connectivity and credentials
+
+    - `svn log` commands
+        - Longest commands, which seem to be timing out and causing issues
+        - We may be able to make the conversion process much smoother if we can use fewer of these log commands
+        - What do we use them for? Why?
+            - Commit metadata
+            -
+        - these commands may be duplicative
+        - This command is executed 3 times per sync job, which one is taking so long?
+
+2025-07-01; 02:35:50.400278; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --revision 1:HEAD
+2025-07-01; 02:35:51.983007; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 1 --revision 1:HEAD
+2025-07-01; 02:35:52.695285; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 2 --revision 1377700:HEAD
+
+2025-07-01; 15:09:44.641140; 924a81c; 3fef96dbf2ce; run 576; DEBUG; pid 101567; still running; running for 3:07:58.451094; psutils_process_dict: {'args': '', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/lucene', '--revision', '1059418:HEAD'], 'cpu_times': pcputimes(user=471.92, system=0.45, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_info': pmem(rss=11436032, vms=22106112, shared=9076736, text=323584, lib=0, data=2150400, dirty=0), 'memory_percent': 0.13784979013949392, 'name': 'svn', 'net_connections_count': 1, 'net_connections': '13.90.137.153:443:CLOSE_WAIT', 'num_fds': 5, 'open_files': [], 'pid': 101567, 'ppid': 101556, 'status': 'running', 'threads': [pthread(id=101567, user_time=471.92, system_time=0.45)]};
+
+
+        - Add new routine to run git log and svn log, to compare and ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
+
+        - Keep an svn log file in a .git/sourcegraph directory in each repo
+        - When to run the next svn log file? When the last commit ID number in the svn log file has been converted
+        - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file cache?
+        - Do we need to keep a log file of svn commands, svn server URL, repo name, execution times, response codes, response size?
+        - Run git svn log --xml to store the repo's log on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
+        - XML parsing library to store and update a local subversion log file?
+
+
+- Different approach
+    - https://kevin.deldycke.com/2012/how-to-create-local-copy-svn-repository
+
+    - Create an empty local SVN repository:
+        rm -rf ./svn-repo
+        svnadmin create ./svn-repo
+        sed -i 's/# password-db = passwd/password-db = passwd/' ./svn-repo/conf/svnserve.conf
+        echo "kevin = kevin" >> ./svn-repo/conf/passwd
+        kill `ps -ef | grep svnserve | grep -v grep | awk '{print $2}'`
+        svnserve --daemon --listen-port 3690 --root ./svn-repo
+
+    - Give the synchronization utility permission our local repository:
+        echo "#!/bin/sh" > ./svn-repo/hooks/pre-revprop-change
+        chmod 755 ./svn-repo/hooks/pre-revprop-change
+
+    - Initialize the synchronization between the remote server (https://svn.example.com/svn/internal-project) and the local SVN (svn://localhost:3690):
+        svnsync init --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" svn://localhost:3690 https://svn.example.com/svn/internal-project
+
+    - Once all of this configuration is done, we can start dumping the content of the remote repository to our local copy:
+        svnsync --non-interactive --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" sync svn://localhost:3690
+
+
+
 - repos-to-convert.yaml
 
-    - Finish parsing the new repos-to-convert format, so repo conversion jobs can succeed
-
-    - Move the config schema to a separate YAML file, bake it into image, read it into Context on container startup, and provide for each field:
+    - Move the config validation schema to a separate YAML file, bake it into image, read it into Context on container startup, and provide for each field:
         - Name
         - Description
         - Valid parents (global / server / repo)
@@ -13,8 +136,6 @@
         - Usage
         - Examples
         - Default values
-
-    - Make `repos_to_convert_fields` a part of Context, so the `sanitize_repos_to_convert` function can save it, to make it available to `check_required_fields`
 
     - Create server-specific concurrency semaphore from repos-to-convert value, if present
 
@@ -58,17 +179,6 @@
             - Can change without restarting the container
 
 - SVN
-    - `svn log` commands
-        - longest commands which seem to be timing out and causing issues are the svn log commands, which just return commit metadata
-        - these commands may be duplicative
-        - We may be able to make the conversion process much smoother if we can use fewer of these log commands
-        - Keep an svn log file in a .git/sourcegraph directory in each repo
-        - When to run the next svn log file? When the last commit ID number in the svn log file has been converted
-        - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file cache?
-        - Do we need to keep a log file of svn commands, svn server URL, repo name, execution times, response codes, response size?
-        - Run git svn log --xml to store the repo's log on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
-        - XML parsing library to store and update a local subversion log file?
-
     - Try to add the batch size to the svn log command to speed it up
     - SVN commands hanging
         - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
@@ -79,26 +189,10 @@
     - Test layout tags and branches as lists / arrays
     - If list of repos is blank in repos-to-convert, try and parse the list from the server?
 
-- Process management
-    - Refactor cmd.subprocess_run() more similar to def convert_repos.conversion_wrapper()
-    - Find a way to get the run time (clock time) of a process once its complete / succeeded / failed
-```log
-2025-06-20; 06:46:14.315469; 96d41ad; ed2e81648d30; run 2; DEBUG; pid 117; succeeded; subprocess_to_run Popen object: psutil.Popen(pid=117, name='svn', status='terminated', started='06:46:12'); process_dict: {'ppid': 108, 'name': 'svn', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/crunch/site', '--limit', '2', '--revision', '1449307:HEAD'], 'status': 'running', 'num_fds': 4, 'cpu_times': pcputimes(user=0.0, system=0.0, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_percent': 0.01071397007889333, 'open_files': []}; std_out: ['<?xml version="1.0" encoding="UTF-8"?>', '<log>', '<logentry', '   revision="1449311">', '</logentry>', '<logentry', '   revision="1449347">', '</logentry>', '</log>'];
-```
-    - Found the repo-converter container dead after 691 runs, with no evidence as to why it died in the container logs
-        - Next time this happens, run podman inspect <container ID>, and review state info
-        - Try to get all the logs / events from the container / pod, to find why it died
-        - How to have the container emit a message while it's dying?
+
     - Need to integrate subprocess methods together
         - State tracking, in ctx.child_procs = {}
-        - Cleanup of zombie processes
         - Clean up of process state
-    - Learn more about multiprocessing pools
-    - Library to cleanup zombie processes, or how does Amp suggest we manage zombies?
-    - Is psutils necessary?
-        - May not have had a recent release, may need to replace it
-        - Requires adding gcc to the Docker image build, which adds ~4 minutes to the build time, and doubles the image size
-        - It would be handy if there was a workaround without it, but multiprocessing.active_children() doesn't join the intermediate processes that Python forks
     - Add to the process status check and cleanup function to
         - get the last lines of stdout from a running process,
         - instead of just wait with a timeout of 0.1,
@@ -211,31 +305,10 @@ version:
         - src serve-git and repo-converter both run as root, which is not ideal
         - Need to create a new user on the host, add it to the host's sourcegraph group, get the UID, and configure the runAs user for the containers with this UID
 
-- Logging
-    - Log a repo status update table?
-        - Repo name
-        - URL
-        - Status (up to date / out of date)
-        - Last run's status (success / fail / timeout)
-        - Progress (% of commits)
-        - Commits converted
-        - Commits remaining
-        - Total commits
-        - Local commit
-        - Remote commit
-        - Size on disk
-    - Find a way to output a whole stack trace for each ERROR (and higher) log event
-    - Switch to structured (i.e. JSON) logs?
-    - Log structure to include file / line number, module / function names
-    - Find a tool to search / filter through logs
-    - Log levels
-        - proc events in DEBUG logs make DEBUG level logging too noisy
-        - Increase log levels of everything else?
-        - Create a new lower log level named proc?
-    - Debug log the list of servers and repos found in config file at the start of each run, so we can see it in the last ~1k log lines?
-
 - Add git-to-p4 converter
     - Run it in MSP, to build up our Perforce test depots from public OSS repos
+
+- Switch zombie process cleanup / running process checker to the same logic as concurrency_monitor, in its own thread, on its own interval?
 
 - Git clone
     - SSH clone
@@ -266,3 +339,15 @@ version:
 
     - Decent example of converting commit messages
         - https://github.com/seantis/git-svn-trac/blob/master/git-svn-trac.py
+
+# Context Managers
+```python
+# Git context automatically captured for all logs in this block
+with git_operation_context("/tmp/repos/acme-corp/main", "sync"):
+    log(ctx, "Checking for updates", "DEBUG")  # Auto-includes git metadata
+
+    # Command context automatically captured
+    with command_execution_context("git", ["fetch", "origin"]):
+        result = run_git_command(...)  # Auto-includes command metadata
+        log(ctx, "Fetch completed", "INFO")
+```

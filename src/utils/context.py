@@ -7,6 +7,9 @@
 # Import Python standard modules
 from datetime import datetime
 import os
+import psutil
+import time
+
 
 class Context:
     """
@@ -14,24 +17,78 @@ class Context:
     Encapsulates shared state that needs to be passed between different parts of the application.
     """
 
-    # repos-to-convert.yaml file contents
-    repos = {}
+    ### Class attributes
 
-    # Child process tracking
+    ## Static / empty
+
+    # Child process tracking for convert_repos.py module's function calls
+    active_repo_conversion_processes = []
+
+    # Child process tracking for cmd.py module's external commands
     child_procs = {}
 
-    # Set of secrets to redact in logs
-    secrets = set()
-
     # Run count
-    run_count = 0
+    cycle = 0
+
+    # Shutdown flag for graceful termination
+    shutdown_flag = False
 
     # Namespace for our metadata in git repo config files
     git_config_namespace = "repo-converter"
 
-    # Container metadata
-    container_id = os.uname().nodename
-    start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Attributes we'd like to log for each process
+    psutils_process_attributes_to_fetch = [
+        'cmdline',
+        'cpu_percent',
+        'cpu_times',
+        'create_time', # Seconds since Epoch, need to convert to datetime
+        'exe',
+        'io_counters',
+        'memory_full_info',
+        # 'memory_maps', # May be useful for deeper debugging, but is quite noisy when not needed
+        'memory_percent',
+        'net_connections',
+        'num_fds',
+        'num_threads',
+        'open_files',
+        'pid',
+        'ppid',
+        'status',
+        'threads',
+    ]
+
+    # repos-to-convert.yaml file contents
+    repos = {}
+
+    # Space to store structure log information for repo sync jobs
+    job = {}
+
+    # Set of secrets to redact in logs
+    secrets = set()
+
+    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
+    # TODO: Add more field names for more repo types as needed in repos-to-convert.yaml
+    url_fields = [
+        "repo-url",
+        "repo-parent-url",
+        "svn-repo-code-root",
+    ]
+
+
+    ## Set on container startup
+
+    # Container metadata (set per-instance in __init__)
+    container_id = None
+    env_vars = None
+    resuid = None
+    start_datetime = None
+    start_timestamp = None
+
+    # Track concurrency state in the context object
+    concurrency_manager = None
+
+
+    ## Class member functions
 
 
     def __init__(self, env_vars):
@@ -42,14 +99,17 @@ class Context:
             env_vars: dict of environment variables from the config.load_env_vars() function
         """
 
-        # Environment variables
+        # Store environment variables from context initialization call
         self.env_vars = env_vars
 
+        # Set container metadata (per-instance, not shared across instances)
+        self.container_id = os.uname().nodename
+        self.resuid = os.getresuid()
+        self.start_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.start_timestamp = time.time()
 
-    def increment_run_count(self):
-        """Increment the run counter and return the new count."""
-        self.run_count += 1
-        return self.run_count
+        # Get the list of proc attributes from the psutils library, and initialize psutils_process_attributes_to_fetch
+        self.initialize_process_attributes_to_fetch()
 
 
     def add_secrets(self, new_secrets):
@@ -65,26 +125,6 @@ class Context:
             self.secrets.add(new_secrets)
 
 
-    def update_repos(self, repos_dict):
-        """
-        Update the repositories to convert dictionary.
-
-        Args:
-            repos_dict (dict): Dictionary of repositories to convert
-        """
-        self.repos_to_convert_dict = repos_dict
-
-
-    def get_run_log_string(self):
-        """
-        Generate a standardized log string with container and run information.
-
-        Returns:
-            str: Formatted log string with container metadata
-        """
-        return f"container ID: {self.container_id}; container running since {self.start_datetime}; with env vars: {str(self.env_vars)}"
-
-
     def get_env_var(self, key, default=None):
         """
         Get an environment variable value with optional default.
@@ -97,3 +137,31 @@ class Context:
             Environment variable value or default
         """
         return self.env_vars.get(key, default)
+
+
+    def increment_cycle(self):
+        """Increment the run counter and return the new count."""
+        self.cycle += 1
+        return self.cycle
+
+
+    def initialize_process_attributes_to_fetch(self):
+        """
+        Of the psutils Process object attributes we'd like to fetch, which of them are available in the current version of the psutil library?
+        """
+
+        psutil_attributes = list(psutil.Process().as_dict().keys())
+
+        for attribute in self.psutils_process_attributes_to_fetch:
+            if attribute not in psutil_attributes:
+                self.psutils_process_attributes_to_fetch.remove(attribute)
+
+
+    def update_repos(self, repos_dict):
+        """
+        Update the repositories to convert dictionary.
+
+        Args:
+            repos_dict (dict): Dictionary of repositories to convert
+        """
+        self.repos_to_convert_dict = repos_dict
