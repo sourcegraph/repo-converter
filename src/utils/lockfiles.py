@@ -11,11 +11,14 @@ import os
 import subprocess
 
 
-def clear_lock_files(ctx: Context, psutils_process_dict) -> bool:
+def clear_lock_files(ctx: Context) -> bool:
+    """
+    Check for the most common lockfiles and try to remove them, when a repo clone job fails
+    """
 
-    args                        = psutils_process_dict['args']
-    repo_path                   = args[2] # [ "git", "-C", local_repo_path, "gc" ]
-    return_value                = False
+    repo_path       = ctx.job["job"]["local_repo_path"]
+    return_value    = False
+
     list_of_command_and_lock_file_path_tuples = [
         ("git garbage collection"       , ".git/gc.pid"                                     ), # fatal: gc is already running on machine '75c377aedbaf' pid 3700 (use --force if not)
         ("git svn fetch git-svn"        , ".git/svn/refs/remotes/git-svn/index.lock"        ), # fatal: Unable to create '/sourcegraph/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/git-svn/index.lock': File exists.
@@ -23,31 +26,9 @@ def clear_lock_files(ctx: Context, psutils_process_dict) -> bool:
         ("svn config"                   , ".git/svn/.metadata.lock"                         ), # error: could not lock config file .git/svn/.metadata: File exists config svn-remote.svn.branches-maxRev 125551: command returned error: 255
     ]
 
-    try:
+    for command, lock_file in list_of_command_and_lock_file_path_tuples:
 
-        # If the cmdline is a list of strings
-        psutils_process_command = " ".join(psutils_process_dict["cmdline"])
-
-    except TypeError as exception:
-
-        # If the cmdline is a single string
-        # TypeError: can only join an iterable
-        psutils_process_command = psutils_process_dict["cmdline"]
-
-    except KeyError:
-
-        # KeyError: 'cmdline'
-        # psutils_process_dict doesn't have an attribute cmdline??
-        # TODO: Review the calling code to see if this is a result of the recent concurrency work
-        log(ctx, f"Failed to check for lock files for process; args: {args}; dict: {psutils_process_dict}", "error")
-        return False
-
-    pid = psutils_process_dict["pid"]
-
-    for lock_file in list_of_command_and_lock_file_path_tuples:
-
-        command = lock_file[0]
-        lock_file_path = f"{repo_path}/{lock_file[1]}"
+        lock_file_path = f"{repo_path}/{lock_file}"
 
         if os.path.exists(lock_file_path):
 
@@ -63,7 +44,7 @@ def clear_lock_files(ctx: Context, psutils_process_dict) -> bool:
                 except UnicodeDecodeError as exception:
                     lock_file_content = exception
 
-                log(ctx, f"pid {pid} failed; {command} failed to start due to finding a lock file in the repo at {lock_file_path}, but no other process is running with {psutils_process_command}; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
+                log(ctx, f"Process failed to start due to a lock file in the repo at {lock_file_path}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
                 cmd_rm_lock_file = ["rm", "-f", lock_file_path]
                 cmd.run_subprocess(ctx, cmd_rm_lock_file, name="cmd_rm_lock_file")
@@ -71,6 +52,6 @@ def clear_lock_files(ctx: Context, psutils_process_dict) -> bool:
                 return_value = True
 
             except subprocess.CalledProcessError as exception:
-                log(ctx, f"Failed to rm -f lock file at {lock_file_path} with exception: {type(exception)}, {exception.args}, {exception}", "error")
+                log(ctx, f"Failed to delete lock file at {lock_file_path} with exception: {type(exception)}, {exception.args}, {exception}", "error")
 
     return return_value

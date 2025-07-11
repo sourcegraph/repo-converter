@@ -307,7 +307,7 @@ def clone_svn_repo(ctx: Context) -> None:
 
     # Get last changed revision for this repo
     if "Last Changed Rev: " in svn_info_output_string:
-        last_changed_rev = svn_info_output_string.split("Last Changed Rev: ")[1].split(" ")[0]
+        last_changed_rev = int(svn_info_output_string.split("Last Changed Rev: ")[1].split(" ")[0])
         ctx.job["job"]["last_changed_rev"] = int(last_changed_rev)
     else:
         log(ctx, f"'Last Changed Rev:' not found in svn info output: {svn_info_output_string}", "error")
@@ -319,11 +319,11 @@ def clone_svn_repo(ctx: Context) -> None:
 
         #  TypeError: 'NoneType' object is not subscriptable
         try:
-            previous_batch_end_revision = cmd.run_subprocess(ctx, cmd_git_get_batch_end_revision, name="cmd_git_get_batch_end_revision")["output"][0]
+            previous_batch_end_revision = int(cmd.run_subprocess(ctx, cmd_git_get_batch_end_revision, name="cmd_git_get_batch_end_revision")["output"][0])
         except Exception as exception:
-            previous_batch_end_revision = "1"
+            previous_batch_end_revision = 1
 
-        ctx.job["job"]["local_rev"] = previous_batch_end_revision
+        ctx.job["job"]["local_rev"] = int(previous_batch_end_revision)
 
         if previous_batch_end_revision == last_changed_rev:
 
