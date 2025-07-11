@@ -540,13 +540,46 @@ def clone_svn_repo(ctx: Context) -> None:
 
 
     # TODO: Find more effective ways to validate that the git svn fetch succeeded
+    git_repository_state_valid, git_repository_state_message = validate_git_repository_state(ctx, local_repo_path)
+    log(ctx, f"validate_git_repository_state result: {git_repository_state_valid}; message: {git_repository_state_message}", "debug")
+
+    revision_range_valid, revision_range_message = validate_revision_range(ctx, local_repo_path)
+    log(ctx, f"validate_revision_range result: {revision_range_valid}; message: {revision_range_message}", "debug")
+
+
 
     error_messages = [
+        # Network/Connection errors
         "Can't create session",
         "Unable to connect to a repository at URL",
-        "Error running context",
         "Connection refused",
+        "Connection timed out",
+        "SSL handshake failed",
+
+        # Authentication errors
+        "Authentication failed",
+        "Authorization failed",
+        "Invalid credentials",
+
+        # Repository errors
+        "Error running context",
+        "Repository not found",
+        "Path not found",
+        "Invalid repository URL",
+
+        # Git-specific errors
+        "fatal:",
+        "error:",
+        "abort:",
+        "Permission denied",
+        "No space left on device",
+
+        # SVN-specific errors
+        "svn: E",  # SVN error codes start with E
+        "Working copy locked",
+        "Repository is locked",
     ]
+
     success = True
 
     for error_message in error_messages:
@@ -583,3 +616,155 @@ def clone_svn_repo(ctx: Context) -> None:
 
 
     # TODO: Log a summary event
+
+
+
+# def validate_commit_count(ctx: Context, local_repo_path: str, expected_count: int) -> tuple[bool, str]:
+#     """
+#     Validate that the expected number of commits were converted
+#     Bad idea, because it depends on counting all revs in the default branch's history,
+#     too slow
+#     too kludgy to replicate for non-default branches
+#     """
+
+#     cmd_git_log_count = ["git", "-C", local_repo_path, "rev-list", "--count", "HEAD"]
+#     result = cmd.run_subprocess(ctx, cmd_git_log_count, name="git_log_count")
+
+#     if result["return_code"] == 0:
+
+#         actual_count = int(result["output"][0])
+
+#         if actual_count >= expected_count:
+#             return True, f"Commit count validation passed: expected {expected_count}, got {actual_count} commits"
+#         else:
+#             return False, f"Commit count mismatch: expected {expected_count}, got {actual_count} commits"
+
+#     return False, "Failed to get commit count"
+
+
+# def validate_branches_and_tags(ctx: Context, local_repo_path: str, expected_branches=None, expected_tags=None):
+#     """
+#     Validate that branches and tags were properly created
+
+#     Bad idea, we don't necessarily know which / how many branches / tags will come out of the repo yet
+#     """
+#     issues = []
+
+#     # Check branches
+#     if expected_branches:
+#         cmd_git_branches = ["git", "-C", local_repo_path, "branch", "-r"]
+#         result = cmd.run_subprocess(ctx, cmd_git_branches, quiet=True, name="git_branches")
+
+#         if result["return_code"] == 0:
+#             actual_branches = [b.strip() for b in result["output"]]
+#             missing_branches = [b for b in expected_branches if b not in str(actual_branches)]
+#             if missing_branches:
+#                 issues.append(f"Missing branches: {missing_branches}")
+
+#     # Check tags
+#     if expected_tags:
+#         cmd_git_tags = ["git", "-C", local_repo_path, "tag", "-l"]
+#         result = cmd.run_subprocess(ctx, cmd_git_tags, quiet=True, name="git_tags")
+
+#         if result["return_code"] == 0:
+#             actual_tags = [t.strip() for t in result["output"]]
+#             missing_tags = [t for t in expected_tags if t not in actual_tags]
+#             if missing_tags:
+#                 issues.append(f"Missing tags: {missing_tags}")
+
+#     if issues:
+#         return False, f"Branch/tag validation failed: {'; '.join(issues)}"
+
+#     return True, "Branch and tag validation passed"
+
+
+# def check_conversion_success(ctx, local_repo_path, batch_start_revision, batch_end_revision, git_svn_fetch_result):
+#     """
+#     Comprehensive validation of SVN to Git conversion success
+
+#     Not a bad idea, just middleware to execute many other validation functions
+#     """
+#     validation_results = []
+#     overall_success = True
+
+#     # Basic validation (existing logic)
+#     basic_success, basic_message = validate_basic_errors(git_svn_fetch_result)
+#     validation_results.append(("basic_validation", basic_success, basic_message))
+
+#     # Repository state validation
+#     repo_success, repo_message = validate_git_repository_state(ctx, local_repo_path)
+#     validation_results.append(("repository_state", repo_success, repo_message))
+
+#     # Commit count validation
+#     if batch_start_revision and batch_end_revision:
+#         commit_success, commit_message = validate_commit_count(ctx, local_repo_path, batch_start_revision, batch_end_revision)
+#         validation_results.append(("commit_count", commit_success, commit_message))
+
+#         # Revision range validation
+#         rev_success, rev_message = validate_revision_range(ctx, local_repo_path, batch_end_revision)
+#         validation_results.append(("revision_range", rev_success, rev_message))
+
+#     # Log all validation results
+#     for validation_type, success, message in validation_results:
+#         log_level = "info" if success else "error"
+#         log(ctx, f"{validation_type}: {message}", log_level)
+
+#         if not success:
+#             overall_success = False
+
+#     return overall_success, validation_results
+
+
+def validate_git_repository_state(ctx: Context, local_repo_path: str) -> tuple[bool, str]:
+    """
+    Validate that the Git repository is in a valid state
+    """
+
+    checks = []
+
+    # Check if git repo is valid
+    cmd_git_status = ["git", "-C", local_repo_path, "status", "--porcelain"]
+    result = cmd.run_subprocess(ctx, cmd_git_status, quiet=True, name="git_status")
+    checks.append(("git_status", result["return_code"] == 0))
+
+    # Check if HEAD exists
+    cmd_git_head = ["git", "-C", local_repo_path, "rev-parse", "HEAD"]
+    result = cmd.run_subprocess(ctx, cmd_git_head, quiet=True, name="git_head")
+    checks.append(("git_head", result["return_code"] == 0))
+
+    # Check if git-svn metadata exists
+    cmd_git_svn_info = ["git", "-C", local_repo_path, "svn", "info"]
+    result = cmd.run_subprocess(ctx, cmd_git_svn_info, quiet=True, name="git_svn_info")
+    checks.append(("git_svn_info", result["return_code"] == 0))
+
+    failed_checks = [name for name, passed in checks if not passed]
+
+    if failed_checks:
+        return False, f"Repository state validation failed: {failed_checks}"
+
+    return True, "Repository state validation passed"
+
+
+def validate_revision_range(ctx: Context, local_repo_path: str, expected_end_rev: int) -> tuple[bool, str]:
+    """
+    Validate that the expected revision range was converted
+
+    git log --all
+
+    """
+
+    cmd_git_log_svn_rev = ["git", "-C", local_repo_path, "log", "--grep", f"@{expected_end_rev}", "--oneline"]
+    result = cmd.run_subprocess(ctx, cmd_git_log_svn_rev, quiet=True, name="git_log_svn_rev")
+
+    if result["return_code"] == 0 and result["output"]:
+        return True, f"End revision {expected_end_rev} found in Git log"
+
+    # Alternative: Check git-svn metadata
+    cmd_git_svn_find_rev = ["git", "-C", local_repo_path, "svn", "find-rev", f"r{expected_end_rev}"]
+    result = cmd.run_subprocess(ctx, cmd_git_svn_find_rev, quiet=True, name="git_svn_find_rev")
+
+    if result["return_code"] == 0 and result["output"]:
+        return True, f"End revision {expected_end_rev} found via git-svn"
+
+    return False, f"End revision {expected_end_rev} not found in converted repository"
+
