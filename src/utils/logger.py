@@ -81,8 +81,8 @@ def _custom_json_renderer(logger, method_name, event_dict):
         # Details in structured metadata, which we want higher than all unlisted metadata
         "concurrency",
         "env_vars",
-        "job",
         "process",
+        "job",
         "psutils",
         "repos",
 

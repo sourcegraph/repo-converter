@@ -46,7 +46,8 @@ def _get_and_validate_local_repo_path(
     if not valid_repo_path:
         log(ctx, f"Not a valid repo path: {local_repo_path}", "debug")
     else:
-        log(ctx, f"Valid repo path: {local_repo_path}", "debug")
+        # log(ctx, f"Valid repo path: {local_repo_path}", "debug")
+        pass
 
     # If a sub_dir was provided, append it
     if sub_dir:
@@ -254,7 +255,7 @@ def garbage_collection(ctx: Context, local_repo_path:str) -> None:
     cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, name="cmd_git_garbage_collection")
 
 
-def get_config(ctx: Context, local_repo_path: str, key: str) -> str:
+def get_config(ctx: Context, local_repo_path: str, key: str) -> list[str]:
     """
     A more generic method to get a config value from a repo's config file
     """
@@ -266,10 +267,10 @@ def get_config(ctx: Context, local_repo_path: str, key: str) -> str:
     cmd_git_get_config = ["git", "-C", local_repo_path, "config", "--get", key]
 
     try:
-        value = cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config").get("output","")
+        value = list(cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config").get("output",""))
     except:
         log(ctx, "git.get_config failed", "warning")
-        value = None
+        value = []
 
     return value
 

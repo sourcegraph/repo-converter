@@ -58,7 +58,7 @@ def convert(ctx: Context) -> None:
         return
 
     # Get revision information from the svn_info output
-    remote_last_changed_rev = _get_remote_last_changed_rev_from_svn_info(ctx, svn_info, git_commands)
+    remote_last_changed_rev = _get_remote_last_changed_rev_from_svn_info(ctx, svn_info)
 
     # If the svn_info output doesn't include the last changed rev, there's probably a server problem
     if not remote_last_changed_rev:
@@ -97,7 +97,7 @@ def convert(ctx: Context) -> None:
 
     # Execute the fetch
     ### EXTERNAL COMMAND: git svn fetch ###
-    _execute_git_svn_fetch(ctx, config, git_commands, batch_rev)
+    _execute_git_svn_fetch(ctx, config, git_commands)
 
     # Cleanup and exit
     _cleanup(ctx, config, git_commands)
@@ -353,7 +353,7 @@ def _test_connection_and_credentials(ctx: Context, svn_commands: dict) -> dict:
     """
 
     # Prepare variables
-    cmd_svn_info = svn_commands['cmd_svn_info'],
+    cmd_svn_info = svn_commands['cmd_svn_info']
     max_retries = ctx.env_vars["MAX_RETRIES"]
     password = svn_commands.get("password","")
     retries_attempted = 0
@@ -456,6 +456,7 @@ def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict
         # cmd_git_get_svn_url_output = cmd.run_subprocess(ctx, git_commands['cmd_git_get_svn_url'], quiet=True, name="cmd_git_get_svn_url_output")
 
     svn_url = git.get_config(ctx, local_repo_path, "svn-remote.svn.url")
+    svn_url = " ".join(svn_url)
 
     if svn_url and svn_url in svn_remote_repo_code_root_url:
         repo_create_or_update = "update"
@@ -572,9 +573,14 @@ def _configure_git_repo(ctx: Context, config: dict, git_commands: dict) -> None:
     ]
 
     for git_config_key, git_config_value in git_config_paths:
+
         if git_config_value:
+
             # Check if these configs are already set the same before trying to set them
+
+            # TODO: Test this
             config_already_set = git.get_config(ctx, local_repo_path, git_config_key)
+            config_already_set = " ".join(config_already_set)
             config_already_set_matches = config_already_set == git_config_value
             path_exists = os.path.exists(git_config_value)
 
@@ -607,7 +613,9 @@ def _check_if_repo_already_up_to_date(ctx: Context, config: dict) -> bool:
     remote_last_changed_rev = ctx.job["job"].get("remote_last_changed_rev","")
     local_repo_path = config['local_repo_path']
 
-    local_last_batch_end_revision = int(git.get_config(ctx, local_repo_path, f"{ctx.git_config_namespace}.batch-end-revision"))
+    # get_config() returns a list of strings, cast it into an int
+    local_last_batch_end_revision = git.get_config(ctx, local_repo_path, f"{ctx.git_config_namespace}.batch-end-revision")
+    local_last_batch_end_revision = int(" ".join(local_last_batch_end_revision))
 
     if local_last_batch_end_revision:
 
@@ -734,12 +742,12 @@ def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict, batch
     git.deduplicate_git_config_file(ctx, local_repo_path)
 
     # Start the fetch
-    log(ctx, f"fetching with {" ".join(cmd_git_svn_fetch)}", "info")
+    log(ctx, f"fetching with {' '.join(cmd_git_svn_fetch)}", "info")
     git_svn_fetch_result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name="cmd_git_svn_fetch")
 
     # Validate repository state
-    git_repository_state_valid, git_repository_state_message = _validate_git_repository_state(ctx, local_repo_path)
-    log(ctx, f"validate_git_repository_state result: {git_repository_state_valid}; message: {git_repository_state_message}", "debug")
+    # git_repository_state_valid, git_repository_state_message = _validate_git_repository_state(ctx, local_repo_path)
+    # log(ctx, f"validate_git_repository_state result: {git_repository_state_valid}; message: {git_repository_state_message}", "debug")
 
     # Check for errors
     error_messages = [
@@ -761,9 +769,9 @@ def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict, batch
                 ctx.job["job"]["reason"] += f" {error_message}"
 
     # If the fetch succeeded and we have a this_batch_end_revision
-    if git_svn_fetch_result["return_code"] == 0 and this_batch_end_revision:
+    if git_svn_fetch_result["return_code"] == 0 and batch_end_revision:
         # Store the ending revision number
-        cmd_git_set_batch_end_revision_with_value = git_commands['cmd_git_set_batch_end_revision'] + [str(this_batch_end_revision)]
+        cmd_git_set_batch_end_revision_with_value = git_commands['cmd_git_set_batch_end_revision'] + [str(batch_end_revision)]
         cmd.run_subprocess(ctx, cmd_git_set_batch_end_revision_with_value, name="cmd_git_set_batch_end_revision_with_value")
         log(ctx, f"git svn fetch complete", "info")
     else:
