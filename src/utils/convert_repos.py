@@ -11,7 +11,6 @@
 # The zombie process cleanup routine in cmd.py should cleanup these processes as well
 
 # Import repo-converter modules
-from multiprocessing import process
 from source_repo import svn
 from utils.concurrency_manager import ConcurrencyManager
 from utils.context import Context

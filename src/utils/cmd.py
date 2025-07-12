@@ -338,7 +338,6 @@ def run_subprocess(
         ctx: Context,
         args: Union[str, List[str]],
         password: Optional[str] = None,
-        echo_password: Optional[bool] = None,
         quiet: Optional[bool] = False,
         name: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -446,14 +445,11 @@ def run_subprocess(
         if not quiet:
             log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
-        # If echo_password is provided to this function,
+        # If password is provided to this function,
         # feed the password string into the subprocess' stdin pipe;
         # password could be an empty or arbitrary string as a workaround if a process needed it
         # communicate() also waits for the process to finish
-        if echo_password:
-            output = sub_process.communicate(password)
-        else:
-            output = sub_process.communicate()
+        output = sub_process.communicate(password)
 
         # Get the process' stdout and/or stderr
         # Have to do this inside the try / except block, in case the output isn't valid
