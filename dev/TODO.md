@@ -31,16 +31,12 @@
     - Decorators and context managers for logging context?
 
 - Log a repo status event at the end of the svn.py module
-    - Repo_key
     - Status (up to date / out of date)
     - Last run's status (success / fail)
     - Progress (% of revs converted)
     - Revs converted
     - Revs remaining
     - Total revs
-    - Local current rev
-    - Remote current rev
-    - Converted repo's size on disk
 
 - Amp's suggestion
     - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
@@ -56,9 +52,9 @@
 - `svn log` commands
     - Longest commands, which seem to be timing out and causing issues
     - What do we use them for? Why?
-        - Count all revs remaining to convert
-        - Get first rev number to start this batch
-        - Get last  rev number to end   this batch
+        - The big one: Count all revs remaining to convert, as a progress indicator
+        - The small one: Get first and last rev numbers to start and end this batch
+        - The smallest one: Log recent commits, to visually verify a successful fetch
     - We may be able to make the conversion process much smoother if we can use fewer of these log commands
         - Keep the output revision numbers from `git svn log --xml` commands in a file on disk
         - Append to this file when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
@@ -77,7 +73,6 @@
 
 ### Performance
 
-- Fix batch processing logic
 - SVN commands hanging
     - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
 
