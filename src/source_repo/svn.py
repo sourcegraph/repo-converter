@@ -39,14 +39,14 @@ def convert(ctx: Context) -> None:
 
     # Extract repo conversion job config values from the repos list in ctx,
     # and set default values for required but undefined configs
-    config = _extract_repo_config_and_set_default_values(ctx)
+    _extract_repo_config_and_set_default_values(ctx)
 
     # Build sets of repeatable commands to use each external CLI
-    svn_commands = _build_svn_cli_commands(ctx, config)
-    git_commands = _build_git_cli_commands(ctx, config)
+    svn_commands = _build_svn_cli_commands(ctx)
+    git_commands = _build_git_cli_commands(ctx)
 
     # Check if a repo cloning job is already in progress
-    if _check_if_conversion_is_already_running_in_another_process(ctx, config, git_commands, svn_commands):
+    if _check_if_conversion_is_already_running_in_another_process(ctx, git_commands, svn_commands):
         return
 
     # Test connection to the SVN server
@@ -67,45 +67,45 @@ def convert(ctx: Context) -> None:
     # Check if the local repo exists and is valid
     # or doesn't exist / is invalid,
     # thus we need to create / recreate it
-    if not _check_if_repo_exists_locally(ctx, config, git_commands):
+    if not _check_if_repo_exists_locally(ctx, git_commands):
 
         # If the repo doesn't exist locally, initialize it
-        _initialize_git_repo(ctx, config, git_commands)
+        _initialize_git_repo(ctx, git_commands)
 
      # Update repo config
-    _configure_git_repo(ctx, config, git_commands)
+    _configure_git_repo(ctx, git_commands)
 
     # Check if the local repo is already up to date
-    if _check_if_repo_already_up_to_date(ctx, config):
+    if _check_if_repo_already_up_to_date(ctx):
 
         # If the repo already exists, and is already up to date, then exit early
         # TODO: Set ctx.job attributes for repo state / up to date
 
         ### EXTERNAL COMMAND: svn log ###
-        _log_recent_commits(ctx, config, git_commands, svn_commands)
-        _cleanup(ctx, config, git_commands)
+        _log_recent_commits(ctx, git_commands, svn_commands)
+        _cleanup(ctx, git_commands)
         return
 
     ### EXTERNAL COMMAND: svn log ###
     # This is the big one, to count all revs remaining
-    _log_number_of_revs_out_of_date(ctx, config, svn_commands)
+    _log_number_of_revs_out_of_date(ctx, svn_commands)
 
     # Calculate revision range for this fetch
     ### EXTERNAL COMMAND: svn log --limit batch-size ###
-    if not _calculate_batch_revisions(ctx, svn_commands, config):
+    if not _calculate_batch_revisions(ctx, svn_commands):
         return
 
     # Execute the fetch
     ### EXTERNAL COMMAND: git svn fetch ###
-    _execute_git_svn_fetch(ctx, config, git_commands)
+    _execute_git_svn_fetch(ctx, git_commands)
 
     # Cleanup and exit
-    _cleanup(ctx, config, git_commands)
+    _cleanup(ctx, git_commands)
 
 
-def _extract_repo_config_and_set_default_values(ctx: Context) -> dict:
+def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
     """
-    Extract repo configuration parameters from the Context object
+    Extract repo configuration parameters from the Context object and set defaults
     """
 
     # Get the repo key from the job context
@@ -114,64 +114,62 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> dict:
     # Short name for repo config dict
     repo_config = ctx.repos[repo_key]
 
-    # Debug logging for the config values we have received for this repo
-    ctx.job["job"]["repo_config"] = repo_config
-    log(ctx, "Repo config", "debug")
-
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
-    config = {
-        'authors_file_path'        : repo_config.get("authors-file-path",        None),
-        'authors_prog_path'        : repo_config.get("authors-prog-path",        None),
-        'bare_clone'               : repo_config.get("bare-clone",               True),
-        'branches'                 : repo_config.get("branches",                 None),
-        'code_host_name'           : repo_config.get("code-host-name",           None),
-        'destination_git_repo_name': repo_config.get("destination-git-repo-name",None),
-        'fetch_batch_size'         : repo_config.get("fetch-batch-size",         100),
-        'git_default_branch'       : repo_config.get("git-default-branch",       "trunk"),
-        'git_ignore_file_path'     : repo_config.get("git-ignore-file-path",     None),
-        'git_org_name'             : repo_config.get("git-org-name",             None),
-        'layout'                   : repo_config.get("svn-layout",               None),
-        'password'                 : repo_config.get("password",                 None),
-        'repo_url'                 : repo_config.get("repo-url",                 None),
-        'repo_parent_url'          : repo_config.get("repo-parent-url",          None),
-        'source_repo_name'         : repo_config.get("source-repo-name",         None),
-        'svn_repo_code_root'       : repo_config.get("svn-repo-code-root",       None),
-        'tags'                     : repo_config.get("tags",                     None),
-        'trunk'                    : repo_config.get("trunk",                    None),
-        'username'                 : repo_config.get("username",                 None)
+    processed_config = {
+        "authors_file_path"        : repo_config.get("authors-file-path",        None),
+        "authors_prog_path"        : repo_config.get("authors-prog-path",        None),
+        "bare_clone"               : repo_config.get("bare-clone",               True),
+        "branches"                 : repo_config.get("branches",                 None),
+        "code_host_name"           : repo_config.get("code-host-name",           None),
+        "destination_git_repo_name": repo_config.get("destination-git-repo-name",None),
+        "fetch_batch_size"         : repo_config.get("fetch-batch-size",         100),
+        "git_default_branch"       : repo_config.get("git-default-branch",       "trunk"),
+        "git_ignore_file_path"     : repo_config.get("git-ignore-file-path",     None),
+        "git_org_name"             : repo_config.get("git-org-name",             None),
+        "layout"                   : repo_config.get("svn-layout",               None),
+        "password"                 : repo_config.get("password",                 None),
+        "repo_url"                 : repo_config.get("repo-url",                 None),
+        "repo_parent_url"          : repo_config.get("repo-parent-url",          None),
+        "source_repo_name"         : repo_config.get("source-repo-name",         None),
+        "svn_repo_code_root"       : repo_config.get("svn-repo-code-root",       None),
+        "tags"                     : repo_config.get("tags",                     None),
+        "trunk"                    : repo_config.get("trunk",                    None),
+        "username"                 : repo_config.get("username",                 None)
     }
 
     # Assemble the full URL to the repo code root path on the remote SVN server
     svn_remote_repo_code_root_url = ""
 
-    if config['repo_url']:
-        svn_remote_repo_code_root_url = f"{config['repo_url']}"
-    elif config['repo_parent_url']:
-        svn_remote_repo_code_root_url = f"{config['repo_parent_url']}/{config['source_repo_name']}"
+    if processed_config["repo_url"]:
+        svn_remote_repo_code_root_url = f"{processed_config['repo_url']}"
+    elif processed_config["repo_parent_url"]:
+        svn_remote_repo_code_root_url = f"{processed_config["repo_parent_url"]}/{processed_config["source_repo_name"]}"
 
-    if config['svn_repo_code_root']:
-        svn_remote_repo_code_root_url += f"/{config['svn_repo_code_root']}"
+    if processed_config["svn_repo_code_root"]:
+        svn_remote_repo_code_root_url += f"/{processed_config['svn_repo_code_root']}"
 
-    config['svn_remote_repo_code_root_url'] = svn_remote_repo_code_root_url
+    processed_config["svn_remote_repo_code_root_url"] = svn_remote_repo_code_root_url
 
     # Set local_repo_path
-    src_serve_root = ctx.env_vars['SRC_SERVE_ROOT']
-    local_repo_path = f"{src_serve_root}/{config['code_host_name']}/{config['git_org_name']}/{config['destination_git_repo_name']}"
-    config['local_repo_path'] = local_repo_path
+    src_serve_root = ctx.env_vars["SRC_SERVE_ROOT"]
+    local_repo_path = f"{src_serve_root}/{processed_config['code_host_name']}/{processed_config['git_org_name']}/{processed_config['destination_git_repo_name']}"
+    processed_config["local_repo_path"] = local_repo_path
     ctx.job["job"]["local_repo_path"] = local_repo_path
 
-    return config
+    # Update the repo_config in the context with processed values
+    ctx.job["job"]["repo_config"] = processed_config
+    log(ctx, "Repo config", "debug")
 
 
-def _build_svn_cli_commands(ctx: Context, config: dict) -> dict:
+def _build_svn_cli_commands(ctx: Context) -> dict:
     """
     Build commands for svn cli
     As lists of strings
     """
 
-    username = config['username']
-    password = config['password']
-    svn_remote_repo_code_root_url = config['svn_remote_repo_code_root_url']
+    username = ctx.job["job"]["repo_config"]["username"]
+    password = ctx.job["job"]["repo_config"]["password"]
+    svn_remote_repo_code_root_url = ctx.job["job"]["repo_config"]["svn_remote_repo_code_root_url"]
 
     # Define common command args
     arg_svn_non_interactive = ["--non-interactive"]
@@ -193,12 +191,12 @@ def _build_svn_cli_commands(ctx: Context, config: dict) -> dict:
         cmd_svn_log += arg_svn_password
 
     return {
-        'cmd_svn_info': cmd_svn_info,
-        'cmd_svn_log': cmd_svn_log,
+        "cmd_svn_info": cmd_svn_info,
+        "cmd_svn_log": cmd_svn_log,
     }
 
 
-def _build_git_cli_commands(ctx: Context, config: dict) -> dict:
+def _build_git_cli_commands(ctx: Context) -> dict:
     """
     Build commands for git cli
     As lists of strings
@@ -206,10 +204,10 @@ def _build_git_cli_commands(ctx: Context, config: dict) -> dict:
     This may be somewhat confusing, as `git svn` commands use the git cli
     """
 
-    local_repo_path = config['local_repo_path']
-    git_default_branch = config['git_default_branch']
-    svn_remote_repo_code_root_url = config['svn_remote_repo_code_root_url']
-    username = config['username']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
+    git_default_branch = ctx.job["job"]["repo_config"]["git_default_branch"]
+    svn_remote_repo_code_root_url = ctx.job["job"]["repo_config"]["svn_remote_repo_code_root_url"]
+    username = ctx.job["job"]["repo_config"]["username"]
 
     # Define common command args
     arg_batch_end_revision = [f"{ctx.git_config_namespace}.batch-end-revision"]
@@ -235,20 +233,19 @@ def _build_git_cli_commands(ctx: Context, config: dict) -> dict:
         cmd_git_svn_fetch += arg_svn_username
 
     return {
-        'cmd_git_bare_clone': cmd_git_bare_clone,
-        'cmd_git_default_branch': cmd_git_default_branch,
-        'cmd_git_garbage_collection': cmd_git_garbage_collection,
-        'cmd_git_get_batch_end_revision': cmd_git_get_batch_end_revision,
-        'cmd_git_get_svn_url': cmd_git_get_svn_url,
-        'cmd_git_set_batch_end_revision': cmd_git_set_batch_end_revision,
-        'cmd_git_svn_fetch': cmd_git_svn_fetch,
-        'cmd_git_svn_init': cmd_git_svn_init
+        "cmd_git_bare_clone": cmd_git_bare_clone,
+        "cmd_git_default_branch": cmd_git_default_branch,
+        "cmd_git_garbage_collection": cmd_git_garbage_collection,
+        "cmd_git_get_batch_end_revision": cmd_git_get_batch_end_revision,
+        "cmd_git_get_svn_url": cmd_git_get_svn_url,
+        "cmd_git_set_batch_end_revision": cmd_git_set_batch_end_revision,
+        "cmd_git_svn_fetch": cmd_git_svn_fetch,
+        "cmd_git_svn_init": cmd_git_svn_init
     }
 
 
 def _check_if_conversion_is_already_running_in_another_process(
         ctx: Context,
-        config: dict,
         git_commands: dict,
         svn_commands: dict
     ) -> bool:
@@ -262,7 +259,7 @@ def _check_if_conversion_is_already_running_in_another_process(
     and moved to the acquire_job_slot function, as it may be applicable to other repo types
     """
 
-    local_repo_path = config['local_repo_path']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
     max_retries = ctx.env_vars["MAX_RETRIES"]
     repo_key = ctx.job["job"]["repo_key"]
 
@@ -277,8 +274,8 @@ def _check_if_conversion_is_already_running_in_another_process(
             running_processes_string = " ".join(running_processes_list)
 
             # Define the list of strings we're looking for in the running processes' commands
-            cmd_git_svn_fetch_string = " ".join(git_commands['cmd_git_svn_fetch'])
-            cmd_git_garbage_collection_string = " ".join(git_commands['cmd_git_garbage_collection'])
+            cmd_git_svn_fetch_string = " ".join(git_commands["cmd_git_svn_fetch"])
+            cmd_git_garbage_collection_string = " ".join(git_commands["cmd_git_garbage_collection"])
             cmd_svn_log_string = " ".join(svn_commands["cmd_svn_log"])
             process_name = f"convert_{repo_key}"
 
@@ -353,7 +350,7 @@ def _test_connection_and_credentials(ctx: Context, svn_commands: dict) -> dict:
     """
 
     # Prepare variables
-    cmd_svn_info = svn_commands['cmd_svn_info']
+    cmd_svn_info = svn_commands["cmd_svn_info"]
     max_retries = ctx.env_vars["MAX_RETRIES"]
     password = svn_commands.get("password","")
     retries_attempted = 0
@@ -412,7 +409,7 @@ def _get_remote_last_changed_rev_from_svn_info(ctx: Context, svn_info: dict) -> 
         return False
 
 
-def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict) -> bool:
+def _check_if_repo_exists_locally(ctx: Context, git_commands: dict) -> bool:
     """
     Check if the local repo exists and we need to update it,
     or if it doesn't exist, or it's invalid, and we need to create / recreate it
@@ -440,8 +437,8 @@ def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict
 
     """
 
-    local_repo_path = config['local_repo_path']
-    svn_remote_repo_code_root_url = config['svn_remote_repo_code_root_url']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
+    svn_remote_repo_code_root_url = ctx.job["job"]["repo_config"]["svn_remote_repo_code_root_url"]
 
     # Default to create state
     # repo_create_or_update = "create"
@@ -492,20 +489,20 @@ def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict
     return repo_exists
 
 
-def _initialize_git_repo(ctx: Context, config: dict, git_commands: dict) -> None:
+def _initialize_git_repo(ctx: Context, git_commands: dict) -> None:
     """
     Initialize a new Git repository
     """
 
     # TODO: Move all the arg / command assembly to another function
 
-    local_repo_path = config['local_repo_path']
-    layout = config['layout']
-    trunk = config['trunk']
-    tags = config['tags']
-    branches = config['branches']
-    bare_clone = config['bare_clone']
-    password = config['password']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
+    layout = ctx.job["job"]["repo_config"]["layout"]
+    trunk = ctx.job["job"]["repo_config"]["trunk"]
+    tags = ctx.job["job"]["repo_config"]["tags"]
+    branches = ctx.job["job"]["repo_config"]["branches"]
+    bare_clone = ctx.job["job"]["repo_config"]["bare_clone"]
+    password = ctx.job["job"]["repo_config"]["password"]
 
     log(ctx, f"Didn't find a local clone, initializing a new local clone", "info")
 
@@ -516,7 +513,7 @@ def _initialize_git_repo(ctx: Context, config: dict, git_commands: dict) -> None
     # Created the needed dirs
     os.makedirs(local_repo_path)
 
-    cmd_git_svn_init = git_commands['cmd_git_svn_init'].copy()
+    cmd_git_svn_init = git_commands["cmd_git_svn_init"].copy()
 
     if layout:
         cmd_git_svn_init += ["--stdlayout"]
@@ -549,25 +546,25 @@ def _initialize_git_repo(ctx: Context, config: dict, git_commands: dict) -> None
 
     # Configure the bare clone
     if bare_clone:
-        cmd.run_subprocess(ctx, git_commands['cmd_git_bare_clone'], name="cmd_git_bare_clone")
+        cmd.run_subprocess(ctx, git_commands["cmd_git_bare_clone"], name="cmd_git_bare_clone")
 
     # Initialize this config with a 0 value
-    cmd_git_initialize_batch_end_revision_with_zero_value = git_commands['cmd_git_set_batch_end_revision'] + [str(0)]
+    cmd_git_initialize_batch_end_revision_with_zero_value = git_commands["cmd_git_set_batch_end_revision"] + [str(0)]
     cmd.run_subprocess(ctx, cmd_git_initialize_batch_end_revision_with_zero_value, name="cmd_git_initialize_batch_end_revision_with_zero_value")
 
 
-def _configure_git_repo(ctx: Context, config: dict, git_commands: dict) -> None:
+def _configure_git_repo(ctx: Context, git_commands: dict) -> None:
     """
     Configure Git repository settings
     """
 
-    local_repo_path = config['local_repo_path']
-    authors_file_path = config['authors_file_path']
-    authors_prog_path = config['authors_prog_path']
-    git_ignore_file_path = config['git_ignore_file_path']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
+    authors_file_path = ctx.job["job"]["repo_config"]["authors_file_path"]
+    authors_prog_path = ctx.job["job"]["repo_config"]["authors_prog_path"]
+    git_ignore_file_path = ctx.job["job"]["repo_config"]["git_ignore_file_path"]
 
     # Set the default branch local to this repo, after init
-    cmd.run_subprocess(ctx, git_commands['cmd_git_default_branch'], name="cmd_git_default_branch")
+    cmd.run_subprocess(ctx, git_commands["cmd_git_default_branch"], name="cmd_git_default_branch")
 
     # Set repo configs, as a list of tuples [(git config key, git config value),]
     git_config_paths = [
@@ -606,7 +603,7 @@ def _configure_git_repo(ctx: Context, config: dict, git_commands: dict) -> None:
             log(ctx, f".gitignore file not found at {git_ignore_file_path}, skipping copying it", "warning")
 
 
-def _check_if_repo_already_up_to_date(ctx: Context, config: dict) -> bool:
+def _check_if_repo_already_up_to_date(ctx: Context) -> bool:
     """
     Get the local_last_batch_end_revision from the local git repo
 
@@ -614,7 +611,7 @@ def _check_if_repo_already_up_to_date(ctx: Context, config: dict) -> bool:
     """
 
     remote_last_changed_rev = ctx.job["job"].get("remote_last_changed_rev","")
-    local_repo_path = config['local_repo_path']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
 
     # get_config() returns a list of strings, cast it into an int
     local_last_batch_end_revision = git.get_config(ctx, local_repo_path, f"{ctx.git_config_namespace}.batch-end-revision")
@@ -630,22 +627,22 @@ def _check_if_repo_already_up_to_date(ctx: Context, config: dict) -> bool:
         return False
 
 
-def _log_recent_commits(ctx: Context, config: dict, git_commands: dict, svn_commands: dict) -> None:
+def _log_recent_commits(ctx: Context, git_commands: dict, svn_commands: dict) -> None:
     """
     If the repo exists and is already up to date,
     run these steps to cleanup,
     then return
     """
 
-    local_repo_path = config['local_repo_path']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
 
     log_recent_commits = ctx.env_vars["LOG_RECENT_COMMITS"]
 
     if log_recent_commits > 0:
 
         # Output the n most recent commits to visually verify the local git repo is up to date with the remote repo
-        cmd_svn_log_recent_revs = svn_commands['cmd_svn_log'] + ["--limit", f"{log_recent_commits}"]
-        ctx.job["svn_log_output"] = cmd.run_subprocess(ctx, cmd_svn_log_recent_revs, config['password'], quiet=True, name="svn_log_recent_commits")["output"]
+        cmd_svn_log_recent_revs = svn_commands["cmd_svn_log"] + ["--limit", f"{log_recent_commits}"]
+        ctx.job["svn_log_output"] = cmd.run_subprocess(ctx, cmd_svn_log_recent_revs, ctx.job["job"]["repo_config"]["password"], quiet=True, name="svn_log_recent_commits")["output"]
 
         log(ctx, f"LOG_RECENT_COMMITS={log_recent_commits}", "debug")
 
@@ -653,7 +650,7 @@ def _log_recent_commits(ctx: Context, config: dict, git_commands: dict, svn_comm
         ctx.job.pop("svn_log_output")
 
 
-def _log_number_of_revs_out_of_date(ctx: Context, config: dict, svn_commands: dict) -> None:
+def _log_number_of_revs_out_of_date(ctx: Context, svn_commands: dict) -> None:
     """
     Run the svn log command to count the total number of revs out of date
 
@@ -663,13 +660,13 @@ def _log_number_of_revs_out_of_date(ctx: Context, config: dict, svn_commands: di
     local_last_batch_end_revision = ctx.job["job"]["local_last_batch_end_revision"]
 
     # Log remaining revisions info for update state
-    cmd_svn_log_remaining_revs = svn_commands['cmd_svn_log'] + ["--revision", f"{local_last_batch_end_revision}:HEAD"]
-    svn_log = cmd.run_subprocess(ctx, cmd_svn_log_remaining_revs, config['password'], name="svn_log_remaining_revs")
+    cmd_svn_log_remaining_revs = svn_commands["cmd_svn_log"] + ["--revision", f"{local_last_batch_end_revision}:HEAD"]
+    svn_log = cmd.run_subprocess(ctx, cmd_svn_log_remaining_revs, ctx.job["job"]["repo_config"]["password"], name="svn_log_remaining_revs")
 
     # Parse the output to get the number of remaining revs
     svn_log_output_string = " ".join(svn_log["output"])
     remaining_revs_count = svn_log_output_string.count("revision=")
-    fetching_batch_count = min(remaining_revs_count, config['fetch_batch_size'])
+    fetching_batch_count = min(remaining_revs_count, ctx.job["job"]["repo_config"]["fetch_batch_size"])
 
     # Log the results
     ctx.job["job"]["reason"] = "Out of date"
@@ -679,17 +676,17 @@ def _log_number_of_revs_out_of_date(ctx: Context, config: dict, svn_commands: di
     log(ctx, f"Out of date; updating", "info")
 
 
-def _calculate_batch_revisions(ctx: Context, svn_commands: dict, config: dict) -> dict:
+def _calculate_batch_revisions(ctx: Context, svn_commands: dict) -> dict:
     """
     Run the svn log command to calculate batch start and end revisions for fetching
 
     TODO: Eliminate this, or make it much more efficient
     """
 
-    cmd_svn_log = svn_commands['cmd_svn_log']
-    fetch_batch_size = config['fetch_batch_size']
+    cmd_svn_log = svn_commands["cmd_svn_log"]
+    fetch_batch_size = ctx.job["job"]["repo_config"]["fetch_batch_size"]
     local_last_batch_end_revision = int(ctx.job["job"]["local_last_batch_end_revision"])
-    password = config['password']
+    password = ctx.job["job"]["repo_config"]["password"]
     this_batch_end_revision = None
     this_batch_start_revision = 0
 
@@ -721,16 +718,16 @@ def _calculate_batch_revisions(ctx: Context, svn_commands: dict, config: dict) -
         return False
 
 
-def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict) -> dict:
+def _execute_git_svn_fetch(ctx: Context, git_commands: dict) -> dict:
     """
     Execute the git svn fetch operation
     """
 
     batch_end_revision      = ctx.job["job"]["batch_end_rev"]
     batch_start_revision    = ctx.job["job"]["batch_start_rev"]
-    cmd_git_svn_fetch       = git_commands['cmd_git_svn_fetch'].copy()
-    local_repo_path         = config['local_repo_path']
-    password                = config['password']
+    cmd_git_svn_fetch       = git_commands["cmd_git_svn_fetch"].copy()
+    local_repo_path         = ctx.job["job"]["repo_config"]["local_repo_path"]
+    password                = ctx.job["job"]["repo_config"]["password"]
 
     # If we have batch revisions, use them
     if batch_start_revision and batch_end_revision:
@@ -769,7 +766,7 @@ def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict) -> di
     # If the fetch succeeded and we have a this_batch_end_revision
     if git_svn_fetch_result["return_code"] == 0 and batch_end_revision:
         # Store the ending revision number
-        cmd_git_set_batch_end_revision_with_value = git_commands['cmd_git_set_batch_end_revision'] + [str(batch_end_revision)]
+        cmd_git_set_batch_end_revision_with_value = git_commands["cmd_git_set_batch_end_revision"] + [str(batch_end_revision)]
         cmd.run_subprocess(ctx, cmd_git_set_batch_end_revision_with_value, name="cmd_git_set_batch_end_revision_with_value")
         log(ctx, f"git svn fetch complete", "info")
     else:
@@ -777,7 +774,7 @@ def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict) -> di
 
     # Run Git garbage collection and cleanup
     git.garbage_collection(ctx, local_repo_path)
-    git.cleanup_branches_and_tags(ctx, local_repo_path, git_commands['cmd_git_default_branch'], config['git_default_branch'])
+    git.cleanup_branches_and_tags(ctx, local_repo_path, git_commands["cmd_git_default_branch"], ctx.job["job"]["repo_config"]["git_default_branch"])
 
     return git_svn_fetch_result
 
@@ -812,13 +809,13 @@ def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict) -> di
 #     return True, "Repository state validation passed"
 
 
-def _cleanup(ctx: Context, config: dict, git_commands: dict) -> None:
+def _cleanup(ctx: Context, git_commands: dict) -> None:
     """
     Groups up any other functions needed to clean up before exit
     """
 
-    local_repo_path = config['local_repo_path']
+    local_repo_path = ctx.job["job"]["repo_config"]["local_repo_path"]
 
     # Run git garbage collection and cleanup branches, even if repo is already up to date
     git.garbage_collection(ctx, local_repo_path)
-    git.cleanup_branches_and_tags(ctx, local_repo_path, git_commands['cmd_git_default_branch'], config['git_default_branch'])
+    git.cleanup_branches_and_tags(ctx, local_repo_path, git_commands["cmd_git_default_branch"], ctx.job["job"]["repo_config"]["git_default_branch"])
