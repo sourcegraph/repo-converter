@@ -13,7 +13,7 @@
 # Import repo-converter modules
 from multiprocessing import process
 from source_repo import svn
-from utils.concurrency import ConcurrencyManager
+from utils.concurrency_manager import ConcurrencyManager
 from utils.context import Context
 from utils.log import log
 
@@ -76,7 +76,7 @@ def start(ctx: Context) -> None:
                 if repo_type in ("svn", "subversion"):
 
                     # Start the conversion process
-                    svn.clone_svn_repo(ctx)
+                    svn.convert(ctx)
 
             finally:
 
@@ -91,7 +91,7 @@ def start(ctx: Context) -> None:
         # and we have enough other process checking / cleanup infra to handle these
         multiprocessing.Process(
             target=conversion_wrapper,
-            name=f"clone_svn_repo_{repo_key}",
+            name=f"convert_{repo_key}",
             args=[ctx]
         ).start()
 

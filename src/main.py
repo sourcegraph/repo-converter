@@ -3,7 +3,7 @@
 
 # Import repo-converter modules
 from config import load_env, load_repos, validate_env
-from utils import cmd, concurrency, concurrency_monitor, convert_repos, git, logger, signal_handler
+from utils import cmd, concurrency_manager, concurrency_monitor, convert_repos, git, logger, signal_handler
 from utils.context import Context
 from utils.log import log
 
@@ -37,7 +37,7 @@ def main():
 
     # Create semaphores for concurrency limits
     # Store them back in the context object
-    ctx.concurrency_manager = concurrency.ConcurrencyManager(ctx)
+    ctx.concurrency_manager = concurrency_manager.ConcurrencyManager(ctx)
 
     # Start concurrency_monitor
     # TODO: Sort out if this is needed / duplicative,

@@ -173,9 +173,9 @@ def cleanup_stale_processing_states(ctx: Context, local_repo_path: str) -> None:
 ### Step 6: Main Logic Integration
 **File**: `src/source_repo/svn.py`
 
-#### 6.1 Modified clone_svn_repo Function
+#### 6.1 Modified convert Function
 ```python
-def clone_svn_repo(ctx: Context) -> None:
+def convert(ctx: Context) -> None:
     # ... existing setup code ...
 
     # NEW: Initialize revision tracking

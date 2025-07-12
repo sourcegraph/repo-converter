@@ -15,7 +15,7 @@ import time
 # import xml.parsers.expat https://docs.python.org/3/library/pyexpat.html#module-xml.parsers.expat
 
 
-def clone_svn_repo(ctx: Context) -> None:
+def convert(ctx: Context) -> None:
 
     repo_key = ctx.job["job"]["repo_key"]
 
@@ -154,7 +154,7 @@ def clone_svn_repo(ctx: Context) -> None:
             cmd_git_svn_fetch_string            = " ".join(cmd_git_svn_fetch)
             cmd_svn_log_string                  = " ".join(cmd_svn_log)
             cmd_git_garbage_collection_string   = " ".join(cmd_git_garbage_collection)
-            process_name                        = f"clone_svn_repo_{repo_key}"
+            process_name                        = f"convert_{repo_key}"
 
             # In priority order
             concurrency_error_strings_and_messages = [
@@ -357,6 +357,10 @@ def clone_svn_repo(ctx: Context) -> None:
 
         else:
 
+            # TODO: Make this faster
+            # This is the slowest command
+            # Averaging 105 seconds in brief testing
+            # "output_line_count": 5310,
             # Write and run the command
             cmd_svn_log_remaining_revs = cmd_svn_log + ["--revision", f"{previous_batch_end_revision}:HEAD"]
             svn_log = cmd.run_subprocess(ctx, cmd_svn_log_remaining_revs, password, arg_svn_echo_password, name="cmd_svn_log_remaining_revs")
@@ -481,6 +485,9 @@ def clone_svn_repo(ctx: Context) -> None:
 
         if ctx.job["job"]["repo_state"] == "create" or batch_start_revision == None:
 
+            # TODO: Make this faster
+            # Third slowest command
+            # Averaging 41 seconds in brief testing
             # If this is a new repo, get the first changed revision number for this repo from the svn server log
             cmd_svn_log_batch_start_revision = cmd_svn_log + ["--limit", "1", "--revision", "1:HEAD"]
             svn_log_batch_start_revision = cmd.run_subprocess(ctx, cmd_svn_log_batch_start_revision, password, arg_svn_echo_password, name="cmd_svn_log_batch_start_revision")["output"]
@@ -489,6 +496,9 @@ def clone_svn_repo(ctx: Context) -> None:
         # Get the revision number to end with
         if batch_start_revision:
 
+            # TODO: Make this faster
+            # Second slowest command
+            # Averaging 61 seconds in brief testing
             # Get the batch size'th revision number for the rev to end this batch range
             cmd_svn_log_batch_end_revision = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{batch_start_revision}:HEAD"]
             cmd_svn_log_batch_end_revision_output = cmd.run_subprocess(ctx, cmd_svn_log_batch_end_revision, password, arg_svn_echo_password, name="cmd_svn_log_batch_end_revision")["output"]
@@ -749,26 +759,26 @@ def validate_git_repository_state(ctx: Context, local_repo_path: str) -> tuple[b
     return True, "Repository state validation passed"
 
 
-def validate_revision_range(ctx: Context, local_repo_path: str, expected_end_rev: int) -> tuple[bool, str]:
-    """
-    Validate that the expected revision range was converted
+# def validate_revision_range(ctx: Context, local_repo_path: str, expected_end_rev: int) -> tuple[bool, str]:
+#     """
+#     Validate that the expected revision range was converted
 
-    git log --all
+#     git log --all
 
-    """
+#     """
 
-    cmd_git_log_svn_rev = ["git", "-C", local_repo_path, "log", "--grep", f"@{expected_end_rev}", "--oneline"]
-    result = cmd.run_subprocess(ctx, cmd_git_log_svn_rev, quiet=True, name="git_log_svn_rev")
+#     cmd_git_log_svn_rev = ["git", "-C", local_repo_path, "log", "--grep", f"@{expected_end_rev}", "--oneline"]
+#     result = cmd.run_subprocess(ctx, cmd_git_log_svn_rev, quiet=True, name="git_log_svn_rev")
 
-    if result["return_code"] == 0 and result["output"]:
-        return True, f"End revision {expected_end_rev} found in Git log"
+#     if result["return_code"] == 0 and result["output"]:
+#         return True, f"End revision {expected_end_rev} found in Git log"
 
-    # Alternative: Check git-svn metadata
-    cmd_git_svn_find_rev = ["git", "-C", local_repo_path, "svn", "find-rev", f"r{expected_end_rev}"]
-    result = cmd.run_subprocess(ctx, cmd_git_svn_find_rev, quiet=True, name="git_svn_find_rev")
+#     # Alternative: Check git-svn metadata
+#     cmd_git_svn_find_rev = ["git", "-C", local_repo_path, "svn", "find-rev", f"r{expected_end_rev}"]
+#     result = cmd.run_subprocess(ctx, cmd_git_svn_find_rev, quiet=True, name="git_svn_find_rev")
 
-    if result["return_code"] == 0 and result["output"]:
-        return True, f"End revision {expected_end_rev} found via git-svn"
+#     if result["return_code"] == 0 and result["output"]:
+#         return True, f"End revision {expected_end_rev} found via git-svn"
 
-    return False, f"End revision {expected_end_rev} not found in converted repository"
+#     return False, f"End revision {expected_end_rev} not found in converted repository"
 

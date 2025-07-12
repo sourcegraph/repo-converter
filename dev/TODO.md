@@ -7,16 +7,22 @@
 - How do we achieve this?
     - Identify which commands are taking a long time, or failing, and why
 - Okay, how?
-    - Adopt structured logging, and a log parsing method to get this data
+    - Done
+        - Implement structured logging
+        - Update customer production
+        - Collect log events
+        - Query log events from JSON lines to CSV, using `dev/query_logs.py`
+        - Analyze log events to understand which commands are taking the longest (`svn log`, by a mile)
+    - In Progress
+        - Implement a better way to run the `svn log` command, to take less time
+    - To Do
+        - Analyze failure events:
+            - Which commands are failing most?
+            - Why?
 
-- Update customer production, gather log events on which repos take how long, and why
-
-- How to get process execution times from logs, and analyze them
-    - Find a tool to search / filter through logs
-        - See Slack thread with Eng
-```shell
-(echo '"date","time","timestamp", "cycle", "correlation_id", "execution_time_seconds","return_code","status_message_reason","args"'; podman logs repo-converter | jq -r 'select(.message == "Process finished" and (.process.args // "" | contains("svn"))) | [.date, .time, .timestamp, .cycle, .correlation_id, .process.execution_time_seconds, .process.return_code, .process.status_message_reason, .process.args] | @csv') | pbcopy
-```
+- Find a tool to search / filter through logs
+    - See Slack thread with Eng
+    - Amped the `dev/query_logs.py` script in the meantime
 
 - Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
 
@@ -24,18 +30,17 @@
     - Remote server response errors, ex. svn: E175012: Connection timed out
     - Decorators and context managers for logging context?
 
-- Log a repo status update table?
-    - Repo name
-        - URL
-        - Status (up to date / out of date)
-        - Last run's status (success / fail / timeout)
-        - Progress (% of commits)
-        - Commits converted
-        - Commits remaining
-        - Total commits
-        - Local commit
-        - Remote commit
-        - Size on disk
+- Log a repo status event at the end of the svn.py module
+    - Repo_key
+    - Status (up to date / out of date)
+    - Last run's status (success / fail)
+    - Progress (% of revs converted)
+    - Revs converted
+    - Revs remaining
+    - Total revs
+    - Local current rev
+    - Remote current rev
+    - Converted repo's size on disk
 
 - Amp's suggestion
     - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
@@ -72,7 +77,7 @@
     - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file?
 
 - Implement more accurate conversion job success validation before updating git config with latest rev
-- Break down `clone_svn_repo()` into smaller, focused methods
+- Break down `convert()` into smaller, focused methods
 - Improve state management / switching for create / update / running
 - Add better error handling for subcommands with specific error types
 - Use GitPython more extensively?
@@ -244,19 +249,18 @@
     - Run it in MSP, to build up our Perforce test depots from public OSS repos
 
 - Git clone
-    - SSH clone
-        - Move git SSH clone from outside bash script into this script
-        - See if the GitPython module fetches the repo successfully, or has a way to clone multiple branches
-            - Fetch (just the default branch)
-            - Fetch all branches
-            - Clone all branches
-        - From the git remote --help
-            - Imitate git clone but track only selected branches
-            -     mkdir project.git
-            -     cd project.git
-            -     git init
-            -     git remote add -f -t master -m master origin git://example.com/git.git/
-            -     git merge origin
+    - Move Git SSH clone Bash script into this containers
+    - See if the GitPython module fetches the repo successfully, or has a way to clone multiple branches
+        - Fetch (just the default branch)
+        - Fetch all branches
+        - Clone all branches
+    - From the git remote --help
+        - Imitate git clone but track only selected branches
+            - mkdir project.git
+            - cd project.git
+            - git init
+            - git remote add -f -t master -m master origin git://example.com/git.git/
+            - git merge origin
 
 ## Notes
 
