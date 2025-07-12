@@ -268,6 +268,7 @@ def get_config(ctx: Context, local_repo_path: str, key: str) -> str:
     try:
         value = cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config").get("output","")
     except:
+        log(ctx, "git.get_config failed", "warning")
         value = None
 
     return value

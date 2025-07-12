@@ -33,11 +33,12 @@ def convert(ctx: Context) -> None:
     if check_if_conversion_is_already_running_in_another_process(ctx, config, git_commands, svn_commands):
         return
 
-    # Determine repository state (create / update)
-    repo_state = determine_repo_state(ctx, config, git_commands)
+    # Check if the local repo exists and we need to update it,
+    # or if it doesn't exist, or it's invalid, and we need to create / recreate it
+    repo_create_or_update = check_repo_create_or_update(ctx, config, git_commands)
 
     # Validate SVN connection
-    svn_result = validate_svn_connection(ctx, svn_commands)
+    svn_result = test_connection_and_credentials(ctx, svn_commands)
     if svn_result.get("error"):
         return
 
@@ -63,7 +64,7 @@ def convert(ctx: Context) -> None:
         return
 
     # Handle update state with remaining revisions logging
-    if ctx.job["job"]["repo_state"] == "update" and not revision_info.get("up_to_date"):
+    if repo_create_or_update == "update" and not revision_info.get("up_to_date"):
         # Log remaining revisions info for update state
         cmd_svn_log_remaining_revs = svn_commands['cmd_svn_log'] + ["--revision", f"{revision_info['previous_batch_end_revision']}:HEAD"]
         svn_log = cmd.run_subprocess(ctx, cmd_svn_log_remaining_revs, config['password'], svn_commands['arg_svn_echo_password'], name="[REDACTED:password]")
@@ -74,7 +75,7 @@ def convert(ctx: Context) -> None:
         fetching_batch_count = min(remaining_revs_count, config['fetch_batch_size'])
 
         # Log the results
-        ctx.job["job"]["repo_state"] = "Updating"
+        repo_create_or_update = "Updating"
         ctx.job["job"]["reason"] = "Out of date"
         ctx.job["job"]["remaining_revs"] = remaining_revs_count
         ctx.job["job"]["fetching_batch_count"] = fetching_batch_count
@@ -82,7 +83,7 @@ def convert(ctx: Context) -> None:
         log(ctx, f"Out of date; updating", "info")
 
     # Initialize repository if needed
-    if ctx.job["job"]["repo_state"] == "create":
+    if repo_create_or_update == "create":
         initialize_git_repo(ctx, config, git_commands)
 
     # Configure repository
@@ -335,41 +336,89 @@ def check_if_conversion_is_already_running_in_another_process(
     return False
 
 
-def determine_repo_state(ctx: Context, config: dict, git_commands: dict) -> str:
+def check_repo_create_or_update(ctx: Context, config: dict, git_commands: dict) -> str:
     """
-    Determine if repo is in 'create' or 'update' state
+    Check if the local repo exists and we need to update it,
+    or if it doesn't exist, or it's invalid, and we need to create / recreate it
+
+    Create:
+        State:
+            The directory doesn't already exist
+            The repo      doesn't already exist
+        How did we get here:
+            First run of the script
+            New repo was added to the repos-to-convert.yaml file
+            Repo was deleted from disk
+        Approach:
+            Harder to test for the negative, so let's:
+            - Assume we're in the Create state,
+            - Check if the repo exists and is valid, then we're in the Update state
+
+    Update:
+        State:
+            Repo already exists, with a valid configuration
+        How did we get here:
+            A fetch job was previously run, but is not currently running
+        Approach:
+            Check if we're in the update state, then set ctx.job["job"]["repo_create_or_update"] = "update"
+
     """
 
     local_repo_path = config['local_repo_path']
     svn_remote_repo_code_root_url = config['svn_remote_repo_code_root_url']
 
     # Default to create state
-    ctx.job["job"]["repo_state"] = "create"
+    repo_create_or_update = "create"
 
-    try:
-        svn_remote_url = ""
-        cmd_git_get_svn_url_output = cmd.run_subprocess(ctx, git_commands['cmd_git_get_svn_url'], quiet=True, name="cmd_git_get_svn_url_output")
+    # try:
 
-        if "output" in cmd_git_get_svn_url_output.keys() and len(cmd_git_get_svn_url_output["output"]) > 0:
-            if isinstance(cmd_git_get_svn_url_output["output"], list):
-                svn_remote_url = cmd_git_get_svn_url_output["output"][0]
-            elif isinstance(cmd_git_get_svn_url_output["output"], str):
-                svn_remote_url = cmd_git_get_svn_url_output["output"]
+        # TODO: Replace this with git.get_config()
+        # Run the cmd_git_get_svn_url command, to try getting the svn URL from the local git repo's config file
+        # if this passes, then we're in the update state,
+        # otherwise, the repo either doesn't exist on disk, or is in an invalid state and needs to be recreated
+        # svn_remote_url = ""
+        # cmd_git_get_svn_url_output = cmd.run_subprocess(ctx, git_commands['cmd_git_get_svn_url'], quiet=True, name="cmd_git_get_svn_url_output")
 
-        if svn_remote_url in svn_remote_repo_code_root_url:
-            ctx.job["job"]["repo_state"] = "update"
-        else:
-            log(ctx, f"Repo not found on disk, initializing new repo", "info")
+    svn_url = git.get_config(ctx, local_repo_path, "svn-remote.svn.url")
 
-    except Exception as exception:
-        log(ctx, f"failed to check git config --get svn-remote.svn.url. Exception: {type(exception)}, {exception.args}, {exception}; cmd_git_get_svn_url_output: {cmd_git_get_svn_url_output}", "warning")
+    if svn_url and svn_url in svn_remote_repo_code_root_url:
+        repo_create_or_update = "update"
 
-    return ctx.job["job"]["repo_state"]
+        # # If the command returned any output
+        # if cmd_git_get_svn_url_output.get("output",""):
+
+        #     # The output should always be a list of strings
+        #     if isinstance(cmd_git_get_svn_url_output["output"], list):
+        #         svn_remote_url = cmd_git_get_svn_url_output["output"][0]
+
+        #     # But this check was in here for some reason
+        #     else:
+        #         svn_remote_url = cmd_git_get_svn_url_output["output"]
+
+        #     # If the URL from the local repo git config file is a substring of the repo code root URL,
+        #     # then we know that we have a valid local repo
+        #     if svn_remote_url in svn_remote_repo_code_root_url:
+        #         repo_create_or_update = "update"
+
+    else:
+        log(ctx, f"Repo not found on disk, initializing new repo", "info")
+
+    # except Exception as exception:
+    #     log(ctx, f"failed to check {git_commands['cmd_git_get_svn_url']}. Exception: {type(exception)}, {exception.args}, {exception}; cmd_git_get_svn_url_output: {cmd_git_get_svn_url_output}", "warning")
 
 
-def validate_svn_connection(ctx: Context, svn_commands: dict) -> dict:
+    ctx.job["job"]["repo_create_or_update"] = repo_create_or_update
+
+    return repo_create_or_update
+
+
+def test_connection_and_credentials(ctx: Context, svn_commands: dict) -> dict:
     """
-    Validate SVN connection and return SVN info
+    Run the svn info command to test:
+    - Network connectivity to the SVN server
+    - Authentication credentials, if provided
+
+    Capture the output, so we can later extract the current remote rev from it
     """
 
     max_retries = ctx.env_vars["MAX_RETRIES"]
@@ -427,7 +476,7 @@ def get_revision_info(ctx: Context, svn_result: dict, git_commands: dict) -> dic
     revision_info = {"last_changed_rev": last_changed_rev, "error": False}
 
     # Check if we're up to date (for update state)
-    if ctx.job["job"]["repo_state"] == "update":
+    if ctx.job["job"]["repo_create_or_update"] == "update":
         try:
             previous_batch_end_revision = int(cmd.run_subprocess(ctx, git_commands['cmd_git_get_batch_end_revision'], name="cmd_git_get_batch_end_revision")["output"][0])
         except Exception as exception:
@@ -437,7 +486,7 @@ def get_revision_info(ctx: Context, svn_result: dict, git_commands: dict) -> dic
         revision_info["previous_batch_end_revision"] = previous_batch_end_revision
 
         if previous_batch_end_revision == last_changed_rev:
-            ctx.job["job"]["repo_state"] = "Skipping"
+            ctx.job["job"]["repo_create_or_update"] = "Skipping"
             ctx.job["job"]["reason"] = "Up to date"
             log(ctx, f"Up to date; skipping", "info")
             revision_info["up_to_date"] = True
@@ -462,12 +511,12 @@ def calculate_batch_revisions(ctx: Context, svn_commands: dict, config: dict, re
 
     try:
         # Get the revision number to start with
-        if ctx.job["job"]["repo_state"] == "update":
+        if ctx.job["job"]["repo_create_or_update"] == "update":
             previous_batch_end_revision = revision_info.get("previous_batch_end_revision")
             if previous_batch_end_revision:
                 batch_start_revision = int(previous_batch_end_revision) + 1
 
-        if ctx.job["job"]["repo_state"] == "create" or batch_start_revision == None:
+        if ctx.job["job"]["repo_create_or_update"] == "create" or batch_start_revision == None:
             # Get the first changed revision number for this repo from the svn server log
             cmd_svn_log_batch_start_revision = cmd_svn_log + ["--limit", "1", "--revision", "1:HEAD"]
             svn_log_batch_start_revision = cmd.run_subprocess(ctx, cmd_svn_log_batch_start_revision, password, arg_svn_echo_password, name="[REDACTED:password]")["output"]
@@ -653,7 +702,7 @@ def execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict, batch_
         cmd_git_svn_fetch += ["--revision", f"{batch_start_revision}:{batch_end_revision}"]
 
     # Delete duplicate lines from the git config file, before the fetch
-    if ctx.job["job"]["repo_state"] == "update":
+    if ctx.job["job"]["repo_create_or_update"] == "update":
         git.deduplicate_git_config_file(ctx, local_repo_path)
 
     # Start the fetch

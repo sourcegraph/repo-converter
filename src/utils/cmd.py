@@ -369,7 +369,7 @@ def run_subprocess(
     # which isn't set in subprocess_psutils_dict
     subprocess_dict                         = {}
     subprocess_dict["name"]                 = name          # For command logging
-    subprocess_dict["output"]               = None          # For consumption by the calling function
+    subprocess_dict["output"]               = []            # For consumption by the calling function
     subprocess_dict["pid"]                  = None          # In case psutils doesn't get a pid in subprocess_psutils_dict
     subprocess_dict["return_code"]          = None          # Integer exit code
     subprocess_dict["status_message_reason"]= None          # Reason for process failure
