@@ -12,10 +12,6 @@ FROM ubuntu:22.04 AS base
 # https://hub.docker.com/layers/library/python/slim/images/sha256-747576ffc7523e2cc620ae304eb7304cedc8abff915adc77f3ce53a33ad1730d
 #FROM python:slim
 
-# Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
-# https://github.com/containers/podman/issues/4016
-RUN useradd -u 1000 -m sourcegraph
-
 # Avoid stuck build due to user prompt
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -85,9 +81,13 @@ COPY src/ src/
 # The contents of this file changes every build
 COPY build/.env build/.env
 
-# Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
-# https://github.com/containers/podman/issues/4016
-USER sourcegraph
+# # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
+# # https://github.com/containers/podman/issues/4016
+# RUN useradd -u 1000 -m sourcegraph
+
+# # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
+# # https://github.com/containers/podman/issues/4016
+# USER sourcegraph
 
 # Start the container
 CMD ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]
