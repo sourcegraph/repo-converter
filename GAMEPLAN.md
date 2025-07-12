@@ -1,7 +1,7 @@
 # AI Agent Game Plan for Revision Tracking System Implementation
 
 ## Overview
-Implement a comprehensive revision tracking system to optimize SVN to Git conversion by caching revision information and tracking conversion states. This eliminates the need to run slow `svn log` commands repeatedly.
+Implement a lightweight revision tracking system to optimize SVN to Git conversion by caching revision information and tracking conversion states. This eliminates the need to run slow `svn log` commands repeatedly.
 
 ## Goals
 1. **Store SVN revision data**: Store revision numbers from SVN log XML output
@@ -13,7 +13,7 @@ Implement a comprehensive revision tracking system to optimize SVN to Git conver
 ## File Structure
 ```
 <local_repo_path>/.git/
-└── svn-revisions.json          # Main revision tracking file
+└── svn-revisions.json
 ```
 
 ## Data Structure
@@ -82,9 +82,6 @@ def load_revision_state(ctx: Context, local_repo_path: str) -> dict:
 
 def save_revision_state(ctx: Context, local_repo_path: str, state: dict) -> None:
     """Save revision state to file with backup"""
-
-def backup_revision_state(ctx: Context, local_repo_path: str) -> None:
-    """Create backup of current revision state"""
 ```
 
 #### 1.3 Revision Discovery and Caching

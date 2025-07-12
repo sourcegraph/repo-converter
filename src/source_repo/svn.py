@@ -412,7 +412,7 @@ def _get_remote_last_changed_rev_from_svn_info(ctx: Context, svn_info: dict) -> 
         return False
 
 
-def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict) -> str:
+def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict) -> bool:
     """
     Check if the local repo exists and we need to update it,
     or if it doesn't exist, or it's invalid, and we need to create / recreate it
@@ -436,7 +436,7 @@ def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict
         How did we get here:
             A fetch job was previously run, but is not currently running
         Approach:
-            Check if we're in the update state, then set ctx.job["job"]["repo_create_or_update"] = "update"
+            Check if we're in the update state, then return true
 
     """
 
@@ -444,7 +444,9 @@ def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict
     svn_remote_repo_code_root_url = config['svn_remote_repo_code_root_url']
 
     # Default to create state
-    repo_create_or_update = "create"
+    # repo_create_or_update = "create"
+
+    repo_exists = False
 
     # try:
 
@@ -456,10 +458,13 @@ def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict
         # cmd_git_get_svn_url_output = cmd.run_subprocess(ctx, git_commands['cmd_git_get_svn_url'], quiet=True, name="cmd_git_get_svn_url_output")
 
     svn_url = git.get_config(ctx, local_repo_path, "svn-remote.svn.url")
-    svn_url = " ".join(svn_url)
+    svn_url = " ".join(svn_url) if isinstance(svn_url, list) else svn_url
 
     if svn_url and svn_url in svn_remote_repo_code_root_url:
-        repo_create_or_update = "update"
+        # repo_create_or_update = "update"
+
+        repo_exists = True
+
 
         # # If the command returned any output
         # if cmd_git_get_svn_url_output.get("output",""):
@@ -484,9 +489,7 @@ def _check_if_repo_exists_locally(ctx: Context, config: dict, git_commands: dict
     #     log(ctx, f"failed to check {git_commands['cmd_git_get_svn_url']}. Exception: {type(exception)}, {exception.args}, {exception}; cmd_git_get_svn_url_output: {cmd_git_get_svn_url_output}", "warning")
 
 
-    ctx.job["job"]["repo_create_or_update"] = repo_create_or_update
-
-    return repo_create_or_update
+    return repo_exists
 
 
 def _initialize_git_repo(ctx: Context, config: dict, git_commands: dict) -> None:
@@ -580,7 +583,7 @@ def _configure_git_repo(ctx: Context, config: dict, git_commands: dict) -> None:
 
             # TODO: Test this
             config_already_set = git.get_config(ctx, local_repo_path, git_config_key)
-            config_already_set = " ".join(config_already_set)
+            config_already_set = " ".join(config_already_set) if isinstance(config_already_set, list) else config_already_set
             config_already_set_matches = config_already_set == git_config_value
             path_exists = os.path.exists(git_config_value)
 
@@ -615,15 +618,10 @@ def _check_if_repo_already_up_to_date(ctx: Context, config: dict) -> bool:
 
     # get_config() returns a list of strings, cast it into an int
     local_last_batch_end_revision = git.get_config(ctx, local_repo_path, f"{ctx.git_config_namespace}.batch-end-revision")
-    local_last_batch_end_revision = int(" ".join(local_last_batch_end_revision))
+    local_last_batch_end_revision = " ".join(local_last_batch_end_revision) if isinstance(local_last_batch_end_revision, list) else local_last_batch_end_revision
+    local_last_batch_end_revision = int(local_last_batch_end_revision) if local_last_batch_end_revision else 0
 
-    if local_last_batch_end_revision:
-
-        ctx.job["job"]["local_last_batch_end_revision"] = local_last_batch_end_revision
-
-    else:
-
-        ctx.job["job"]["local_last_batch_end_revision"] = 0
+    ctx.job["job"]["local_last_batch_end_revision"] = local_last_batch_end_revision
 
     if local_last_batch_end_revision == remote_last_changed_rev:
         return True
@@ -707,13 +705,13 @@ def _calculate_batch_revisions(ctx: Context, svn_commands: dict, config: dict) -
     if cmd_svn_log_batch_rev_result["return_code"] == 0 and cmd_svn_log_batch_rev_output:
 
         # Update the this batch's starting rev to the first real rev number after the previous end rev
-        this_batch_start_revision = int(" ".join(cmd_svn_log_batch_rev).split("revision=\"")[1].split("\"")[0])
+        this_batch_start_revision = int(" ".join(cmd_svn_log_batch_rev_output).split("revision=\"")[1].split("\"")[0])
         ctx.job["job"]["batch_start_rev"] = this_batch_start_revision
 
         # Reverse the output so we can get the last revision number
         cmd_svn_log_batch_rev_output.reverse()
         this_batch_end_revision = int(" ".join(cmd_svn_log_batch_rev_output).split("revision=\"")[1].split("\"")[0])
-        ctx.job["job"]["batch_end_revision"] = this_batch_end_revision
+        ctx.job["job"]["batch_end_rev"] = this_batch_end_revision
 
         return True
 
@@ -723,7 +721,7 @@ def _calculate_batch_revisions(ctx: Context, svn_commands: dict, config: dict) -
         return False
 
 
-def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict, batch_info: dict) -> dict:
+def _execute_git_svn_fetch(ctx: Context, config: dict, git_commands: dict) -> dict:
     """
     Execute the git svn fetch operation
     """

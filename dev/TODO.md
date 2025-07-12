@@ -62,14 +62,6 @@
     - These commands may be duplicative?
     - This command is executed 3 times per sync job, which one is taking so long?
 
-```log
-2025-07-01; 02:35:50.400278; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --revision 1:HEAD
-2025-07-01; 02:35:51.983007; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 1 --revision 1:HEAD
-2025-07-01; 02:35:52.695285; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 2 --revision 1377700:HEAD
-
-2025-07-01; 15:09:44.641140; 924a81c; 3fef96dbf2ce; run 576; DEBUG; pid 101567; still running; running for 3:07:58.451094; psutils_process_dict: {'args': '', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/lucene', '--revision', '1059418:HEAD'], 'cpu_times': pcputimes(user=471.92, system=0.45, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_info': pmem(rss=11436032, vms=22106112, shared=9076736, text=323584, lib=0, data=2150400, dirty=0), 'memory_percent': 0.13784979013949392, 'name': 'svn', 'net_connections_count': 1, 'net_connections': '13.90.137.153:443:CLOSE_WAIT', 'num_fds': 5, 'open_files': [], 'pid': 101567, 'ppid': 101556, 'status': 'running', 'threads': [pthread(id=101567, user_time=471.92, system_time=0.45)]};
-```
-
 - Keep the output revision numbers from `git svn log --xml` commands in a file on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
     - Use an XML parsing library or regex matches to extract revision numbers, but store as JSON in the file
 - Compare svn log file against `git log` output, to ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
