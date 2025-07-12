@@ -16,7 +16,9 @@ def clear_lock_files(ctx: Context) -> bool:
     Check for the most common lockfiles and try to remove them, when a repo clone job fails
     """
 
-    repo_path       = ctx.job["job"]["local_repo_path"]
+    # Get the local repo path
+    repo_path = ctx.job.get("job", {}).get("local_repo_path","")
+
     return_value    = False
 
     list_of_command_and_lock_file_path_tuples = [

@@ -12,25 +12,19 @@ import os
 
 def _get_and_validate_local_repo_path(
         ctx: Context,
-        function_name: str,
-        local_repo_path: str,
         sub_dir: str = None
     ) -> str:
 
     # Get the local repo path
-    repo_path = ""
+    local_repo_path = ctx.job.get("job", {}).get("local_repo_path","")
 
-    if local_repo_path:
-        repo_path = local_repo_path
-    elif ctx.job["job"]["local_repo_path"]:
-        repo_path = local_repo_path
-    else:
-        log(ctx, f"No local repo path provided to {function_name}", "warning")
+    if not local_repo_path:
+        log(ctx, f"No local repo path provided to function", "warning")
         return None
 
     # Validate the repo path exists
-    if not os.path.exists(repo_path):
-        log(ctx, f"Path {repo_path} provided to {function_name} doesn't exist", "warning")
+    if not os.path.exists(local_repo_path):
+        log(ctx, f"Path {local_repo_path} provided to function doesn't exist", "warning")
         return None
 
     # Validate the repo path is a valid git repo
@@ -51,22 +45,17 @@ def _get_and_validate_local_repo_path(
 
     # If a sub_dir was provided, append it
     if sub_dir:
-        repo_path += f"/{sub_dir}"
+        local_repo_path += f"/{sub_dir}"
 
         # Validate the repo path + sub_dir exists
-        if not os.path.exists(repo_path):
-            log(ctx, f"Path {repo_path} needed for {function_name} doesn't exist", "warning")
+        if not os.path.exists(local_repo_path):
+            log(ctx, f"Path {local_repo_path} needed for function doesn't exist", "warning")
             return None
 
-    return repo_path
+    return local_repo_path
 
 
-def cleanup_branches_and_tags(
-        ctx: Context,
-        local_repo_path: str,
-        cmd_git_default_branch: str,
-        git_default_branch: str
-    ) -> None:
+def cleanup_branches_and_tags(ctx: Context) -> None:
     """
     git svn, and git tfs, have a bad habit of creating converted branches as remote branches,
     so the Sourcegraph clone doesn't show them to users
@@ -76,9 +65,13 @@ def cleanup_branches_and_tags(
     so if the git config file doesn't exist at this point, big problem
     """
 
-    packed_refs_file_path = _get_and_validate_local_repo_path(ctx, "cleanup_branches_and_tags", local_repo_path, ".git/packed-refs")
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
+    packed_refs_file_path = _get_and_validate_local_repo_path(ctx, ".git/packed-refs")
     if not packed_refs_file_path:
         return
+
+    git_default_branch = ctx.job.get("job",{})['git_default_branch']
+    cmd_git_repo_set_default_branch = ["git", "-C", local_repo_path, "symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
 
     local_branch_prefix         = "refs/heads/"
     local_tag_prefix            = "refs/tags/"
@@ -186,7 +179,7 @@ def cleanup_branches_and_tags(
             packed_refs_file.write(f"{line}\n")
 
     # Reset the default branch
-    cmd.run_subprocess(ctx, cmd_git_default_branch, quiet=True, name="cmd_git_default_branch")
+    cmd.run_subprocess(ctx, cmd_git_repo_set_default_branch, quiet=True, name="cmd_git_repo_set_default_branch")
 
 
 def deduplicate_git_config_file(
@@ -203,7 +196,7 @@ def deduplicate_git_config_file(
     however, if the git config file doesn't exist for a repo that's supposed to exist and be updated, big problem
     """
 
-    git_config_file_path = _get_and_validate_local_repo_path(ctx, "deduplicate_git_config_file", local_repo_path, ".git/config")
+    git_config_file_path = _get_and_validate_local_repo_path(ctx, ".git/config")
     if not git_config_file_path:
         return
 
@@ -242,12 +235,12 @@ def deduplicate_git_config_file(
         log(ctx, f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
 
 
-def garbage_collection(ctx: Context, local_repo_path:str) -> None:
+def garbage_collection(ctx: Context) -> None:
     """
     Garbage collection routine
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "garbage_collection", local_repo_path)
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
@@ -255,12 +248,12 @@ def garbage_collection(ctx: Context, local_repo_path:str) -> None:
     cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, name="cmd_git_garbage_collection")
 
 
-def get_config(ctx: Context, local_repo_path: str, key: str) -> list[str]:
+def get_config(ctx: Context, key: str) -> list[str]:
     """
     A more generic method to get a config value from a repo's config file
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "get_config", local_repo_path)
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
@@ -289,7 +282,7 @@ def git_global_config(ctx: Context) -> None:
     cmd.run_subprocess(ctx, cmd_git_default_branch, name="cmd_git_default_branch")
 
 
-def set_config(ctx: Context, local_repo_path: str, key: str, value: str) -> bool:
+def set_config(ctx: Context, key: str, value: str) -> bool:
     """
     A more generic method to set a config value in a repo's config file
 
@@ -297,7 +290,7 @@ def set_config(ctx: Context, local_repo_path: str, key: str, value: str) -> bool
     Returns False only if the command failed
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "get_config", local_repo_path)
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
@@ -310,7 +303,7 @@ def set_config(ctx: Context, local_repo_path: str, key: str, value: str) -> bool
         return False
 
 
-def unset_config(ctx: Context, local_repo_path: str, key: str) -> bool:
+def unset_config(ctx: Context, key: str) -> bool:
     """
     A more generic method to unset a config value from a repo's config file
 
@@ -318,7 +311,7 @@ def unset_config(ctx: Context, local_repo_path: str, key: str) -> bool:
     Returns False only if the command failed
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "get_config", local_repo_path)
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 

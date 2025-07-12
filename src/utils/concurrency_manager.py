@@ -74,10 +74,10 @@ class ConcurrencyManager:
         """
 
         # Get job information from context
-        this_job_id         = ctx.job["job"]["id"]
-        this_job_repo       = ctx.job["job"]["repo_key"]
+        this_job_id         = ctx.job.get("job",{}).get("id","")
+        this_job_repo       = ctx.job.get("job",{}).get("repo_key","")
         this_job_timestamp  = int(time.time())
-        server_name         = ctx.job["job"]["server_name"]
+        server_name         = ctx.job.get("job",{}).get("server_name","")
 
 
         ## Check if this repo already has a job in progress
@@ -179,7 +179,7 @@ class ConcurrencyManager:
         Get or create a semaphore for the given server.
         """
 
-        server_name = ctx.job["job"]["server_name"]
+        server_name = ctx.job.get("job",{}).get("server_name","")
 
         # Wait for the lock to be free
         with self.per_server_semaphores_lock:
@@ -319,9 +319,9 @@ class ConcurrencyManager:
         """Release both global and server-specific semaphores."""
 
         # Get job information from context
-        this_job_id     = ctx.job["job"]["id"]
-        this_job_repo   = ctx.job["job"]["repo_key"]
-        server_name     = ctx.job["job"]["server_name"]
+        this_job_id     = ctx.job.get("job",{}).get("id","")
+        this_job_repo   = ctx.job.get("job",{}).get("repo_key","")
+        server_name     = ctx.job.get("job",{}).get("server_name","")
 
         try:
 

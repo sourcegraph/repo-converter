@@ -55,24 +55,25 @@
 
 - `svn log` commands
     - Longest commands, which seem to be timing out and causing issues
-    - We may be able to make the conversion process much smoother if we can use fewer of these log commands
     - What do we use them for? Why?
-        - Get first commit for a new repo
-        - Get last commit number for a batch range
-    - These commands may be duplicative?
-    - This command is executed 3 times per sync job, which one is taking so long?
+        - Count all revs remaining to convert
+        - Get first rev number to start this batch
+        - Get last  rev number to end   this batch
+    - We may be able to make the conversion process much smoother if we can use fewer of these log commands
+        - Keep the output revision numbers from `git svn log --xml` commands in a file on disk
+        - Append to this file when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
+        - Use an XML parsing library or regex matches to extract revision numbers, but store as JSON in the file
 
-- Keep the output revision numbers from `git svn log --xml` commands in a file on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
-    - Use an XML parsing library or regex matches to extract revision numbers, but store as JSON in the file
-- Compare svn log file against `git log` output, to ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
-- When to run the next svn log command? When the last commit ID number in the svn log file has been converted
-    - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file?
+    - Compare svn log file against `git log` output, to ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
+
+    - When to run the next svn log command?
+        - When the last commit ID number in the svn log file has been converted
+    - Can SVN repo history be changed?
+        - Would we need to re-run svn log periodically to update the local log file?
 
 - Implement more accurate conversion job success validation before updating git config with latest rev
-- Break down `convert()` into smaller, focused methods
-- Improve state management / switching for create / update / running
 - Add better error handling for subcommands with specific error types
-- Use GitPython more extensively?
+- Use git.get_config(), git.set_config(), and GitPython more extensively?
 
 ### Performance
 
