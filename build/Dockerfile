@@ -45,6 +45,10 @@ RUN apt-get update && \
     systemctl enable cron && \
     systemctl start cron
 
+# Set Git defaults, system-wide, in /etc/gitconfig
+RUN git config --system safe.directory "*" && \
+    git config --system init.defaultBranch main
+
 # cd to /sg/repo-converter in the image
 WORKDIR /sg/repo-converter
 
@@ -83,12 +87,11 @@ COPY build/.env build/.env
 
 # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
 # https://github.com/containers/podman/issues/4016
-RUN useradd -m sourcegraph
+RUN useradd -m -d /home/sourcegraph sourcegraph
 
 # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
 # https://github.com/containers/podman/issues/4016
 USER sourcegraph
-ENV HOME=/home/sourcegraph
 
 # Start the container
 CMD ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]
