@@ -86,8 +86,8 @@ COPY src/ src/
 COPY build/.env build/.env
 
 # Create the user, with a home directory
-RUN groupadd --gid 1002 sourcegraph && \
-    useradd --uid 1001 --gid sourcegraph --create-home --home-dir /home/sourcegraph sourcegraph
+RUN groupadd sourcegraph --gid 10002 && \
+     useradd sourcegraph --uid 10001 --gid sourcegraph --create-home --home-dir /home/sourcegraph
 
 # Give ownership of the whole /sg dir and all its contents to the new user
 RUN chown -R sourcegraph:sourcegraph /sg
