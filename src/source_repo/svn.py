@@ -637,20 +637,20 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> dict:
     this_batch_start_revision       = local_last_batch_end_revision + 1
 
     # Run the svn log command to get real revision numbers for this batch
-    cmd_svn_log_batch_rev           = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{this_batch_start_revision}:HEAD"]
-    cmd_svn_log_batch_rev_result    = cmd.run_subprocess(ctx, cmd_svn_log_batch_rev, password, name="cmd_svn_log_batch_rev")
+    cmd_svn_log_get_this_batch_rev_range           = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{this_batch_start_revision}:HEAD"]
+    cmd_svn_log_get_this_batch_rev_range_result    = cmd.run_subprocess(ctx, cmd_svn_log_get_this_batch_rev_range, password, name="cmd_svn_log_get_this_batch_rev_range")
 
-    cmd_svn_log_batch_rev_output    = cmd_svn_log_batch_rev_result.get("output","")
+    cmd_svn_log_get_this_batch_rev_range_output    = cmd_svn_log_get_this_batch_rev_range_result.get("output","")
 
-    if cmd_svn_log_batch_rev_result["return_code"] == 0 and cmd_svn_log_batch_rev_output:
+    if cmd_svn_log_get_this_batch_rev_range_result["return_code"] == 0 and cmd_svn_log_get_this_batch_rev_range_output:
 
         # Update the this batch's starting rev to the first real rev number after the previous end rev
-        this_batch_start_revision = int(" ".join(cmd_svn_log_batch_rev_output).split("revision=\"")[1].split("\"")[0])
+        this_batch_start_revision = int(" ".join(cmd_svn_log_get_this_batch_rev_range_output).split("revision=\"")[1].split("\"")[0])
         ctx.job["job"]["batch_start_rev"] = this_batch_start_revision
 
         # Reverse the output so we can get the last revision number
-        cmd_svn_log_batch_rev_output.reverse()
-        this_batch_end_revision = int(" ".join(cmd_svn_log_batch_rev_output).split("revision=\"")[1].split("\"")[0])
+        cmd_svn_log_get_this_batch_rev_range_output.reverse()
+        this_batch_end_revision = int(" ".join(cmd_svn_log_get_this_batch_rev_range_output).split("revision=\"")[1].split("\"")[0])
         ctx.job["job"]["batch_end_rev"] = this_batch_end_revision
 
         return True
