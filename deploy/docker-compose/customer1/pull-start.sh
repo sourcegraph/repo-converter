@@ -6,12 +6,12 @@
 # and the Docker image tagged latest in GitHub packages
 
 # crontab -e
-# */30 * * * * bash /sg/repo-updater/deploy/docker-compose/customer1/pull-start.sh
+# */30 * * * * bash /sg/repo-converter/deploy/docker-compose/customer1/pull-start.sh
 
 
 ## Setup
 # Define file paths
-repo_dir="/sg/repo-updater"
+repo_dir="/sg/repo-converter"
 docker_compose_dir="deploy/docker-compose/customer1"
 docker_compose_file_name="docker-compose.yaml"
 docker_compose_full_file_path="$repo_dir/$docker_compose_dir/$docker_compose_file_name"
