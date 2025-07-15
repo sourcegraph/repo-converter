@@ -20,7 +20,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 # the application crashes without emitting any logs due to buffering
 ENV \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HOME=/home/sourcegraph
 
 # Install packages
 # default-jre needed for Atlassian's svn-migration-scripts.jar
@@ -48,21 +49,6 @@ RUN apt-get update && \
 # Set Git defaults, system-wide, in /etc/gitconfig
 RUN git config --system safe.directory "*" && \
     git config --system init.defaultBranch main
-
-
-# # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
-# # https://github.com/containers/podman/issues/4016
-# RUN useradd -m -d /home/sourcegraph sourcegraph
-
-# RUN groupadd -r sourcegraph --gid 1000 && \
-#     useradd -r -g sourcegraph --uid 1000 sourcegraph
-
-# # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
-# # https://github.com/containers/podman/issues/4016
-# USER sourcegraph:sourcegraph
-# # ENV HOME=/home/sourcegraph
-# RUN id && printenv | sort
-
 
 # cd to /sg/repo-converter in the image
 WORKDIR /sg/repo-converter
