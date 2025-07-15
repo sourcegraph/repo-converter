@@ -92,6 +92,7 @@ RUN useradd -m -d /home/sourcegraph sourcegraph
 # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
 # https://github.com/containers/podman/issues/4016
 USER sourcegraph
+ENV HOME=/home/sourcegraph
 
 # Start the container
 CMD ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]
