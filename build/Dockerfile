@@ -49,6 +49,21 @@ RUN apt-get update && \
 RUN git config --system safe.directory "*" && \
     git config --system init.defaultBranch main
 
+
+# # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
+# # https://github.com/containers/podman/issues/4016
+# RUN useradd -m -d /home/sourcegraph sourcegraph
+
+# RUN groupadd -r sourcegraph --gid 1000 && \
+#     useradd -r -g sourcegraph --uid 1000 sourcegraph
+
+# # Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
+# # https://github.com/containers/podman/issues/4016
+# USER sourcegraph:sourcegraph
+# # ENV HOME=/home/sourcegraph
+# RUN id && printenv | sort
+
+
 # cd to /sg/repo-converter in the image
 WORKDIR /sg/repo-converter
 
@@ -84,15 +99,6 @@ COPY src/ src/
 # Copy the dotenv file into the image
 # The contents of this file changes every build
 COPY build/.env build/.env
-
-# Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
-# https://github.com/containers/podman/issues/4016
-RUN useradd -m -d /home/sourcegraph sourcegraph
-
-# Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
-# https://github.com/containers/podman/issues/4016
-USER sourcegraph
-ENV HOME=/home/sourcegraph
 
 # Start the container
 CMD ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]
