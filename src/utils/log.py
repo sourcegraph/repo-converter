@@ -121,6 +121,8 @@ def _build_structured_payload(
     if ctx.job.get("job", {}):
         payload.update(ctx.job)
 
+    payload = _remove_null_values(payload)
+
     return payload
 
 
@@ -200,3 +202,35 @@ def _format_uptime(uptime_seconds: float) -> str:
     parts.append(f"{seconds}s")
 
     return " ".join(parts)
+
+
+def _remove_null_values(payload: dict) -> dict:
+    """
+    Recursive function to remove keys from payload where values are null, or empty strings,
+    but keep values set to 0
+    """
+
+    if type(payload) is dict:
+
+        return dict((key, _remove_null_values(value)) for key, value in payload.items() if value == 0 or (value is not None and value != "" and _remove_null_values(value)))
+
+    elif type(payload) is list:
+
+        return [_remove_null_values(value) for value in payload if value == 0 or (value is not None and value != "" and _remove_null_values(value))]
+
+    else:
+        return payload
+
+
+def set_job_result(ctx: Context, action: str = None, reason: str = None, success: bool = None) -> None:
+    """
+    Set the result subdict for job logs
+    """
+
+    ctx.job["job"]["result"].update(
+        {
+            "action": action,
+            "reason": reason,
+            "success": success
+        }
+    )

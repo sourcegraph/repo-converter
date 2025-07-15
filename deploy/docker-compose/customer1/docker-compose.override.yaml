@@ -11,6 +11,10 @@ services:
       - LOG_LEVEL=DEBUG
       - REPO_CONVERTER_INTERVAL_SECONDS=60
       - TRUNCATED_OUTPUT_MAX_LINES=40
+    # It seems like the only way this works for both podman and docker compose,
+    # is to run the container as UID=10001 and GID 10002,
+    # both on the host,
+    # and inside the container
     user: ${CURRENT_UID_GID}
     volumes:
       - ../../../src-serve-root/:/sg/src-serve-root

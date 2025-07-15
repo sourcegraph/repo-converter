@@ -6,7 +6,7 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.log import log
+from utils.log import log, set_job_result
 
 # Import Python standard modules
 from datetime import datetime
@@ -74,10 +74,12 @@ class ConcurrencyManager:
         """
 
         # Get job information from context
+        this_job_config     = ctx.job.get("job",{}).get("config","")
+        this_job_repo       = this_job_config.get("repo_key","")
+        server_name         = this_job_config.get("server_name","")
+
         this_job_id         = ctx.job.get("job",{}).get("id","")
-        this_job_repo       = ctx.job.get("job",{}).get("repo_key","")
         this_job_timestamp  = int(time.time())
-        server_name         = ctx.job.get("job",{}).get("server_name","")
 
 
         ## Check if this repo already has a job in progress
@@ -90,6 +92,7 @@ class ConcurrencyManager:
                 for active_job_id, active_job_repo, active_job_timestamp in self.active_jobs[server_name]:
 
                     if active_job_repo == this_job_repo:
+                        set_job_result(ctx, "skipped", "Repo job already in progress", False)
                         log(ctx, f"Skipping; Repo job already in progress; repo: {active_job_repo}, timestamp: {active_job_timestamp}; job_id: {active_job_id}; running for: {int(time.time() - active_job_timestamp)} seconds", "info")
                         return False
 
@@ -179,7 +182,9 @@ class ConcurrencyManager:
         Get or create a semaphore for the given server.
         """
 
-        server_name = ctx.job.get("job",{}).get("server_name","")
+        # Get job information from context
+        this_job_config = ctx.job.get("job",{}).get("config","")
+        server_name     = this_job_config.get("server_name","")
 
         # Wait for the lock to be free
         with self.per_server_semaphores_lock:
@@ -320,8 +325,9 @@ class ConcurrencyManager:
 
         # Get job information from context
         this_job_id     = ctx.job.get("job",{}).get("id","")
-        this_job_repo   = ctx.job.get("job",{}).get("repo_key","")
-        server_name     = ctx.job.get("job",{}).get("server_name","")
+        this_job_config = ctx.job.get("job",{}).get("config","")
+        this_job_repo   = this_job_config.get("repo_key","")
+        server_name     = this_job_config.get("server_name","")
 
         try:
 

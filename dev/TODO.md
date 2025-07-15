@@ -24,19 +24,24 @@
     - See Slack thread with Eng
     - Amped the `dev/query_logs.py` script in the meantime
 
-- Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
+- Build up log event context, ex. canonical logs
+    - And be able to retrieve this context in cmd.log_process_status()
 
 - Enhance error events with automatic error context capture and correlation IDs
     - Remote server response errors, ex. svn: E175012: Connection timed out
     - Decorators and context managers for logging context?
 
 - Log a repo status event at the end of the svn.py module
-    - Status (up to date / out of date)
+    - Remote
+        - SVN
+            - Revs remaining to convert
+            - Total rev count
+    - Local
+        - Git
+            - Last rev from git log at start
+            - Last rev from git log at end
     - Last run's status (success / fail)
     - Progress (% of revs converted)
-    - Revs converted
-    - Revs remaining
-    - Total revs
 
 - Amp's suggestion
     - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
@@ -52,9 +57,9 @@
 - `svn log` commands
     - Longest commands, which seem to be timing out and causing issues
     - What do we use them for? Why?
-        - The big one: Count all revs remaining to convert, as a progress indicator
-        - The small one: Get first and last rev numbers to start and end this batch
-        - The smallest one: Log recent commits, to visually verify a successful fetch
+        - The big one: Count all revs remaining to convert, as a progress indicator - Disabled this by default
+        - The small one: Get first and last rev numbers to start and end this batch - Seems to be necessary, but combined into one, and limited to batch size
+        - The smallest one: Log recent commits, to visually verify a successful fetch - Disabled by default
     - We may be able to make the conversion process much smoother if we can use fewer of these log commands
         - Keep the output revision numbers from `git svn log --xml` commands in a file on disk
         - Append to this file when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
@@ -168,8 +173,10 @@
 ## Processes
 
 - How do I get more information about the child PID which was reaped in these lines, in `./src/utils/signal_handler.py`?
+
     ```python
     if os.WIFEXITED(status) and os.WEXITSTATUS(status) != 0:
+        # "message": "SIGCHLD handler reaped child PID 10747 with exit code 129",
         log(ctx, f"SIGCHLD handler reaped child PID {pid} with exit code {os.WEXITSTATUS(status)}", "warning")
     ```
     - Maintain a list of processes, with their metadata, from when they're launched, and updated on an interval, then look up that information in the signal handler
@@ -220,8 +227,11 @@
             - gha-env-vars-workflow-dispatch.sh
 - Wolfi Python base image for Docker / podman build
 - Container runAs user
-    - src serve-git and repo-converter both run as root, which is not ideal
-    - Need to create a new user on the host, add it to the host's sourcegraph group, get the UID, and configure the runAs user for the containers with this UID
+    - It seems like the only way this works for both Podman and Docker Compose, is to:
+        - Bake the image with a specific UID/GID,
+        - and change the app service user account's UID/GID on the host OS to match
+    - Changed the UID of the service account on the host to 10001, and GID to 10002
+    - I hope I'm wrong on this limitation, adding this to the TODO list to figure out later
 
 ## Dev
 

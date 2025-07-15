@@ -12,19 +12,23 @@ import os
 
 def _get_and_validate_local_repo_path(
         ctx: Context,
-        sub_dir: str = None
+        sub_dir: str = None,
+        quiet: bool = False
     ) -> str:
 
     # Get the local repo path
-    local_repo_path = ctx.job.get("job", {}).get("local_repo_path","")
+    job_config      = ctx.job.get("job",{}).get("config",{})
+    local_repo_path = job_config.get("local_repo_path","")
 
     if not local_repo_path:
-        log(ctx, f"No local repo path provided to function", "warning")
+        if not quiet:
+            log(ctx, f"No local repo path provided to function", "warning")
         return None
 
     # Validate the repo path exists
     if not os.path.exists(local_repo_path):
-        log(ctx, f"Path {local_repo_path} provided to function doesn't exist", "warning")
+        if not quiet:
+            log(ctx, f"Path {local_repo_path} provided to function doesn't exist", "warning")
         return None
 
     # Validate the repo path is a valid git repo
@@ -36,9 +40,12 @@ def _get_and_validate_local_repo_path(
         "--is-inside-work-tree",
         # "--is-inside-git-dir",
     ]
+
     valid_repo_path = cmd.run_subprocess(ctx, cmd_git_validate_repo_path, quiet=True, name="cmd_git_validate_repo_path").get("output","")
     if not valid_repo_path:
-        log(ctx, f"Not a valid repo path: {local_repo_path}", "debug")
+        if not quiet:
+            log(ctx, f"Not a valid repo path: {local_repo_path}", "debug")
+        return None
     else:
         # log(ctx, f"Valid repo path: {local_repo_path}", "debug")
         pass
@@ -49,7 +56,8 @@ def _get_and_validate_local_repo_path(
 
         # Validate the repo path + sub_dir exists
         if not os.path.exists(local_repo_path):
-            log(ctx, f"Path {local_repo_path} needed for function doesn't exist", "warning")
+            if not quiet:
+                log(ctx, f"Path {local_repo_path} needed for function doesn't exist", "warning")
             return None
 
     return local_repo_path
@@ -70,7 +78,9 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     if not packed_refs_file_path:
         return
 
-    git_default_branch = ctx.job.get("job",{})['git_default_branch']
+    # Get the local repo path
+    job_config                      = ctx.job.get("job",{}).get("config",{})
+    git_default_branch              = job_config("job",{})['git_default_branch']
     cmd_git_repo_set_default_branch = ["git", "-C", local_repo_path, "symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
 
     local_branch_prefix         = "refs/heads/"
@@ -181,11 +191,28 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     # Reset the default branch
     cmd.run_subprocess(ctx, cmd_git_repo_set_default_branch, quiet=True, name="cmd_git_repo_set_default_branch")
 
+def count_commits_in_repo(ctx: Context) -> int:
+    """
+    Count and return the total number of commits in the git repo, across all branches
+    """
 
-def deduplicate_git_config_file(
-        ctx: Context,
-        local_repo_path: str
-    ) -> None:
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
+    if not local_repo_path:
+        return
+
+    cmd_git_count_commits = ["git", "-C", local_repo_path, "rev-list", "--all", "--count"]
+    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits")
+
+    if cmd_git_count_commits_result["return_code"] == 0:
+
+        count_commits = ''.join(cmd_git_count_commits_result["output"]) if isinstance(cmd_git_count_commits_result["output"], list) else cmd_git_count_commits_result["output"]
+        return int(count_commits)
+
+    else:
+        return None
+
+
+def deduplicate_git_config_file(ctx: Context) -> None:
     """
     git svn has a bad habit of appending duplicate lines to a git config file
     This function removes the duplicate lines, as a sacrifice to the git gods,
@@ -212,7 +239,7 @@ def deduplicate_git_config_file(
         # Read the whole file's contents into memory
         config_file_data = config_file.readlines()
 
-        log(ctx, f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data)}", "debug")
+        log(ctx, f"git_config_file lines before: {len(config_file_data)}", "debug")
 
         # Move the file pointer back to the beginning of the file to start overwriting from there
         config_file.seek(0)
@@ -232,7 +259,7 @@ def deduplicate_git_config_file(
         # Delete the rest of the file's contents
         config_file.truncate()
 
-        log(ctx, f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
+        log(ctx, f"git_config_file lines after: {len(lines_seen)}", "debug")
 
 
 def garbage_collection(ctx: Context) -> None:
@@ -248,12 +275,12 @@ def garbage_collection(ctx: Context) -> None:
     cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, name="cmd_git_garbage_collection")
 
 
-def get_config(ctx: Context, key: str) -> list[str]:
+def get_config(ctx: Context, key: str, quiet: bool=False) -> list[str]:
     """
     A more generic method to get a config value from a repo's config file
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx)
+    local_repo_path = _get_and_validate_local_repo_path(ctx, quiet)
     if not local_repo_path:
         return
 

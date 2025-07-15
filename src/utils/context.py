@@ -111,6 +111,9 @@ class Context:
         # Get the list of proc attributes from the psutils library, and initialize psutils_process_attributes_to_fetch
         self.initialize_process_attributes_to_fetch()
 
+        # Set the initial state of the job dict
+        self.reset_job()
+
 
     def add_secrets(self, new_secrets):
         """
@@ -156,6 +159,33 @@ class Context:
             if attribute not in psutil_attributes:
                 self.psutils_process_attributes_to_fetch.remove(attribute)
 
+
+    def reset_job(self):
+        """
+        Resets the job dict for each repo conversion job,
+        to prevent log events from including old data from other jobs
+        """
+
+        self.job = {
+            "job": {
+                "id": "",
+                "config": {
+                    "repo_key": "",
+                    "repo_type": "",
+                    "server_name": ""
+                },
+                "result": {
+                    "action": "",
+                    "reason": "",
+                    "success": "",
+                    "run_time_seconds": "",
+                },
+                "stats": {
+                    "local": {},
+                    "remote": {}
+                }
+            }
+        }
 
     def update_repos(self, repos_dict):
         """

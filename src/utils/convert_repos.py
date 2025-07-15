@@ -28,7 +28,7 @@ def start(ctx: Context) -> None:
     """
 
     # Reset the job dict, again, so it doesn't get passed on to other log events
-    ctx.job = {}
+    ctx.reset_job()
 
     # Log a start event
     log(ctx, f"Starting convert_repos.start", "info", log_concurrency_status=True)
@@ -48,14 +48,16 @@ def start(ctx: Context) -> None:
         # Set log context / structured data
         # Overwrite fresh for each job
         # Each conversion_wrapper child process gets its own copy of the context
-        ctx.job = {
-            "job": {
+        ctx.job["job"].update(
+            {
                 "id": job_id,
-                "repo_key": repo_key,
-                "repo_type": repo_type,
-                "server_name": server_name
+                "config": {
+                    "repo_key": repo_key,
+                    "repo_type": repo_type,
+                    "server_name": server_name,
+                }
             }
-        }
+        )
 
         # Log initial status
         log(ctx, "Starting repo conversion job", "debug", log_concurrency_status=True)
@@ -90,16 +92,17 @@ def start(ctx: Context) -> None:
         # and we have enough other process checking / cleanup infra to handle these
         multiprocessing.Process(
             target=conversion_wrapper,
-            name=f"convert_{repo_key}",
+            name=f"convert_{repo_type}_{repo_key}",
             args=[ctx]
         ).start()
 
         # Reset the job dict, after it's been copied to the new process,
         # so it doesn't get passed on to other log events
-        ctx.job = {}
+        ctx.reset_job()
+
 
     # Reset the job dict, again, so it doesn't get passed on to other log events
-    ctx.job = {}
+    ctx.reset_job()
 
     # Log final status
     log(ctx, f"Finishing convert_repos.start", "info", log_concurrency_status=True)
