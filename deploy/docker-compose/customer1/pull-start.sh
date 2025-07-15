@@ -100,9 +100,13 @@ fi
 log "Pruning remote git branches deleted from remote"
 git fetch --prune
 
-log "Pruning local git branches deleted from remote"
 # Command from https://stackoverflow.com/a/17029936
-git branch --remotes | awk '{print $1}' | grep -E -v -f /dev/fd/0 <(git branch -vv | grep origin) | awk '{print $1}' | xargs git branch -D
+branches_to_delete=$(git branch --remotes | awk '{print $1}' | grep -E -v -f /dev/fd/0 <(git branch -vv | grep origin) | awk '{print $1}')
+if [[ -n "$branches_to_delete" ]]
+then
+    log "Pruning local git branches deleted from remote"
+    echo "$branches_to_delete" | xargs git branch -D
+fi
 
 log "On branch before git pull:"
 $git_branch_cmd
