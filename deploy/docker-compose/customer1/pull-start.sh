@@ -138,4 +138,6 @@ sleep $docker_up_sleep_seconds
 log "docker ps after:"
 $docker_cmd ps
 
+echo ""
 log "Script finishing"
+echo ""

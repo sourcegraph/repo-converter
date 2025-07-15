@@ -13,15 +13,15 @@ services:
       - TRUNCATED_OUTPUT_MAX_LINES=40
     user: ${CURRENT_UID_GID}
     volumes:
-      - ../../../../src-serve-root/:/sg/src-serve-root
-      - ../../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
-      - ../../../dev/toprc:/root/.config/procps/toprc
+      - ../../../src-serve-root/:/sg/src-serve-root
+      - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
+      - ../../dev/toprc:/root/.config/procps/toprc
 
   src-serve-git:
     container_name: src-serve-git-ubuntu.local
     user: ${CURRENT_UID_GID}
     volumes:
-      - ../../../../src-serve-root/:/sg/src-serve-root:ro
+      - ../../../src-serve-root/:/sg/src-serve-root:ro
 
 networks:
   default:
