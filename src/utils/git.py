@@ -80,7 +80,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
 
     # Get the local repo path
     job_config                      = ctx.job.get("job",{}).get("config",{})
-    git_default_branch              = job_config("job",{})['git_default_branch']
+    git_default_branch              = job_config("job",{}).get("git_default_branch","")
     cmd_git_repo_set_default_branch = ["git", "-C", local_repo_path, "symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
 
     local_branch_prefix         = "refs/heads/"

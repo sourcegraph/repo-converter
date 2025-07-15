@@ -167,7 +167,7 @@ def extract_fields(record: Dict[str, Any]) -> List[str]:
     fields = [
         'timestamp',
         'process.name',
-        'job.repo_key',
+        'job.config.repo_key',
         'process.execution_time_seconds',
         'process.output_line_count',
         'process.success',
