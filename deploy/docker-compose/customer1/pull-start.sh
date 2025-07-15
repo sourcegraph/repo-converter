@@ -49,28 +49,45 @@ log "Verifying file/dir ownerships in $src_serve_root_dir"
 count_of_files_not_owned_by_me=$(find "$src_serve_root_dir" \! -user "$CURRENT_USER" -printf 1 | wc -c)
 log "Found $count_of_files_not_owned_by_me files/dirs in $src_serve_root_dir not owned by current user"
 
-log "Attempting to take ownership of these files/dirs"
-find "$src_serve_root_dir" \! -user "$CURRENT_USER" -exec chown "$CURRENT_UID_GID" {} \;
 
+# If an f is passed in the args
+if [[ "$1" == *"m"* ]]
+then
+
+    log "Attempting to take ownership of these files/dirs"
+    find "$src_serve_root_dir" \! -user "$CURRENT_USER" -exec chown "$CURRENT_UID_GID" {} \;
+
+fi
 
 log "Verifying file permissions in $src_serve_root_dir"
 
 count_of_files_with_wrong_perms=$(find "$src_serve_root_dir" -type f \! -perm 644 -printf 1 | wc -c)
 log "Found $count_of_files_with_wrong_perms files $src_serve_root_dir with incorrect permissions"
 
-log "Attempting to fix permissions on these files"
-find "$src_serve_root_dir" -type f \! -perm 644 -exec chmod 644 {} \;
 
+# If an f is passed in the args
+if [[ "$1" == *"m"* ]]
+then
+
+    log "Attempting to fix permissions on these files"
+    find "$src_serve_root_dir" -type f \! -perm 644 -exec chmod 644 {} \;
+
+fi
 
 log "Verifying directory permissions in $src_serve_root_dir"
 
 count_of_dirs_with_wrong_perms=$(find "$src_serve_root_dir" -type d \! -perm 755 -printf 1 | wc -c)
 log "Found $count_of_dirs_with_wrong_perms directories $src_serve_root_dir with incorrect permissions"
 
-log "Attempting to fix permissions on these directories"
-find "$src_serve_root_dir" -type d \! -perm 755 -exec chmod 755 {} \;
 
+# If an f is passed in the args
+if [[ "$1" == *"m"* ]]
+then
 
+    log "Attempting to fix permissions on these directories"
+    find "$src_serve_root_dir" -type d \! -perm 755 -exec chmod 755 {} \;
+
+fi
 
 ## Run Git and Docker commands
 log "On branch before git pull: $($git_cmd branch -v)"
