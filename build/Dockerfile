@@ -20,8 +20,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 # the application crashes without emitting any logs due to buffering
 ENV \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    HOME=/home/sourcegraph
+    PYTHONUNBUFFERED=1
 
 # Install packages
 # default-jre needed for Atlassian's svn-migration-scripts.jar
@@ -85,6 +84,16 @@ COPY src/ src/
 # Copy the dotenv file into the image
 # The contents of this file changes every build
 COPY build/.env build/.env
+
+# Create the user, with a home directory
+RUN groupadd --gid 1002 sourcegraph && \
+    useradd --uid 1001 --gid sourcegraph --create-home --home-dir /home/sourcegraph sourcegraph
+
+# Give ownership of the whole /sg dir and all its contents to the new user
+RUN chown -R sourcegraph:sourcegraph /sg
+
+# Switch to the new user
+USER sourcegraph
 
 # Start the container
 CMD ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]
