@@ -25,7 +25,8 @@ services:
 #    image: ghcr.io/sourcegraph/repo-converter:HEAD
     image: repo-converter:build
     restart: never
-    userns_mode: keep-id
+    user: "1000:1000"
+    userns_mode: "keep-id:uid=1000,gid=1000"
     volumes:
       - ../dev/toprc:/root/.config/procps/toprc:z # `top` config file
       - ../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
