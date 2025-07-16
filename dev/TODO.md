@@ -31,6 +31,11 @@
         - What little data do we have from a child process reap event, which we can lookup in the dict?
         - grandparent pid?
 
+- Add more details to the "Concurrency status" messages, including:
+    - Batch size
+    - Number of commits already converted in the local git repo
+    - Commit date of the most recently converted revision
+
 - Enhance error events with automatic error context capture and correlation IDs
     - Remote server response errors, ex. svn: E175012: Connection timed out
     - Decorators and context managers for logging context?
@@ -58,8 +63,8 @@
 ### Stability
 
 - `git svn fetch`
-    - Commits not getting committed to the local repo
-    - Not entirely sure if svn is blocking me
+    - Turns out, the `fetch` command is absolutely intolerant of invalid revs in the `--revisions` range, i.e. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, no changes
+    - Simplifying local repo state tracking for the purposes of fetch batch ranges, just using the SVN rev number from the latest git commit message
 
 - `svn log` commands
     - Longest commands, which seem to be timing out and causing issues

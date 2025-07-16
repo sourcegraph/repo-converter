@@ -296,7 +296,7 @@ def get_config(ctx: Context, key: str, quiet: bool=False) -> list[str]:
     return value
 
 
-def get_latest_commit_metadata(ctx: Context, commit_metadata_list: list[str] = None) -> list[str]:
+def get_latest_commit_metadata(ctx: Context, commit_metadata_list: list[str] = None) -> dict:
     """
     Get metadata from the most recent commit from the local git repo
     """
@@ -321,7 +321,9 @@ def get_latest_commit_metadata(ctx: Context, commit_metadata_list: list[str] = N
         "for-each-ref", "--count=1", "--sort=-committerdate", f"--format=%({commit_metadata_string})"
     ]
 
-    return list(cmd.run_subprocess(ctx, cmd_git_get_latest_ref, name="cmd_git_get_latest_ref").get("output",""))
+    result = cmd.run_subprocess(ctx, cmd_git_get_latest_ref, name="cmd_git_get_latest_ref")
+
+    return result
 
 
 def git_global_config(ctx: Context) -> None:

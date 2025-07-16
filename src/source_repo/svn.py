@@ -500,9 +500,6 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
     if bare_clone:
         git.set_config(ctx, "core.bare", "true")
 
-    # Initialize the batch end rev config with a 0 value
-    git.set_config(ctx, f"{ctx.git_config_namespace}.batch-end-revision", "0")
-
 
 def _configure_git_repo(ctx: Context, commands: dict) -> None:
     """
@@ -592,21 +589,24 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
 
     ## Latest commit metadata
     commit_metadata_results = git.get_latest_commit_metadata(ctx)
+    log(ctx, f"commit_metadata_results:", "debug", {"process": commit_metadata_results})
+
+    commit_metadata_results_output = list(commit_metadata_results.get("output"))
 
     # If we got all the results back we need
-    if len(commit_metadata_results) >= 4:
+    if len(commit_metadata_results_output) >= 4:
 
         # Try to extract the last converted subversion revision from the commit message body
         last_converted_subversion_revision = 0
-        for line in commit_metadata_results:
+        for line in commit_metadata_results_output:
             if "git-svn-id" in line:
                 last_converted_subversion_revision = int(line.split('@')[1].split()[0])
 
         ctx.job["stats"]["local"].update(
             {
-                f"git_repo_latest_commit_date_{event}": commit_metadata_results[0],
-                f"git_repo_latest_commit_short_hash_{event}": commit_metadata_results[1],
-                f"git_repo_latest_commit_message_{event}": commit_metadata_results[2],
+                f"git_repo_latest_commit_date_{event}": commit_metadata_results_output[0],
+                f"git_repo_latest_commit_short_hash_{event}": commit_metadata_results_output[1],
+                f"git_repo_latest_commit_message_{event}": commit_metadata_results_output[2],
                 f"git_repo_latest_converted_svn_rev_{event}": last_converted_subversion_revision,
             }
         )
@@ -614,21 +614,16 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
 
 def _check_if_repo_already_up_to_date(ctx: Context) -> bool:
     """
-    Get the previous_batch_end_rev from the local git repo
+    Get the git_repo_latest_converted_svn_rev_start from the local git repo
 
     Compare it against remote_current_rev from the svn info output
     """
 
-    remote_current_rev = ctx.job.get("stats",{}).get("remote",{}).get("last_changed_revision","")
+    job_stats = ctx.job.get("stats",{})
+    git_repo_latest_converted_svn_rev_start = job_stats.get("local",{}).get("git_repo_latest_converted_svn_rev_start")
+    remote_current_rev = job_stats.get("remote",{}).get("last_changed_revision")
 
-    # get_config() returns a list of strings, cast it into an int
-    previous_batch_end_rev = git.get_config(ctx, f"{ctx.git_config_namespace}.batch-end-revision")
-    previous_batch_end_rev = " ".join(previous_batch_end_rev) if isinstance(previous_batch_end_rev, list) else previous_batch_end_rev
-    previous_batch_end_rev = int(previous_batch_end_rev) if previous_batch_end_rev else 0
-
-    ctx.job["stats"]["local"]["previous_batch_end_rev"] = previous_batch_end_rev
-
-    if previous_batch_end_rev == remote_current_rev:
+    if git_repo_latest_converted_svn_rev_start and remote_current_rev and git_repo_latest_converted_svn_rev_start == remote_current_rev:
         set_job_result(ctx, "skipped", "repo up to date", True)
         return True
 
@@ -692,8 +687,8 @@ def _log_number_of_revs_out_of_date(ctx: Context, commands: dict) -> None:
 
     if log_remaining_revs:
 
-        previous_batch_end_rev      = ctx.job.get("stats",{}).get("local",{}).get("previous_batch_end_rev","")
-        cmd_svn_log_remaining_revs  = commands["cmd_svn_log"] + ["--revision", f"{previous_batch_end_rev}:HEAD"]
+        git_repo_latest_converted_svn_rev_start      = ctx.job.get("stats",{}).get("local",{}).get("git_repo_latest_converted_svn_rev_start","")
+        cmd_svn_log_remaining_revs  = commands["cmd_svn_log"] + ["--revision", f"{git_repo_latest_converted_svn_rev_start}:HEAD"]
         password                    = job_config.get("password","")
 
         # Parse the output to get the number of remaining revs
@@ -716,12 +711,12 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> bool:
     fetch_batch_size        = int(job_config.get("fetch_batch_size", 0))
     password                = job_config.get("password","")
     cmd_svn_log             = commands["cmd_svn_log"]
-    previous_batch_end_rev  = int(ctx.job.get("stats",{}).get("local",{}).get("previous_batch_end_rev", 0))
+    git_repo_latest_converted_svn_rev_start  = int(ctx.job.get("stats",{}).get("local",{}).get("git_repo_latest_converted_svn_rev_start", 0))
     this_batch_end_rev      = 0
     log_failure_message     = ""
 
     # Pick a revision number to start with; may or may not be a real rev number
-    this_batch_start_rev    = int(previous_batch_end_rev + 1)
+    this_batch_start_rev    = int(git_repo_latest_converted_svn_rev_start + 1)
 
     # Run the svn log command to get real revision numbers for this batch
     cmd_svn_log_get_batch_revs  = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{this_batch_start_rev}:HEAD"]
@@ -869,13 +864,6 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
             - Some commits were synced
             - Some errors were present
 
-    Actions:
-
-        Any success:
-            - Update the .git/config file with the new last synced commit
-                previous_batch_end_rev = ctx.job["stats"]["local"]["previous_batch_end_rev"]
-                git.set_config(ctx, f"{ctx.git_config_namespace}.batch-end-revision", previous_batch_end_rev)
-
     """
 
     ## Gather needed inputs
@@ -1002,7 +990,6 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     ## Get the latest commit from the git repo's commit logs
     # Update the .git/config file with the ending revision number
     latest_converted_svn_rev = int(job_stats_local.get("git_repo_latest_converted_svn_rev_end", 0))
-    git.set_config(ctx, f"{ctx.git_config_namespace}.batch-end-revision", str(latest_converted_svn_rev))
 
     # If the ending revision number matches the batch end rev number,
     # then we know we succeeded
@@ -1012,15 +999,15 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
 
 
     ## Get the batch size, and git commits before and after, to check if they add up
+    fetching_batch_count        = int(job_stats_local.get("fetching_batch_count", 0))
     git_repo_commit_count_end   = int(job_stats_local.get("git_repo_commit_count_end",   0))
     git_repo_commit_count_start = int(job_stats_local.get("git_repo_commit_count_start", 0))
     git_commits_added           = int(git_repo_commit_count_end - git_repo_commit_count_start)
-    fetch_batch_size            = int(job_config.get("fetch_batch_size", 0))
 
     ctx.job["stats"]["local"].update({"git_commits_added": git_commits_added})
 
-    if git_commits_added != fetch_batch_size:
-        ctx.job["result"]["failures"].append(f"git_commits_added: {git_commits_added} != fetch_batch_size: {fetch_batch_size}")
+    if git_commits_added != fetching_batch_count:
+        ctx.job["result"]["failures"].append(f"git_commits_added: {git_commits_added} != fetching_batch_count: {fetching_batch_count}")
 
 
     ## Count how many, and which revs were checked in this fetch
