@@ -19,13 +19,17 @@
         - Analyze failure events:
             - Which commands are failing most?
             - Why?
+        - Implement OpenTelemetry
 
 - Find a tool to search / filter through logs
     - See Slack thread with Eng
     - Amped the `dev/query_logs.py` script in the meantime
 
 - Build up log event context, ex. canonical logs
+        - Store job metadata in a dict, key is pid?
     - And be able to retrieve this context in cmd.log_process_status()
+        - What little data do we have from a child process reap event, which we can lookup in the dict?
+        - grandparent pid?
 
 - Enhance error events with automatic error context capture and correlation IDs
     - Remote server response errors, ex. svn: E175012: Connection timed out
@@ -34,12 +38,11 @@
 - Log a repo status event at the end of the svn.py module
     - Remote
         - SVN
-            - Revs remaining to convert
-            - Total rev count
+            - Revs remaining to convert, if LOG_REMAINING_REVS
+            - Total rev count, if LOG_REMAINING_REVS
     - Local
         - Git
-            - Last rev from git log at start
-            - Last rev from git log at end
+            - Difference between svn_info last changed date, and git last commit date
     - Last run's status (success / fail)
     - Progress (% of revs converted)
 
@@ -64,6 +67,7 @@
         - Keep the output revision numbers from `git svn log --xml` commands in a file on disk
         - Append to this file when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
         - Use an XML parsing library or regex matches to extract revision numbers, but store as JSON in the file
+    - The problem with the `git svn` CLI, is that failures still exit 0, so we have to bubble wrap around it
 
     - Compare svn log file against `git log` output, to ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
 
@@ -77,6 +81,10 @@
 - Use git.get_config(), git.set_config(), and GitPython more extensively?
 
 ### Performance
+
+- Dynamically reduce batch size on timeouts
+    - If timeout error, retry with half the batch size
+    - If the batch size succeeded, persist the batch size for the one repo, with a comment as to why the change was made
 
 - SVN commands hanging
     - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
@@ -183,6 +191,21 @@
         - Track PIDs when launching: Store process metadata (command, start time, purpose) in a dict when creating child processes
         - Cross-reference with active processes: Check if the PID exists in ctx.active_repo_conversion_processes
     - Use process monitoring libraries
+
+- Prevent stack traces during shutdown; from Amp:
+    - The SIGTERM signals are received across different cycles (11, 0, 1) because:
+        - Signal handler registers itself recursively: In signal_handler.py:19, the handler is registered as a lambda that calls itself
+        - Process group kill triggers more signals: When the handler calls os.killpg() at line 39, it sends SIGTERM to all processes in the group, including itself
+        - Multiple threads/processes receive signals: Each active process/thread receives its own SIGTERM and logs the "Received signal" message
+    - Stack Trace During Shutdown occur because:
+        - Signal handler called during JSON logging: The signal handler interrupts the logging process while it's serializing JSON data (line 51-52 in traceback)
+        - Recursive signal handling: The handler tries to log while already handling a signal, creating a nested call
+        - Multiprocessing cleanup fails: The FileNotFoundError at line 100 indicates the multiprocessing manager's socket connection was already closed when trying to access self.active_jobs[server_name]
+    - Root Causes
+        - Non-reentrant signal handling: The signal handler isn't designed to handle recursive calls safely
+        - Race condition: The multiprocessing manager shuts down before all processes finish cleanup
+        - Signal propagation: os.killpg() creates a cascade of signals across the process group
+    - The application does eventually shut down gracefully, but the multiple signal receptions and stack traces indicate the shutdown process could be more robust.
 
 - Multiprocessing / state / zombie cleanup
     - Learn more about multiprocessing pools

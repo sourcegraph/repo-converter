@@ -58,7 +58,7 @@ def main():
         ctx.cycle += 1
 
         # Log the start of the run
-        log(ctx, f"Starting main loop run", "info", log_env_vars = True)
+        log(ctx, f"Starting main loop run", "debug", log_env_vars = True)
 
         # Load the repos to convert from file, in case the file has been changed while the container is running
         load_repos.load_from_file(ctx)
@@ -77,16 +77,16 @@ def main():
         cmd.status_update_and_cleanup_zombie_processes(ctx)
         # Run the same code again, to update the list of running repo conversion jobs in the context dict
 
-        # Log the end of the run
-        log(ctx, "Finishing main loop run", "info")
+        # # Log the end of the run
+        # log(ctx, "Finishing main loop run", "debug")
 
         # Sleep the configured interval
-        log(ctx, f"Sleeping main loop for REPO_CONVERTER_INTERVAL_SECONDS={interval} seconds", "info")
+        log(ctx, f"Sleeping main loop for REPO_CONVERTER_INTERVAL_SECONDS={interval} seconds", "debug")
         time.sleep(interval)
 
         # If MAX_CYCLES was defined, and if we've reached it, then exit
         if max_cycles > 0 and ctx.cycle >= max_cycles:
-            log(ctx, f"Reached MAX_CYCLES={max_cycles}, exiting main loop"," warning")
+            log(ctx, f"Reached MAX_CYCLES={max_cycles}, exiting main loop"," info")
             break
 
     # Set shutdown flag to stop background threads gracefully

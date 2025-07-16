@@ -17,7 +17,7 @@ def _get_and_validate_local_repo_path(
     ) -> str:
 
     # Get the local repo path
-    job_config      = ctx.job.get("job",{}).get("config",{})
+    job_config      = ctx.job.get("config",{})
     local_repo_path = job_config.get("local_repo_path","")
 
     if not local_repo_path:
@@ -79,7 +79,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
         return
 
     # Get the local repo path
-    job_config                      = ctx.job.get("job",{}).get("config",{})
+    job_config                      = ctx.job.get("config",{})
     git_default_branch              = job_config.get("git_default_branch","")
     cmd_git_repo_set_default_branch = ["git", "-C", local_repo_path, "symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
 
@@ -280,7 +280,7 @@ def get_config(ctx: Context, key: str, quiet: bool=False) -> list[str]:
     A more generic method to get a config value from a repo's config file
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, quiet)
+    local_repo_path = _get_and_validate_local_repo_path(ctx, quiet=quiet)
     if not local_repo_path:
         return
 
@@ -294,6 +294,33 @@ def get_config(ctx: Context, key: str, quiet: bool=False) -> list[str]:
 
     return value
 
+def get_latest_commit_metadata(ctx: Context, commit_metadata_list: list[str] = None) -> list[str]:
+    """
+    Get metadata from the most recent commit from the local git repo
+    """
+
+    local_repo_path = _get_and_validate_local_repo_path(ctx, quiet=True)
+    if not local_repo_path:
+        return
+
+    # Set a default value if none is provided
+    if not commit_metadata_list:
+        commit_metadata_list = [
+            "committerdate:short",
+            "objectname:short",
+            "contents:subject",
+            "contents:body"
+        ]
+
+    commit_metadata_string = ")%0a%(".join(commit_metadata_list)
+
+    cmd_git_get_latest_ref = [
+        "git", "-C", local_repo_path,
+        "for-each-ref", "--count=1", "--sort=-committerdate", f"--format=%({commit_metadata_string})"
+    ]
+
+    return list(cmd.run_subprocess(ctx, cmd_git_get_latest_ref, name="cmd_git_get_latest_ref").get("output",""))
+
 
 def git_global_config(ctx: Context) -> None:
     """
@@ -303,10 +330,10 @@ def git_global_config(ctx: Context) -> None:
     """
 
     cmd_git_safe_directory = ["git", "config", "--global", "--replace-all", "safe.directory", "\"*\""]
-    cmd.run_subprocess(ctx, cmd_git_safe_directory, name="cmd_git_safe_directory")
+    cmd.run_subprocess(ctx, cmd_git_safe_directory, quiet=True, name="cmd_git_safe_directory")
 
     cmd_git_default_branch = ["git", "config", "--global", "--replace-all", "init.defaultBranch", "main"]
-    cmd.run_subprocess(ctx, cmd_git_default_branch, name="cmd_git_default_branch")
+    cmd.run_subprocess(ctx, cmd_git_default_branch, quiet=True, name="cmd_git_default_branch")
 
 
 def set_config(ctx: Context, key: str, value: str) -> bool:

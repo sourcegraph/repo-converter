@@ -31,7 +31,7 @@ def start(ctx: Context) -> None:
     ctx.reset_job()
 
     # Log a start event
-    log(ctx, f"Starting convert_repos.start", "info", log_concurrency_status=True)
+    log(ctx, f"Starting convert_repos.start", "debug", log_concurrency_status=True)
 
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
@@ -43,14 +43,14 @@ def start(ctx: Context) -> None:
         repo_type = repo_config.get("type", "").lower()
 
         # Generate a job ID, to link all events for each repo conversion job together in the logs
-        job_id = str(uuid.uuid4())[:8]
+        job_trace = str(uuid.uuid4())[:8]
 
         # Set log context / structured data
         # Overwrite fresh for each job
         # Each conversion_wrapper child process gets its own copy of the context
-        ctx.job["job"].update(
+        ctx.job.update(
             {
-                "id": job_id,
+                "trace": job_trace,
                 "config": {
                     "repo_key": repo_key,
                     "repo_type": repo_type,
@@ -65,7 +65,7 @@ def start(ctx: Context) -> None:
         # Try to acquire concurrency slot
         # This will block and wait till a slot is available
         if not ctx.concurrency_manager.acquire_job_slot(ctx):
-            log(ctx, "Could not acquire concurrency slot, skipping", "info", log_concurrency_status=True)
+            log(ctx, "Could not acquire concurrency slot, skipping", "debug", log_concurrency_status=True)
             continue
 
         # Create a wrapper function that handles semaphore cleanup
@@ -85,7 +85,7 @@ def start(ctx: Context) -> None:
                 ctx.concurrency_manager.release_job_slot(ctx)
 
                 # log_concurrency_status=True causes an error inside this wrapper function
-                log(ctx, f"Finishing repo conversion job in pid={os.getpid()}", "debug")
+                log(ctx, f"Finishing repo conversion job in pid={os.getpid()}", "info")
 
         # Start the process
         # Do not store any reference to the process, otherwise it may cling on as a zombie,
@@ -105,4 +105,4 @@ def start(ctx: Context) -> None:
     ctx.reset_job()
 
     # Log final status
-    log(ctx, f"Finishing convert_repos.start", "info", log_concurrency_status=True)
+    log(ctx, f"Finishing convert_repos.start", "debug", log_concurrency_status=True)

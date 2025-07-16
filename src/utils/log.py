@@ -118,9 +118,10 @@ def _build_structured_payload(
         payload.update(structured_data)
 
     # Merge any job data from the context
-    if ctx.job.get("job", {}):
-        payload.update(ctx.job)
+    if ctx.job:
+        payload.update({"job": dict(ctx.job)})
 
+    # Remove any null values
     payload = _remove_null_values(payload)
 
     return payload
@@ -227,7 +228,7 @@ def set_job_result(ctx: Context, action: str = None, reason: str = None, success
     Set the result subdict for job logs
     """
 
-    ctx.job["job"]["result"].update(
+    ctx.job["result"].update(
         {
             "action": action,
             "reason": reason,

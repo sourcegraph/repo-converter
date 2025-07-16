@@ -53,7 +53,7 @@ def load_from_file(ctx: Context) -> None:
 
     ctx.repos = repos
 
-    log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
+    # log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
 
     repos_to_log = {"repos": ctx.repos}
     log(ctx, "Repos to convert", "debug", repos_to_log)

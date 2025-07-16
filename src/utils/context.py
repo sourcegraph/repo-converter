@@ -5,11 +5,21 @@
 # Do not import the logger module; it'd create a circular import
 
 # Import Python standard modules
+from collections import defaultdict
 from datetime import datetime
 import os
 import psutil
 import time
 
+class NestedDefaultDict(defaultdict):
+    """
+    Helper class to prevent KeyErrors on job dict
+    """
+    def __init__(self, *args, **kwargs):
+        super(NestedDefaultDict, self).__init__(NestedDefaultDict, *args, **kwargs)
+
+    def __repr__(self):
+        return repr(dict(self))
 
 class Context:
     """
@@ -61,7 +71,8 @@ class Context:
     repos = {}
 
     # Space to store structure log information for repo sync jobs
-    job = {}
+    # job = {}
+    job = NestedDefaultDict()
 
     # Set of secrets to redact in logs
     secrets = set()
@@ -110,9 +121,6 @@ class Context:
 
         # Get the list of proc attributes from the psutils library, and initialize psutils_process_attributes_to_fetch
         self.initialize_process_attributes_to_fetch()
-
-        # Set the initial state of the job dict
-        self.reset_job()
 
 
     def add_secrets(self, new_secrets):
@@ -166,26 +174,28 @@ class Context:
         to prevent log events from including old data from other jobs
         """
 
-        self.job = {
-            "job": {
-                "id": "",
-                "config": {
-                    "repo_key": "",
-                    "repo_type": "",
-                    "server_name": ""
-                },
-                "result": {
-                    "action": "",
-                    "reason": "",
-                    "success": "",
-                    "run_time_seconds": "",
-                },
-                "stats": {
-                    "local": {},
-                    "remote": {}
-                }
-            }
-        }
+        self.job = NestedDefaultDict()
+
+        # self.job = {
+        #     "job": {
+        #         "id": "",
+        #         "config": {
+        #             "repo_key": "",
+        #             "repo_type": "",
+        #             "server_name": ""
+        #         },
+        #         "result": {
+        #             "action": "",
+        #             "reason": "",
+        #             "success": "",
+        #             "run_time_seconds": "",
+        #         },
+        #         "stats": {
+        #             "local": {},
+        #             "remote": {}
+        #         }
+        #     }
+        # }
 
     def update_repos(self, repos_dict):
         """

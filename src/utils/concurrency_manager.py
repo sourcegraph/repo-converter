@@ -43,12 +43,12 @@ class ConcurrencyManager:
         self.per_server_semaphores_lock = multiprocessing.Lock()
 
         # Share a list of active jobs with concurrency_monitor
-        self.active_jobs = self.manager.dict() # server_name -> list of (active_job_id, active_job_repo, active_job_timestamp)
+        self.active_jobs = self.manager.dict() # server_name -> list of (active_job_trace, active_job_repo, active_job_timestamp)
         # Ensure no two processes can write to active_jobs at the same
         self.active_jobs_lock = multiprocessing.Lock()
 
         # Track jobs waiting for a semaphore to become available, using a list for each server_name, not sure why
-        self.queued_jobs = self.manager.dict()  # server_name -> list of (queued_job_id, queued_job_repo, queued_job_timestamp)
+        self.queued_jobs = self.manager.dict()  # server_name -> list of (queued_job_trace, queued_job_repo, queued_job_timestamp)
         self.queued_jobs_lock = multiprocessing.Lock()
 
         # Log this, without log_concurrency_status=True, as that creates a race condition
@@ -74,11 +74,11 @@ class ConcurrencyManager:
         """
 
         # Get job information from context
-        this_job_config     = ctx.job.get("job",{}).get("config","")
+        this_job_config     = ctx.job.get("config","")
         this_job_repo       = this_job_config.get("repo_key","")
         server_name         = this_job_config.get("server_name","")
 
-        this_job_id         = ctx.job.get("job",{}).get("id","")
+        this_job_trace      = ctx.job.get("trace","")
         this_job_timestamp  = int(time.time())
 
 
@@ -89,11 +89,11 @@ class ConcurrencyManager:
             # active_jobs is a dict, with subdicts for each server_name, which contains a list of active jobs for that server
             if server_name in self.active_jobs:
 
-                for active_job_id, active_job_repo, active_job_timestamp in self.active_jobs[server_name]:
+                for active_job_trace, active_job_repo, active_job_timestamp in self.active_jobs[server_name]:
 
                     if active_job_repo == this_job_repo:
                         set_job_result(ctx, "skipped", "Repo job already in progress", False)
-                        log(ctx, f"Skipping; Repo job already in progress; repo: {active_job_repo}, timestamp: {active_job_timestamp}; job_id: {active_job_id}; running for: {int(time.time() - active_job_timestamp)} seconds", "info")
+                        log(ctx, f"Skipping; Repo job already in progress; repo: {active_job_repo}, timestamp: {active_job_timestamp}; trace: {active_job_trace}; running for: {int(time.time() - active_job_timestamp)} seconds", "info")
                         return False
 
         ## Add this job to the dict of waiting jobs, just in case the blocking semaphore acquire takes a while
@@ -103,7 +103,7 @@ class ConcurrencyManager:
                 self.queued_jobs[server_name] = self.manager.list()
 
             queued_jobs_list = self.queued_jobs[server_name]
-            queued_jobs_list.append((this_job_id, this_job_repo, this_job_timestamp))
+            queued_jobs_list.append((this_job_trace, this_job_repo, this_job_timestamp))
             self.queued_jobs[server_name] = queued_jobs_list
 
         ## Check per-server limit
@@ -148,7 +148,7 @@ class ConcurrencyManager:
             server_active_jobs_list = self.active_jobs[server_name]
 
             # Append the new job
-            server_active_jobs_list.append((this_job_id, this_job_repo, this_job_timestamp))
+            server_active_jobs_list.append((this_job_trace, this_job_repo, this_job_timestamp))
 
             # Assign the list back to the manager list
             self.active_jobs[server_name] = server_active_jobs_list
@@ -160,13 +160,13 @@ class ConcurrencyManager:
             queued_jobs_list = self.queued_jobs[server_name]
 
             # Find the job in the active_jobs list
-            for queued_job_id, queued_job_repo, queued_job_timestamp in queued_jobs_list:
+            for queued_job_trace, queued_job_repo, queued_job_timestamp in queued_jobs_list:
 
                 # If found
-                if queued_job_repo == this_job_repo and queued_job_id == this_job_id:
+                if queued_job_repo == this_job_repo and queued_job_trace == this_job_trace:
 
                     # Remove the job from the active list
-                    queued_jobs_list.remove((queued_job_id, queued_job_repo, queued_job_timestamp))
+                    queued_jobs_list.remove((queued_job_trace, queued_job_repo, queued_job_timestamp))
 
             # Overwrite the managed list
             self.queued_jobs[server_name] = queued_jobs_list
@@ -183,7 +183,7 @@ class ConcurrencyManager:
         """
 
         # Get job information from context
-        this_job_config = ctx.job.get("job",{}).get("config","")
+        this_job_config = ctx.job.get("config","")
         server_name     = this_job_config.get("server_name","")
 
         # Wait for the lock to be free
@@ -266,14 +266,14 @@ class ConcurrencyManager:
 
                         status_active_jobs_list = []
 
-                        for active_job_id, active_job_repo, active_job_timestamp in active_jobs_list:
+                        for active_job_trace, active_job_repo, active_job_timestamp in active_jobs_list:
 
                             active_jobs_count += 1
 
                             status_active_jobs_list.append(
                                 {
                                     "repo":                 active_job_repo,
-                                    "id":                   active_job_id,
+                                    "trace":                active_job_trace,
                                     "started_timestamp":    active_job_timestamp,
                                     "started_datetime":     datetime.fromtimestamp(active_job_timestamp),
                                     "running_time_seconds": int(time.time() - active_job_timestamp),
@@ -298,14 +298,14 @@ class ConcurrencyManager:
 
                     status_queued_jobs_list = []
 
-                    for queued_job_id, queued_job_repo, queued_job_timestamp in queued_jobs_list:
+                    for queued_job_trace, queued_job_repo, queued_job_timestamp in queued_jobs_list:
 
                         queued_jobs_count += 1
 
                         status_queued_jobs_list.append(
                             {
                                 "repo":             queued_job_repo,
-                                "id":               queued_job_id,
+                                "trace":            queued_job_trace,
                                 "queued_timestamp": queued_job_timestamp,
                                 "queued_datetime":  datetime.fromtimestamp(queued_job_timestamp),
                                 "queue_wait_time":  int(time.time() - queued_job_timestamp),
@@ -324,8 +324,8 @@ class ConcurrencyManager:
         """Release both global and server-specific semaphores."""
 
         # Get job information from context
-        this_job_id     = ctx.job.get("job",{}).get("id","")
-        this_job_config = ctx.job.get("job",{}).get("config","")
+        this_job_trace  = ctx.job.get("trace","")
+        this_job_config = ctx.job.get("config","")
         this_job_repo   = this_job_config.get("repo_key","")
         server_name     = this_job_config.get("server_name","")
 
@@ -337,10 +337,10 @@ class ConcurrencyManager:
                 server_active_jobs_list = self.active_jobs[server_name]
 
                 # Find the job in the active_jobs list
-                for active_job_id, active_job_repo, active_job_timestamp in server_active_jobs_list:
+                for active_job_trace, active_job_repo, active_job_timestamp in server_active_jobs_list:
 
                     # If found
-                    if active_job_repo == this_job_repo and active_job_id == this_job_id:
+                    if active_job_repo == this_job_repo and active_job_trace == this_job_trace:
 
                         # Release per-server semaphore
                         server_semaphore = self._get_server_semaphore(ctx)
@@ -350,7 +350,7 @@ class ConcurrencyManager:
                         self.global_semaphore.release()
 
                         # Remove the job from the active list
-                        server_active_jobs_list.remove((active_job_id, active_job_repo, active_job_timestamp))
+                        server_active_jobs_list.remove((active_job_trace, active_job_repo, active_job_timestamp))
 
                 # Overwrite the managed list
                 self.active_jobs[server_name] = server_active_jobs_list

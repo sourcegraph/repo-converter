@@ -383,8 +383,8 @@ def run_subprocess(
         subprocess_dict["args"] = args
 
     # Generate a correlation ID for this subprocess run
-    subprocess_id = str(uuid.uuid4())[:8]
-    subprocess_dict["id"] = subprocess_id
+    subprocess_span = str(uuid.uuid4())[:8]
+    subprocess_dict["span"] = subprocess_span
 
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet
@@ -393,8 +393,8 @@ def run_subprocess(
 
     # Log a starting message
     subprocess_dict["start_time"] = datetime.now()
-    if not quiet:
-        log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+    # if not quiet:
+    #     log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
     # Try to run the subprocess, and catch subprocess exceptions
     try:
