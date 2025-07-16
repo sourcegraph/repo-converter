@@ -31,7 +31,7 @@ def start(ctx: Context) -> None:
     ctx.reset_job()
 
     # Log a start event
-    log(ctx, f"Starting convert_repos.start", "debug", log_concurrency_status=True)
+    log(ctx, f"Starting convert_repos.start", "debug")
 
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
@@ -60,7 +60,7 @@ def start(ctx: Context) -> None:
         )
 
         # Log initial status
-        log(ctx, "Starting repo conversion job", "debug", log_concurrency_status=True)
+        log(ctx, "Starting repo conversion job", "debug")
 
         # Try to acquire concurrency slot
         # This will block and wait till a slot is available
@@ -105,4 +105,4 @@ def start(ctx: Context) -> None:
     ctx.reset_job()
 
     # Log final status
-    log(ctx, f"Finishing convert_repos.start", "debug", log_concurrency_status=True)
+    log(ctx, f"Finishing convert_repos.start", "debug")

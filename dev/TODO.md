@@ -57,9 +57,16 @@
 
 ### Stability
 
+- `git svn fetch`
+    - Updated batch end rev is not getting written to .git/config, file perms issue?
+    - Updated batch end rev is not getting read from .git/config, file perms issue?
+
 - `svn log` commands
     - Longest commands, which seem to be timing out and causing issues
     - What do we use them for? Why?
+        - Limitations of `git svn fetch`:
+            - Does not have a --batch-size arg, but does have a --revisions (range) arg
+            - Does not commit synced changes to the local git repo until the job completes, so we have to run it in batches
         - The big one: Count all revs remaining to convert, as a progress indicator - Disabled this by default
         - The small one: Get first and last rev numbers to start and end this batch - Seems to be necessary, but combined into one, and limited to batch size
         - The smallest one: Log recent commits, to visually verify a successful fetch - Disabled by default

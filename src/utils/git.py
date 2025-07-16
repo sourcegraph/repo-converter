@@ -288,11 +288,13 @@ def get_config(ctx: Context, key: str, quiet: bool=False) -> list[str]:
 
     try:
         value = list(cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config").get("output",""))
+        # log(ctx, f"git.get_config succeeded; key: {key}; value: {value}; cmd_git_get_config: {cmd_git_get_config}; result: {value}", "info")
     except:
-        log(ctx, "git.get_config failed", "warning")
+        # log(ctx, f"git.get_config failed; key: {key}; value: {value}; cmd_git_get_config: {cmd_git_get_config}; result: {value}", "error")
         value = []
 
     return value
+
 
 def get_latest_commit_metadata(ctx: Context, commit_metadata_list: list[str] = None) -> list[str]:
     """
@@ -348,12 +350,17 @@ def set_config(ctx: Context, key: str, value: str) -> bool:
     if not local_repo_path:
         return
 
-    cmd_git_set_config = ["git", "-C", local_repo_path, "config", "--set", key, value, "--replace-all"]
+    cmd_git_set_config = ["git", "-C", local_repo_path, "config", "--replace-all", key, value]
+    result = {
+        "empty_dict": "true"
+    }
 
     try:
-        cmd.run_subprocess(ctx, cmd_git_set_config, quiet=True, name="cmd_git_set_config")
+        result = cmd.run_subprocess(ctx, cmd_git_set_config, quiet=True, name="cmd_git_set_config")
+        # log(ctx, f"git.set_config succeeded; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "info", result)
         return True
     except:
+        # log(ctx, f"git.set_config failed; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "error", result)
         return False
 
 

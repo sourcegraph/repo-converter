@@ -15,13 +15,13 @@ services:
   repo-converter:
     container_name: repo-converter
     environment:
-      - CONCURRENCY_MONITOR_INTERVAL=10
+      - CONCURRENCY_MONITOR_INTERVAL=60
       - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
-      - LOG_RECENT_COMMITS=5
-      - MAX_CONCURRENT_CONVERSIONS_GLOBAL=1
-      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=1
+      # - LOG_RECENT_COMMITS=5
+      - MAX_CONCURRENT_CONVERSIONS_GLOBAL=20
+      - MAX_CONCURRENT_CONVERSIONS_PER_SERVER=10
       # - MAX_CYCLES=5
-      - REPO_CONVERTER_INTERVAL_SECONDS=10 # Default is 3600 seconds (1 hour)
+      - REPO_CONVERTER_INTERVAL_SECONDS=30 # Default is 3600 seconds (1 hour)
 #    image: ghcr.io/sourcegraph/repo-converter:HEAD
     image: repo-converter:build
     restart: never

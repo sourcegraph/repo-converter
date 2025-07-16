@@ -112,17 +112,17 @@ class ConcurrencyManager:
 
         # Check the semaphore value for number of remaining slots
         if server_semaphore.get_value() <= 0:
-            log(ctx, f"Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info")
+            log(ctx, f"Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info", log_concurrency_status=True)
 
         ## Check global limit
         if self.global_semaphore.get_value() <= 0:
-            log(ctx, f"Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info")
+            log(ctx, f"Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", log_concurrency_status=True)
 
         ## Acquire a slot in the the server-specific semaphore
         # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
         if not server_semaphore.acquire(block=True):
 
-            log(ctx, "server_semaphore.acquire failed", "error")
+            log(ctx, "server_semaphore.acquire failed", "error", log_concurrency_status=True)
             return False
 
         ## Acquire a slot in the the global semaphore
@@ -132,7 +132,7 @@ class ConcurrencyManager:
             # Release the server semaphore since we couldn't get the global one
             server_semaphore.release()
 
-            log(ctx, "self.global_semaphore.acquire failed", "error")
+            log(ctx, "self.global_semaphore.acquire failed", "error", log_concurrency_status=True)
             return False
 
         ## Successfully acquired both semaphores
@@ -172,7 +172,7 @@ class ConcurrencyManager:
             self.queued_jobs[server_name] = queued_jobs_list
 
         # Log an update
-        log(ctx, f"Acquired job slot", "debug", log_concurrency_status=True)
+        log(ctx, f"Acquired job slot", "debug")
 
         return True
 

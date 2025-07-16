@@ -177,8 +177,8 @@ def extract_fields(record: Dict[str, Any]) -> List[str]:
         'date',
         'time',
         'cycle',
-        'process.id',
-        'job.id'
+        'process.span',
+        'job.trace'
     ]
 
     # Extract values and convert to strings
