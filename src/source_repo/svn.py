@@ -816,11 +816,16 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
     repo_key                = job_config.get("repo_key","")
     this_batch_end_rev      = job_stats_local.get("this_batch_end_rev","")
     this_batch_start_rev    = job_stats_local.get("this_batch_start_rev","")
+    fetching_batch_count    = job_stats_local.get("fetching_batch_count","")
 
     # If we have batch revisions, use them
     # It should be assumed at this point that we have these revisions
     if this_batch_start_rev and this_batch_end_rev:
         cmd_git_svn_fetch += ["--revision", f"{this_batch_start_rev}:{this_batch_end_rev}"]
+
+    # Try setting the log window size to see if it helps with stability
+    if fetching_batch_count:
+        cmd_git_svn_fetch += ["--log-window-size", str(fetching_batch_count)]
 
     log(ctx, f"Repo out of date: {repo_key}; fetching", "info")
 
