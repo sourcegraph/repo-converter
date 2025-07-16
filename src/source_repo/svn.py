@@ -34,8 +34,6 @@ def convert(ctx: Context) -> None:
     Entrypoint / main logic / orchestration function
     """
 
-    job_start_time = int(time.time())
-
     # Extract repo conversion job config values from the repos list in ctx,
     # and set default values for required but undefined configs
     _extract_repo_config_and_set_default_values(ctx)
@@ -75,14 +73,14 @@ def convert(ctx: Context) -> None:
     if _check_if_repo_already_up_to_date(ctx):
 
         # If the repo already exists, and is already up to date, then exit early
-
         ### EXTERNAL COMMAND: svn log ###
-        _log_recent_commits(ctx, commands)
-        _cleanup(ctx)
+        _cleanup(ctx, commands)
+        log(ctx, "Ending svn repo conversion job", "info")
         return
 
     ### EXTERNAL COMMAND: svn log ###
     # This is the big one, to count all revs remaining
+    # TODO: Separate the svn log range from calculating batch revisions
     _log_number_of_revs_out_of_date(ctx, commands)
 
     # Calculate revision range for this fetch
@@ -95,24 +93,14 @@ def convert(ctx: Context) -> None:
     git_svn_fetch_result = _git_svn_fetch(ctx, commands)
 
     ## Gather information needed to decide if the fetch was successful or failed
-
-    # Check if the repo is valid after the fetch
-    if _check_if_repo_exists_locally(ctx, "end"):
-        pass
-
     # Cleanup before exit
-    _cleanup(ctx)
-
-    # Get dir size of converted git repo
-    _get_local_git_repo_stats(ctx, "end")
-
-    ctx.job["result"]["run_time_seconds"] = int(time.time() - job_start_time)
+    _cleanup(ctx, commands)
 
     ## Decide if the fetch was successful or failed
     ## Also update batch end rev in git repo config file
     _verify_git_svn_fetch_success(ctx, git_svn_fetch_result)
 
-    log(ctx, "SVN repo conversion job complete", "info")
+    log(ctx, "Ending svn repo conversion job", "info")
 
 
 def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
@@ -675,14 +663,19 @@ def _log_recent_commits(ctx: Context, commands: dict) -> None:
         ctx.job.pop("svn_log_output")
 
 
-def _cleanup(ctx: Context) -> None:
+def _cleanup(ctx: Context, commands: dict) -> None:
     """
     Groups up any other functions needed to clean up before exit
     """
 
+    # Get dir size of converted git repo
+    _get_local_git_repo_stats(ctx, "end")
+
+    _log_recent_commits(ctx, commands)
+
     # Run git garbage collection and cleanup branches, even if repo is already up to date
-    git.garbage_collection(ctx)
     git.cleanup_branches_and_tags(ctx)
+    git.garbage_collection(ctx)
 
 
 def _log_number_of_revs_out_of_date(ctx: Context, commands: dict) -> None:
@@ -713,7 +706,7 @@ def _log_number_of_revs_out_of_date(ctx: Context, commands: dict) -> None:
         log(ctx, "Logging remaining_revs; note: this is an expensive operation", "info")
 
 
-def _calculate_batch_revisions(ctx: Context, commands: dict) -> dict:
+def _calculate_batch_revisions(ctx: Context, commands: dict) -> bool:
     """
     Run the svn log command to calculate batch start and end revisions for fetching
     """
@@ -730,53 +723,79 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> dict:
     # Pick a revision number to start with; may or may not be a real rev number
     this_batch_start_rev    = int(previous_batch_end_rev + 1)
 
-
     # Run the svn log command to get real revision numbers for this batch
-    cmd_svn_log_get_batch_revs                  = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{this_batch_start_rev}:HEAD"]
-    cmd_svn_log_get_batch_revs_result           = cmd.run_subprocess(ctx, cmd_svn_log_get_batch_revs, password, name="cmd_svn_log_get_batch_revs")
-    cmd_svn_log_get_batch_revs_output_list      = list(cmd_svn_log_get_batch_revs_result.get("output",""))
-    cmd_svn_log_get_batch_revs_output_string    = " ".join(cmd_svn_log_get_batch_revs_output_list)
+    cmd_svn_log_get_batch_revs  = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{this_batch_start_rev}:HEAD"]
+    process_result              = cmd.run_subprocess(ctx, cmd_svn_log_get_batch_revs, password, name="cmd_svn_log_get_batch_revs")
+    log_details                 = {"process": process_result}
+    output_list                 = list(process_result.get("output",""))
+    output_string               = " ".join(output_list)
+    len_output_list             = len(output_list)
+    # Start off as a set type for built-in deduplication
+    list_of_revs_this_batch     = set()
 
-    if cmd_svn_log_get_batch_revs_result["return_code"] == 0    and \
-        len(cmd_svn_log_get_batch_revs_output_list) > 0         and \
-        "revision" in cmd_svn_log_get_batch_revs_output_string:
+    if process_result["return_code"] == 0   and \
+        len_output_list > 0                 and \
+        "revision" in output_string:
+
+        ## Extract the specific revisions from the svn log output
+        # "output": [
+        #     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        #     "<log>",
+        #     "<logentry",
+        #     "   revision=\"1636921\">",
+        #     "</logentry>",
+        #     "<logentry",
+        #     "   revision=\"1636922\">",
+        #     "</logentry>",
+        #     "</log>"
+        # ],
+
+        for line in output_list:
+            if "revision" in line:
+                list_of_revs_this_batch.add(int(line.split("revision=\"")[1].split("\"")[0]))
+
+        # Then convert to a list for sorting
+        list_of_revs_this_batch = sorted(list_of_revs_this_batch)
 
         # Update the this batch's starting rev to the first real rev number after the previous end rev
-        this_batch_start_rev = int(" ".join(cmd_svn_log_get_batch_revs_output_list).split("revision=\"")[1].split("\"")[0])
+        this_batch_start_rev = min(list_of_revs_this_batch)
         ctx.job["stats"]["local"]["this_batch_start_rev"] = this_batch_start_rev
 
-        # Reverse the output so we can get the last revision number
-        cmd_svn_log_get_batch_revs_output_list.reverse()
-        this_batch_end_rev = int(" ".join(cmd_svn_log_get_batch_revs_output_list).split("revision=\"")[1].split("\"")[0])
+        # Get the last revision number
+        this_batch_end_rev = max(list_of_revs_this_batch)
         ctx.job["stats"]["local"]["this_batch_end_rev"] = this_batch_end_rev
 
     else:
         log_failure_message = "Failed to get batch revs from svn log"
 
 
-    ## Check if the output isn't as long as we were expecting
-    # Expected output number of lines for
-    # svn log --xml --with-no-revprops --non-interactive --limit 10 --revision 1:HEAD
-    # is 3 lines per revision
-    # and 3 lines for xml format start / end
-    expected_output_list_len = (fetch_batch_size * 3) + 3
-
-    if len(cmd_svn_log_get_batch_revs_output_list) < expected_output_list_len:
-        log_failure_message = "svn log returned fewer lines than expected"
-
-
     ## Count how many revs are in the svn log output
-    revs_in_svn_log_output = cmd_svn_log_get_batch_revs_output_string.count("revision=")
+    len_list_of_revs_this_batch = len(list_of_revs_this_batch)
     # Grab the min, in case we are close to the current rev,
     # and there are fewer revs remaining than our current batch size
-    fetching_batch_count = min(revs_in_svn_log_output, fetch_batch_size)
+    fetching_batch_count = min(len_list_of_revs_this_batch, fetch_batch_size)
     # Store it in the job stats dict
-    ctx.job["stats"]["local"]["fetching_batch_count"] = fetching_batch_count
+    ctx.job["stats"]["local"]["fetching_batch_count"]       = fetching_batch_count
+    ctx.job["stats"]["local"]["list_of_revs_this_batch"]    = list_of_revs_this_batch
+
+
+    # ## Check if the output isn't as long as we were expecting
+    # This isn't a valid check, as
+    # some repos are smaller than our batch size,
+    # and once the repo conversion catches up to the latest rev,
+    # there will be fewer commits to convert each run
+    # # Expected output number of lines for
+    # # svn log --xml --with-no-revprops --non-interactive --limit 10 --revision 1:HEAD
+    # # is 3 lines per revision
+    # # and 3 lines for xml format start / end
+    # expected_output_list_len = (fetch_batch_size * 3) + 3
+    # if len_output_list < expected_output_list_len:
+    #     log(ctx, f"svn log returned fewer lines: {len_output_list} than expected: {expected_output_list_len}", "warning", log_details)
 
 
     if log_failure_message:
         set_job_result(ctx, "skipped", log_failure_message, False)
-        log(ctx, log_failure_message, "error")
+        log(ctx, log_failure_message, "error", log_details)
         return False
 
     else:
@@ -857,10 +876,17 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     ## Gather needed inputs
     action                          = "git svn fetch"
     ctx.job["result"]["failures"]   = []
+    git_svn_fetch_output_for_errors = list(git_svn_fetch_result.get("output",""))
     git_svn_fetch_output            = list(git_svn_fetch_result.get("output",""))
     job_config                      = ctx.job.get("config","")
     job_stats_local                 = ctx.job.get("stats","").get("local","")
     structured_log_dict             = {"process": git_svn_fetch_result}
+
+
+    # Check if the repo is valid after the fetch
+    if _check_if_repo_exists_locally(ctx, "end"):
+        pass
+
 
     ## Check for any errors in the command output
     # TODO: Test the error message processing
@@ -874,7 +900,7 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
 
     # Remove the not_error lines from the output list
     for not_error in not_errors:
-        git_svn_fetch_output = [x for x in git_svn_fetch_output if not re.search(not_error, x)]
+        git_svn_fetch_output_for_errors = [x for x in git_svn_fetch_output_for_errors if not re.search(not_error, x)]
 
     # Check for expected error messages
     # We should keep this list tidy, as execution time is
@@ -945,16 +971,19 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     for error_category in error_message_regex_patterns_dict.keys():
         for error_message_regex_pattern in error_message_regex_patterns_dict.get(error_category):
 
+            regex_pattern = rf".*{error_message_regex_pattern}.*"
+            regex = re.compile(regex_pattern, flags=re.IGNORECASE)
+
             # We need the line match, but testing the match across the entire list first to reduce the exponential runtime
-            list_match = re.search(error_message_regex_pattern, " ".join(git_svn_fetch_output))
+            list_match = regex.search(" ".join(git_svn_fetch_output_for_errors))
 
             if list_match:
                 for match_group in list_match.groups():
-                    for line in git_svn_fetch_output:
+                    for line in git_svn_fetch_output_for_errors:
 
                         # Re-running the match, as list_match may match across lines,
                         # but we only want to match within each line
-                        line_match = re.search(error_message_regex_pattern, line)
+                        line_match = regex.search(line)
 
                         if line_match:
 
@@ -962,7 +991,7 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
 
                             # Remove the svn fetch error line from the process output list to avoid duplicate output,
                             # if one line in the error message matches multiple error_messages
-                            git_svn_fetch_output.remove(line)
+                            git_svn_fetch_output_for_errors.remove(line)
 
 
     ## Get the latest commit from the git repo's commit logs
@@ -988,6 +1017,13 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     if git_commits_added != fetch_batch_size:
         ctx.job["result"]["failures"].append(f"git_commits_added: {git_commits_added} != fetch_batch_size: {fetch_batch_size}")
 
+
+    ## Count how many, and which revs were checked in this fetch
+    # Verify each of them are in the git log output
+    # TODO: Implement this
+    # git_svn_fetch_output
+
+    ## Make final success / fail call
 
     if len(ctx.job["result"]["failures"]) > 0:
 

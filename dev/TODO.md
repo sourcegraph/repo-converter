@@ -58,8 +58,8 @@
 ### Stability
 
 - `git svn fetch`
-    - Updated batch end rev is not getting written to .git/config, file perms issue?
-    - Updated batch end rev is not getting read from .git/config, file perms issue?
+    - Commits not getting committed to the local repo
+    - Not entirely sure if svn is blocking me
 
 - `svn log` commands
     - Longest commands, which seem to be timing out and causing issues

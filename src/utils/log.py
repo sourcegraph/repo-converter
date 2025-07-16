@@ -119,6 +119,18 @@ def _build_structured_payload(
 
     # Merge any job data from the context
     if ctx.job:
+
+        ctx_job_result  = ctx.job.get("result",{})
+        start_timestamp = ctx_job_result.get("start_timestamp")
+        end_timestamp   = ctx_job_result.get("end_timestamp")
+        execution_time  = ctx_job_result.get("execution_time")
+
+        # If the job is still running
+        if start_timestamp and not end_timestamp and not execution_time:
+
+            # Then add a running_time_seconds
+            ctx.job["result"]["running_time_seconds"] = int(time.time() - start_timestamp)
+
         payload.update({"job": dict(ctx.job)})
 
     # Remove any null values
