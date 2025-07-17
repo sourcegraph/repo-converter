@@ -96,6 +96,7 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
 
     repos_to_convert_fields = {}
 
+
     # TODO: Implement these
     repos_to_convert_fields[ "max-concurrent-conversions"    ] = (int,           )
     repos_to_convert_fields[ "fetch-interval"                ] = (int,           )
@@ -115,6 +116,7 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
     repos_to_convert_fields[ "bare-clone"                    ] = (bool,          )
     repos_to_convert_fields[ "branches"                      ] = (str, list      )
     repos_to_convert_fields[ "git-ignore-file-path"          ] = (str,           )
+    repos_to_convert_fields[ "log-window-size"               ] = (int,           )
     repos_to_convert_fields[ "repo-url"                      ] = (str,           ) # Required: Either repo-parent-url or repo-url
     repos_to_convert_fields[ "source-repo-name"              ] = (str,           )
     repos_to_convert_fields[ "svn-layout"                    ] = (str, list      )

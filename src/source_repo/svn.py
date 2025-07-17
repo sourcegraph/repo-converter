@@ -128,6 +128,7 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
         "git_ignore_file_path"     : repo_config.get("git-ignore-file-path",     None),
         "git_org_name"             : repo_config.get("git-org-name",             None),
         "layout"                   : repo_config.get("svn-layout",               None),
+        "log-window-size"          : repo_config.get("log-window-size",          None),
         "password"                 : repo_config.get("password",                 None),
         "repo_url"                 : repo_config.get("repo-url",                 None),
         "repo_parent_url"          : repo_config.get("repo-parent-url",          None),
@@ -202,7 +203,8 @@ def _build_cli_commands(ctx: Context) -> dict:
     # git commands
     cmd_git_default_branch                  = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
     cmd_git_garbage_collection              = arg_git     + ["gc"]
-    cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--no-checkout"]
+    cmd_git_svn_fetch                       = arg_git_svn + ["fetch"]
+    # cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--no-checkout"]
     cmd_git_svn_init                        = arg_git_svn + ["init"] + arg_svn_remote_repo_code_root_url
 
      # Add authentication, if provided
@@ -386,7 +388,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
         # If we've hit the max_retries limit, return here
         elif retries_attempted >= max_retries:
 
-            log_failure_message = f"Failed to connect to repo remote, reached max retries {max_retries}"
+            log_failure_message = f"svn info failed to connect to repo remote, reached max retries {max_retries}"
             set_job_result(ctx, "skipped", log_failure_message, False)
             log(ctx, log_failure_message, "error")
 
@@ -399,7 +401,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
 
             # Log the failure
             retry_delay_seconds = random.randrange(1, 5)
-            log(ctx, f"Failed to connect to repo remote, retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
+            log(ctx, f"svn info failed to connect to repo remote, retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
             time.sleep(retry_delay_seconds)
 
         # Repeat the loop
@@ -538,10 +540,10 @@ def _configure_git_repo(ctx: Context, commands: dict) -> None:
             if path_exists and config_already_set_matches:
                 continue
             elif path_exists and not config_already_set_matches:
-                git.set_config(ctx, local_repo_path, git_config_key, git_config_value)
+                git.set_config(ctx, git_config_key, git_config_value)
             elif not path_exists and config_already_set_matches:
                 log(ctx, f"{git_config_key} already set, but file doesn't exist, unsetting it", "warning")
-                git.unset_config(ctx, local_repo_path, git_config_key)
+                git.unset_config(ctx, git_config_key)
             elif not path_exists:
                 log(ctx, f"{git_config_key} not found at {git_config_value}, skipping configuring it", "warning")
 
@@ -561,9 +563,11 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
     Called with event "start" and "end"
     """
 
+
     # Get config values
     job_config      = ctx.job.get("config",{})
     job_stats_local = ctx.job.get("stats",{}).get("local",{})
+
 
     ## dir size
     local_repo_path = job_config.get("local_repo_path","")
@@ -584,8 +588,8 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
     ## Commit count
     commit_count = git.count_commits_in_repo(ctx)
     job_stats_local[f"git_repo_commit_count_{event}"] = commit_count
-
     ctx.job["stats"]["local"].update(job_stats_local)
+
 
     ## Latest commit metadata
     commit_metadata_results = git.get_latest_commit_metadata(ctx)
@@ -610,6 +614,19 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
                 f"git_repo_latest_converted_svn_rev_{event}": last_converted_subversion_revision,
             }
         )
+
+
+    ## Get metadata from previous runs of git svn
+    branches_max_rev = 0
+    branches_max_rev_list = git.get_config(ctx, key="svn-remote.svn.branches-maxRev", config_file_path=".git/svn/.metadata", quiet=True)
+    if branches_max_rev_list:
+        branches_max_rev = int(branches_max_rev_list[0])
+
+    ctx.job["stats"]["local"].update(
+        {
+            f"git_svn_branches_max_rev_{event}": branches_max_rev
+        }
+    )
 
 
 def _check_if_repo_already_up_to_date(ctx: Context) -> bool:
@@ -708,10 +725,11 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> bool:
 
     # Get config values
     job_config                              = ctx.job.get("config",{})
+    job_stats_local                         = ctx.job.get("stats",{}).get("local",{})
     fetch_batch_size                        = int(job_config.get("fetch_batch_size", 0))
     password                                = job_config.get("password","")
     cmd_svn_log                             = commands["cmd_svn_log"]
-    git_repo_latest_converted_svn_rev_start = int(ctx.job.get("stats",{}).get("local",{}).get("git_repo_latest_converted_svn_rev_start", 0))
+    git_repo_latest_converted_svn_rev_start = int(job_stats_local.get("git_repo_latest_converted_svn_rev_start", 0))
     this_batch_end_rev                      = 0
     log_failure_message                     = ""
 
@@ -774,6 +792,14 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> bool:
     ctx.job["stats"]["local"]["list_of_revs_this_batch"]    = list_of_revs_this_batch
 
 
+    ## Ensure that this rev range won't cause a problem with branches_max_rev
+    branches_max_rev = job_stats_local.get("git_svn_branches_max_rev_start", 0)
+
+    if branches_max_rev > this_batch_start_rev:
+        log(ctx, f"git_svn_branches_max_rev_start {branches_max_rev} > this_batch_start_rev {this_batch_start_rev}, unsetting svn-remote.svn.branches-maxRev and svn-remote.svn.tags-maxRev to remediate", "warning")
+        git.unset_config(ctx, key="svn-remote.svn.branches-maxRev", config_file_path=".git/svn/.metadata")
+        git.unset_config(ctx, key="svn-remote.svn.tags-maxRev", config_file_path=".git/svn/.metadata")
+
     # ## Check if the output isn't as long as we were expecting
     # This isn't a valid check, as
     # some repos are smaller than our batch size,
@@ -807,6 +833,7 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
     cmd_git_svn_fetch       = commands["cmd_git_svn_fetch"]
     job_config              = ctx.job.get("config",{})
     job_stats_local         = ctx.job.get("stats",{}).get("local",{})
+    log_window_size         = job_config.get("log-window-size","")
     max_retries             = job_config.get("max_retries","")
     password                = job_config.get("password","")
     repo_key                = job_config.get("repo_key","")
@@ -820,8 +847,8 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
         cmd_git_svn_fetch += ["--revision", f"{this_batch_start_rev}:{this_batch_end_rev}"]
 
     # Try setting the log window size to see if it helps with stability
-    if fetching_batch_count:
-        cmd_git_svn_fetch += ["--log-window-size", str(fetching_batch_count)]
+    if log_window_size:
+        cmd_git_svn_fetch += ["--log-window-size", str(log_window_size)]
 
     log(ctx, f"Repo out of date: {repo_key}; fetching", "info")
 
@@ -831,20 +858,52 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
     # Start the fetch
     log(ctx, f'fetching with {" ".join(cmd_git_svn_fetch)}', "debug")
 
+    # Do while loop for retries
+    retries_attempted = 0
+    while True:
 
-    for i in range(1, max_retries + 1):
+        # Run the command, capture the output
+        result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name=f"cmd_git_svn_fetch_{retries_attempted}")
 
-        result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name=f"cmd_git_svn_fetch_{i}")
-
+        # If the command's output has a connection error in the last line, retry
         output = result.get("output",[])
         if output:
             last_line = output[-1]
 
             if "Can't create session: Unable to connect to a repository at URL" in last_line:
-                log(ctx, f"Connection to server dropped on attempt {i} of MAX_RETRIES={max_retries}, retrying", "warning")
+                log(ctx, f"git svn fetch failed to connect to repo remote on attempt {retries_attempted} of MAX_RETRIES={max_retries}, retrying", "warning")
+
+            elif result["return_code"] != 0:
+                log(ctx, f"git svn fetch failed, return_code: {result['return_code']}; {retries_attempted} of MAX_RETRIES={max_retries}, retrying", "warning")
 
             else:
+
+                # Only exit the loop if:
+                    # the output has lines
+                    # and the last line is not a connection failure
+                    # and return_code is 0
+                    # or we hit max_retries
                 break
+
+        # If we've hit the max_retries limit, return here
+        if retries_attempted >= max_retries:
+
+            log_failure_message = f"git svn fetch failed, reached max retries {max_retries}"
+            set_job_result(ctx, "failed fetch", log_failure_message, False)
+            log(ctx, log_failure_message, "error")
+            break
+
+        # Otherwise, prepare for retry
+        else:
+
+            retries_attempted += 1
+
+            # Log the failure
+            retry_delay_seconds = random.randrange(1, 5)
+            log(ctx, f"git svn fetch failed, retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
+            time.sleep(retry_delay_seconds)
+
+        # Repeat the loop
 
 
     # Do not store in ctx.job, because then it gets output to logs

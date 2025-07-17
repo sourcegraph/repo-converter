@@ -275,23 +275,38 @@ def garbage_collection(ctx: Context) -> None:
     cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, name="cmd_git_garbage_collection")
 
 
-def get_config(ctx: Context, key: str, quiet: bool=False) -> list[str]:
+def get_config(ctx: Context, key: str, config_file_path: str = None, quiet: bool=False) -> list[str]:
     """
     A more generic method to get a config value from a repo's config file
     """
+
+    # Validate if the config_file_path exists, but do not use it
+    if config_file_path and not _get_and_validate_local_repo_path(ctx, sub_dir=config_file_path, quiet=quiet):
+        return
 
     local_repo_path = _get_and_validate_local_repo_path(ctx, quiet=quiet)
     if not local_repo_path:
         return
 
-    cmd_git_get_config = ["git", "-C", local_repo_path, "config", "--get", key]
+    cmd_git_get_config = ["git", "-C", local_repo_path, "config"]
 
-    try:
-        value = list(cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config").get("output",""))
+    if config_file_path:
+        cmd_git_get_config += ["--file", config_file_path]
+
+    cmd_git_get_config += ["--get", key]
+
+    value = []
+    result = cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config")
+
+    if result["return_code"] == 0:
+
+        value = list(result.get("output",""))
         # log(ctx, f"git.get_config succeeded; key: {key}; value: {value}; cmd_git_get_config: {cmd_git_get_config}; result: {value}", "info")
-    except:
+
+    else:
+
         # log(ctx, f"git.get_config failed; key: {key}; value: {value}; cmd_git_get_config: {cmd_git_get_config}; result: {value}", "error")
-        value = []
+        pass
 
     return value
 
@@ -366,7 +381,7 @@ def set_config(ctx: Context, key: str, value: str) -> bool:
         return False
 
 
-def unset_config(ctx: Context, key: str) -> bool:
+def unset_config(ctx: Context, key: str, config_file_path: str = None) -> bool:
     """
     A more generic method to unset a config value from a repo's config file
 
@@ -374,14 +389,24 @@ def unset_config(ctx: Context, key: str) -> bool:
     Returns False only if the command failed
     """
 
+    # Validate if the config_file_path exists, but do not use it
+    if config_file_path and not _get_and_validate_local_repo_path(ctx, sub_dir=config_file_path):
+        return
+
     local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
-    cmd_git_unset_config = ["git", "-C", local_repo_path, "config", "--unset", key]
+    cmd_git_unset_config = ["git", "-C", local_repo_path, "config"]
 
-    try:
-        cmd.run_subprocess(ctx, cmd_git_unset_config, quiet=True, name="cmd_git_unset_config")
+    if config_file_path:
+        cmd_git_unset_config += ["--file", config_file_path]
+
+    cmd_git_unset_config += ["--unset", key]
+
+    result = cmd.run_subprocess(ctx, cmd_git_unset_config, quiet=True, name="cmd_git_unset_config")
+
+    if result["return_code"] == 0:
         return True
-    except:
+    else:
         return False
