@@ -55,9 +55,9 @@ def should_include_record(record: Dict[str, Any]) -> bool:
         record: JSON log record
 
     Returns:
-        True if process.execution_time_seconds is a number, False otherwise
+        True if job.result.execution_time is a number, False otherwise
     """
-    execution_time = safe_get(record, 'process.execution_time_seconds')
+    execution_time = safe_get(record, 'job.result.execution_time')
     return isinstance(execution_time, (int, float))
 
 
@@ -163,10 +163,10 @@ def extract_fields(record: Dict[str, Any]) -> List[str]:
     Returns:
         List of field values as strings
     """
-    # Field mapping with timestamp first, command moved after level, success added
+    # Field mapping with new order: timestamp, cycle, command, then other fields
     fields = [
         'timestamp',
-        'process.name',
+        'cycle',
         'job.config.repo_key',
         'process.execution_time_seconds',
         'process.output_line_count',
@@ -174,9 +174,9 @@ def extract_fields(record: Dict[str, Any]) -> List[str]:
         'process.return_code',
         'level',
         'process.args',
+        'process.name',
         'date',
         'time',
-        'cycle',
         'process.span',
         'job.trace'
     ]
@@ -200,6 +200,36 @@ def extract_fields(record: Dict[str, Any]) -> List[str]:
         if field == 'timestamp':
             timestamp = safe_get(record, field)
             row.append(str(timestamp) if timestamp else '')
+        elif field == 'cycle':
+            cycle = safe_get(record, field)
+            row.append(str(cycle) if cycle else '')
+            # After cycle, add command
+            row.append(command_value)
+            # Add new job result and stats columns
+            job_action = safe_get(record, 'job.result.action')
+            row.append(str(job_action) if job_action else '')
+            job_success = safe_get(record, 'job.result.success')
+            row.append(str(job_success) if job_success is not None else '')
+            job_reason = safe_get(record, 'job.result.reason')
+            row.append(str(job_reason) if job_reason else '')
+            job_execution_time = safe_get(record, 'job.result.execution_time')
+            row.append(str(job_execution_time) if job_execution_time else '')
+            batch_count = safe_get(record, 'job.stats.local.fetching_batch_count')
+            row.append(str(batch_count) if batch_count else '')
+            commits_added = safe_get(record, 'job.stats.local.git_commits_added')
+            row.append(str(commits_added) if commits_added else '')
+            commit_count_start = safe_get(record, 'job.stats.local.git_repo_commit_count_start')
+            row.append(str(commit_count_start) if commit_count_start else '')
+            commit_count_end = safe_get(record, 'job.stats.local.git_repo_commit_count_end')
+            row.append(str(commit_count_end) if commit_count_end else '')
+            latest_rev_start = safe_get(record, 'job.stats.local.git_repo_latest_converted_svn_rev_start')
+            row.append(str(latest_rev_start) if latest_rev_start else '')
+            latest_rev_end = safe_get(record, 'job.stats.local.git_repo_latest_converted_svn_rev_end')
+            row.append(str(latest_rev_end) if latest_rev_end else '')
+            batch_start_rev = safe_get(record, 'job.stats.local.this_batch_start_rev')
+            row.append(str(batch_start_rev) if batch_start_rev else '')
+            batch_end_rev = safe_get(record, 'job.stats.local.this_batch_end_rev')
+            row.append(str(batch_end_rev) if batch_end_rev else '')
         elif field == 'process.name':
             # After process.name, add limit, start_rev, end_rev
             process_name = safe_get(record, field)
@@ -207,11 +237,6 @@ def extract_fields(record: Dict[str, Any]) -> List[str]:
             row.append(limit_value)
             row.append(start_rev)
             row.append(end_rev)
-        elif field == 'level':
-            # After level, add command
-            level = safe_get(record, field)
-            row.append(str(level) if level else '')
-            row.append(command_value)
         elif field == 'process.execution_time_seconds':
             # Convert to integer
             value = safe_get(record, field)
@@ -235,24 +260,36 @@ def parse_logs_to_csv(input_file: str, output_file: str) -> None:
         input_file: Path to input JSON logs file
         output_file: Path to output CSV file
     """
-    # CSV headers with timestamp first, success before return code, command after level
+    # CSV headers with new order: timestamp, cycle, command, then other fields
     headers = [
         'Timestamp',
-        'Process Name',
-        'Limit',
-        'Start Rev',
-        'End Rev',
+        'Cycle',
+        'Command',
+        'Job Action',
+        'Job Success',
+        'Job Reason',
+        'Job Execution Time',
+        'Batch Count',
+        'Commits Added',
+        'Commit Count Start',
+        'Commit Count End',
+        'Latest Rev at Start',
+        'Latest Rev at End',
+        'Batch Start Rev',
+        'Batch End Rev',
         'Repo Key',
         'Execution Time Seconds',
         'Output Line Count',
         'Success',
         'Return Code',
         'Level',
-        'Command',
         'Process Args',
+        'Process Name',
+        'Limit',
+        'Start Rev',
+        'End Rev',
         'Date',
         'Time',
-        'Cycle',
         'Process Id',
         'Job Id'
     ]

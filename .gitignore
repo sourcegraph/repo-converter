@@ -6,6 +6,7 @@ config/repos-to-convert*
 config/service-account-key.json
 dev/stats/repos.txt
 logs/
+notes/
 src-serve-root/
 
 # Byte-compiled / optimized / DLL files
