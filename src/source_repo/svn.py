@@ -202,7 +202,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     # git commands
     cmd_git_default_branch                  = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
     cmd_git_garbage_collection              = arg_git     + ["gc"]
-    cmd_git_svn_fetch                       = arg_git_svn + ["fetch"]
+    cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--no-checkout"]
     cmd_git_svn_init                        = arg_git_svn + ["init"] + arg_svn_remote_repo_code_root_url
 
      # Add authentication, if provided
@@ -807,6 +807,7 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
     cmd_git_svn_fetch       = commands["cmd_git_svn_fetch"]
     job_config              = ctx.job.get("config",{})
     job_stats_local         = ctx.job.get("stats",{}).get("local",{})
+    max_retries             = job_config.get("max_retries","")
     password                = job_config.get("password","")
     repo_key                = job_config.get("repo_key","")
     this_batch_end_rev      = job_stats_local.get("this_batch_end_rev","")
@@ -831,7 +832,20 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
     log(ctx, f'fetching with {" ".join(cmd_git_svn_fetch)}', "debug")
 
 
-    result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name="cmd_git_svn_fetch")
+    for i in range(1, max_retries + 1):
+
+        result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name=f"cmd_git_svn_fetch_{i}")
+
+        output = result.get("output",[])
+        if output:
+            last_line = output[-1]
+
+            if "Can't create session: Unable to connect to a repository at URL" in last_line:
+                log(ctx, f"Connection to server dropped on attempt {i} of MAX_RETRIES={max_retries}, retrying", "warning")
+
+            else:
+                break
+
 
     # Do not store in ctx.job, because then it gets output to logs
     # ctx.job["git_svn_fetch_result"] = result
@@ -1007,7 +1021,7 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     git_repo_commit_count_end   = int(job_stats_local.get("git_repo_commit_count_end",   0))
     git_repo_commit_count_start = int(job_stats_local.get("git_repo_commit_count_start", 0))
     git_commits_added           = int(git_repo_commit_count_end - git_repo_commit_count_start)
-    git_commits_missed          = int(git_commits_added - fetching_batch_count)
+    git_commits_missed          = int(fetching_batch_count - git_commits_added)
 
     ctx.job["stats"]["local"].update({"git_commits_added": git_commits_added})
     ctx.job["stats"]["local"].update({"git_commits_missed": git_commits_missed})
@@ -1025,7 +1039,7 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     # git_svn_fetch_output
 
 
-    
+
 
 
     # Assign the lists to the job result data for log output
@@ -1036,18 +1050,21 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     ## Make final success / fail call
     if len(errors) > 0:
 
-        reason = "fetch failed with errors"
-        set_job_result(ctx, action, reason, False)
-        log(ctx, f"git svn fetch incomplete", "error", structured_log_dict)
+        reason = "git svn fetch failed with errors"
+        success = False
+        log_level = "error"
 
     elif len(warnings) > 0:
 
-        reason = "fetch passed with warnings"
-        set_job_result(ctx, action, reason, True)
-        log(ctx, f"git svn fetch incomplete", "error", structured_log_dict)
+        reason = "git svn fetch passed with warnings"
+        success = True
+        log_level = "warning"
 
     else:
 
-        reason = "fetch completed successfully"
-        set_job_result(ctx, action, reason, True)
-        log(ctx, f"git svn fetch complete", "info", structured_log_dict)
+        reason = "git svn fetch completed successfully"
+        success = True
+        log_level = "info"
+
+    set_job_result(ctx, action, reason, success)
+    log(ctx, reason, log_level, structured_log_dict)
