@@ -28,9 +28,9 @@ fi
 # Set how often to reprint the header
 # If a second arg is provided, use it as the print header every n lines
 if [ -n "$2" ]; then
-    print_header_every_n_lines="$2"
+    print_header_every_n_cycles="$2"
 else
-    print_header_every_n_lines=10
+    print_header_every_n_cycles=100
 fi
 
 # Set the number of seconds to wait between scans
@@ -48,7 +48,7 @@ else
     csv_output_file="dir-stats.csv"
 fi
 
-lines_since_header_printed=$print_header_every_n_lines
+cycles_since_header_printed=$print_header_every_n_cycles
 
 # Loop until the user quits
 while true; do
@@ -71,25 +71,28 @@ while true; do
     done
 
     # If the current line count is equal to the print header ever n lines
-    if [ "$lines_since_header_printed" -eq "$print_header_every_n_lines" ]; then
+    if [ "$cycles_since_header_printed" -eq "$print_header_every_n_cycles" ]; then
 
         repo_column_name="Repo"
         repo_column_name_length=$(echo "$repo_column_name" | wc -c)
         padding_length=$((longest_child_dir_name_length - repo_column_name_length))
         padding=$(printf "%${padding_length}s" " ")
 
+        seconds_since_mod_date_column_name="Seconds since mod"
+        seconds_since_mod_date_column_name_length=$(echo "$seconds_since_mod_date_column_name" | wc -c)
+
         # Define the CSV header line
-        header_line="Date,       Time,     $repo_column_name, $padding Mod Date,   Mod Time, Seconds since mod, Size (bytes), Size (human readable)"
+        header_line="Date,       Time,     $repo_column_name, $padding  Mod Date,   Mod Time, $seconds_since_mod_date_column_name, Size (bytes), Size (human readable)"
 
         # Print the header line
         echo "$header_line"
         echo "$header_line" >> "$csv_output_file"
         # Reset the line count
-        lines_since_header_printed=0
+        cycles_since_header_printed=0
     fi
 
     # Increment the current line count
-    lines_since_header_printed=$((lines_since_header_printed + 1))
+    cycles_since_header_printed=$((cycles_since_header_printed + 1))
 
     # Loop through the list of child directories
     for child_dir in $child_dirs; do
@@ -122,7 +125,7 @@ while true; do
         seconds_since_last_modified=$((current_time_seconds - most_recent_file_modified_time_seconds))
         # Add a string of padding spaces, to make the seconds since last modified column the same length as the seconds since last modified column in the header
         seconds_since_last_modified_length=$(echo "$seconds_since_last_modified" | wc -c)
-        seconds_since_last_modified_padding_length=$((longest_child_dir_name_length - seconds_since_last_modified_length))
+        seconds_since_last_modified_padding_length=$((seconds_since_mod_date_column_name_length - seconds_since_last_modified_length))
         seconds_since_last_modified_padding=$(printf "%${seconds_since_last_modified_padding_length}s" " ")
         seconds_since_last_modified_string="$seconds_since_last_modified$seconds_since_last_modified_padding"
 
