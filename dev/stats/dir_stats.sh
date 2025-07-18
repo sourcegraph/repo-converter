@@ -99,7 +99,7 @@ while true; do
         # Get the repo name, and pad it with spaces to the longest child directory name length
         repo_column_name=$(basename "$child_dir")
         repo_column_name_length=$(echo "$repo_column_name" | wc -c)
-        padding_length=$((longest_child_dir_name_length - repo_column_name_length))
+        padding_length=$((longest_child_dir_name_length - repo_column_name_length + 2))
         padding=$(printf "%${padding_length}s" " ")
 
         # Get the date and time of the most recently modified file in the child directory
@@ -124,7 +124,7 @@ while true; do
         # Print the child directory, disk usage, and most recent file
         # to the console, and append to the output file
         # Add spaces to the repo name to make it the same length as the longest child directory name
-        line="$date, $time, $repo_column_name$padding, $most_recent_file_modified_date, $most_recent_file_modified_time, $seconds_since_last_modified, $disk_usage_bytes, $disk_usage_human"
+        line="$date, $time, $repo_column_name,$padding $most_recent_file_modified_date, $most_recent_file_modified_time, $seconds_since_last_modified, $disk_usage_bytes, $disk_usage_human"
         echo "$line"
         echo "$line" >> "$csv_output_file"
 
