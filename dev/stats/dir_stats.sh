@@ -57,7 +57,14 @@ while true; do
     child_dirs=$(find "$dir" -maxdepth 1 -type d)
 
     # Get the length of the longest child directory name's basename
-    longest_child_dir_name_length=$(echo "$child_dirs" | awk '{print length(basename($0))}' | sort -nr | head -1)
+    longest_child_dir_name_length=0
+    for child_dir in $child_dirs; do
+        name=$(basename "$child_dir")
+        len=${#name}
+        if [ "$len" -gt "$longest_child_dir_name_length" ]; then
+            longest_child_dir_name_length=$len
+        fi
+    done
 
     # If the current line count is equal to the print header ever n lines
     if [ "$lines_since_header_printed" -eq "$print_header_every_n_lines" ]; then
@@ -68,7 +75,7 @@ while true; do
         padding=$(printf "%${padding_length}s" " ")
 
         # Define the CSV header line
-        header_line="Date, Time, $repo_column_name$padding, Last Modified Date, Last Modified Time, Seconds since last modified, Size (bytes), Size (human readable)"
+        header_line="Date,       Time,     $repo_column_name, $padding Mod Date,   Mod Time, Seconds since mod, Size (bytes), Size (human readable)"
 
         # Print the header line
         echo "$header_line"
@@ -87,6 +94,7 @@ while true; do
         date=$(date +%Y-%m-%d)
         # Get the current time
         time=$(date +%H:%M:%S)
+        current_time_seconds=$(date +%s)
 
         # Get the repo name, and pad it with spaces to the longest child directory name length
         repo_column_name=$(basename "$child_dir")
@@ -96,14 +104,16 @@ while true; do
 
         # Get the date and time of the most recently modified file in the child directory
         # Format: %Y-%m-%d %H:%M:%S
-        most_recent_file=$(find "$child_dir" -type f -printf '%T@ %p\n' | sort -n | tail -1 | awk '{print $2}')
+        # Send stderr from find to /dev/null
+        most_recent_file=$(find "$child_dir" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | awk '{print $2}')
 
         # Get the date and time of the most recently modified file
         most_recent_file_modified_date=$(date -r "$most_recent_file" +%Y-%m-%d)
         most_recent_file_modified_time=$(date -r "$most_recent_file" +%H:%M:%S)
 
         # Get the seconds since the most recently modified file
-        seconds_since_last_modified=$(date -r "$most_recent_file" +%s)
+        most_recent_file_modified_time_seconds=$(date -r "$most_recent_file" +%s)
+        seconds_since_last_modified=$((current_time_seconds - most_recent_file_modified_time_seconds))
 
         # Get the total disk usage of the child directory, in bytes
         disk_usage_bytes=$(du -sb "$child_dir" | awk '{print $1}')
