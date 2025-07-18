@@ -75,7 +75,7 @@ while true; do
 
         repo_column_name="Repo"
         repo_column_name_length=$(echo "$repo_column_name" | wc -c)
-        repo_column_name_padding_length=$((longest_child_dir_name_length - repo_column_name_length))
+        repo_column_name_padding_length=$((longest_child_dir_name_length - repo_column_name_length + 2))
         repo_column_name_padding=$(printf "%${repo_column_name_padding_length}s" " ")
         repo_column_name_string="$repo_column_name$repo_column_name_padding"
 
@@ -153,9 +153,9 @@ while true; do
         # Get the total disk usage of the child directory, in bytes
         # Send stderr from du to /dev/null
         disk_usage_bytes=$(du -sb "$child_dir" 2>/dev/null | awk '{print $1}')
-        # Add padding to the disk usage bytes, to make it length 10
+        # Add padding to the disk usage bytes, to make it length 12
         disk_usage_bytes_length=$(echo "$disk_usage_bytes" | wc -c)
-        disk_usage_bytes_padding_length=$((10 - disk_usage_bytes_length))
+        disk_usage_bytes_padding_length=$((12 - disk_usage_bytes_length))
         disk_usage_bytes_padding=$(printf "%${disk_usage_bytes_padding_length}s" " ")
         disk_usage_bytes_string="$disk_usage_bytes$disk_usage_bytes_padding"
 
