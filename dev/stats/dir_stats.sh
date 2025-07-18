@@ -54,7 +54,11 @@ lines_since_header_printed=$print_header_every_n_lines
 while true; do
 
     # Get the list of child directories
-    child_dirs=$(find "$dir" -maxdepth 1 -type d)
+    child_dirs=$(find "$dir" -maxdepth 1 -type d | sort)
+
+    # Ensure the list of directories has the current directory at the beginning
+    child_dirs=$(echo "$child_dirs" | sed '1d')
+    child_dirs="$dir $child_dirs"
 
     # Get the length of the longest child directory name's basename
     longest_child_dir_name_length=0
@@ -108,18 +112,22 @@ while true; do
         most_recent_file=$(find "$child_dir" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | awk '{print $2}')
 
         # Get the date and time of the most recently modified file
-        most_recent_file_modified_date=$(date -r "$most_recent_file" +%Y-%m-%d)
-        most_recent_file_modified_time=$(date -r "$most_recent_file" +%H:%M:%S)
+        # Send stderr from date to /dev/null
+        most_recent_file_modified_date=$(date -r "$most_recent_file" +%Y-%m-%d 2>/dev/null)
+        most_recent_file_modified_time=$(date -r "$most_recent_file" +%H:%M:%S 2>/dev/null)
 
         # Get the seconds since the most recently modified file
-        most_recent_file_modified_time_seconds=$(date -r "$most_recent_file" +%s)
+        # Send stderr from date to /dev/null
+        most_recent_file_modified_time_seconds=$(date -r "$most_recent_file" +%s 2>/dev/null)
         seconds_since_last_modified=$((current_time_seconds - most_recent_file_modified_time_seconds))
 
         # Get the total disk usage of the child directory, in bytes
-        disk_usage_bytes=$(du -sb "$child_dir" | awk '{print $1}')
+        # Send stderr from du to /dev/null
+        disk_usage_bytes=$(du -sb "$child_dir" 2>/dev/null | awk '{print $1}')
 
         # Get the total disk usage of the child directory, in human readable format
-        disk_usage_human=$(du -sh "$child_dir" | awk '{print $1}')
+        # Send stderr from du to /dev/null
+        disk_usage_human=$(du -sh "$child_dir" 2>/dev/null | awk '{print $1}')
 
         # Print the child directory, disk usage, and most recent file
         # to the console, and append to the output file
