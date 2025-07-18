@@ -117,12 +117,31 @@ while true; do
         # Get the date and time of the most recently modified file
         # Send stderr from date to /dev/null
         most_recent_file_modified_date=$(date -r "$most_recent_file" +%Y-%m-%d 2>/dev/null)
+        # If most_recent_file_modified_date is empty, then set it to a string of spaces, of length 10
+        if [ -z "$most_recent_file_modified_date" ]; then
+            most_recent_file_modified_date=$(printf "%10s" " ") # 10 spaces
+        fi
+
+        # Get the time of the most recently modified file
         most_recent_file_modified_time=$(date -r "$most_recent_file" +%H:%M:%S 2>/dev/null)
+        # If most_recent_file_modified_time is empty, then set it to a string of spaces, of length 8
+        if [ -z "$most_recent_file_modified_time" ]; then
+            most_recent_file_modified_time=$(printf "%8s" " ") # 8 spaces
+        fi
 
         # Get the seconds since the most recently modified file
         # Send stderr from date to /dev/null
         most_recent_file_modified_time_seconds=$(date -r "$most_recent_file" +%s 2>/dev/null)
-        seconds_since_last_modified=$((current_time_seconds - most_recent_file_modified_time_seconds))
+
+        seconds_since_last_modified=""
+
+        # If most_recent_file_modified_time_seconds is empty, then set it to a string of spaces, of length 10
+        if [ -z "$most_recent_file_modified_time_seconds" ]; then
+            most_recent_file_modified_time_seconds=$(printf "%10s" " ") # 10 spaces
+        else
+            seconds_since_last_modified=$((current_time_seconds - most_recent_file_modified_time_seconds))
+        fi
+
         # Add a string of padding spaces, to make the seconds since last modified column the same length as the seconds since last modified column in the header
         seconds_since_last_modified_length=$(echo "$seconds_since_last_modified" | wc -c)
         seconds_since_last_modified_padding_length=$((seconds_since_mod_date_column_name_length - seconds_since_last_modified_length))
