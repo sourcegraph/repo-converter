@@ -75,14 +75,15 @@ while true; do
 
         repo_column_name="Repo"
         repo_column_name_length=$(echo "$repo_column_name" | wc -c)
-        padding_length=$((longest_child_dir_name_length - repo_column_name_length))
-        padding=$(printf "%${padding_length}s" " ")
+        repo_column_name_padding_length=$((longest_child_dir_name_length - repo_column_name_length))
+        repo_column_name_padding=$(printf "%${repo_column_name_padding_length}s" " ")
+        repo_column_name_string="$repo_column_name$repo_column_name_padding"
 
         seconds_since_mod_date_column_name="Seconds since mod"
         seconds_since_mod_date_column_name_length=$(echo "$seconds_since_mod_date_column_name" | wc -c)
 
         # Define the CSV header line
-        header_line="Date,       Time,     $repo_column_name, $padding  Mod Date,   Mod Time, $seconds_since_mod_date_column_name, Size (bytes), Size (human readable)"
+        header_line="Date,       Time,     $repo_column_name_string,  Mod Date,   Mod Time, $seconds_since_mod_date_column_name, Size (bytes), Size (human readable)"
 
         # Print the header line
         echo "$header_line"
@@ -106,8 +107,9 @@ while true; do
         # Get the repo name, and pad it with spaces to the longest child directory name length
         repo_column_name=$(basename "$child_dir")
         repo_column_name_length=$(echo "$repo_column_name" | wc -c)
-        padding_length=$((longest_child_dir_name_length - repo_column_name_length + 2))
-        padding=$(printf "%${padding_length}s" " ")
+        repo_column_name_padding_length=$((longest_child_dir_name_length - repo_column_name_length + 2))
+        repo_column_name_padding=$(printf "%${repo_column_name_padding_length}s" " ")
+        repo_column_name_string="$repo_column_name$repo_column_name_padding"
 
         # Get the date and time of the most recently modified file in the child directory
         # Format: %Y-%m-%d %H:%M:%S
@@ -151,6 +153,11 @@ while true; do
         # Get the total disk usage of the child directory, in bytes
         # Send stderr from du to /dev/null
         disk_usage_bytes=$(du -sb "$child_dir" 2>/dev/null | awk '{print $1}')
+        # Add padding to the disk usage bytes, to make it length 10
+        disk_usage_bytes_length=$(echo "$disk_usage_bytes" | wc -c)
+        disk_usage_bytes_padding_length=$((10 - disk_usage_bytes_length))
+        disk_usage_bytes_padding=$(printf "%${disk_usage_bytes_padding_length}s" " ")
+        disk_usage_bytes_string="$disk_usage_bytes$disk_usage_bytes_padding"
 
         # Get the total disk usage of the child directory, in human readable format
         # Send stderr from du to /dev/null
@@ -159,7 +166,7 @@ while true; do
         # Print the child directory, disk usage, and most recent file
         # to the console, and append to the output file
         # Add spaces to the repo name to make it the same length as the longest child directory name
-        line="$date, $time, $repo_column_name,$padding $most_recent_file_modified_date, $most_recent_file_modified_time, $seconds_since_last_modified_string, $disk_usage_bytes, $disk_usage_human"
+        line="$date, $time, $repo_column_name_string, $most_recent_file_modified_date, $most_recent_file_modified_time, $seconds_since_last_modified_string, $disk_usage_bytes_string, $disk_usage_human"
         echo "$line"
         echo "$line" >> "$csv_output_file"
 
