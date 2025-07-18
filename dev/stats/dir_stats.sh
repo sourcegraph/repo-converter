@@ -73,7 +73,10 @@ while true; do
     fi
 
     # Get the list of child directories
-    child_dirs=$(find "$dir" -type d -maxdepth 1)
+    child_dirs=$(find -maxdepth 1 "$dir" -type d)
+
+    # Get the length of the longest child directory name
+    longest_child_dir_name_length=$(echo "$child_dirs" | awk '{print length($0)}' | sort -nr | head -1)
 
     # Loop through the list of child directories
     for child_dir in $child_dirs; do
@@ -83,8 +86,9 @@ while true; do
         # Get the current time
         time=$(date +%H:%M:%S)
 
-        # Get the repo name
+        # Get the repo name, and pad it with spaces to the longest child directory name length
         repo=$(basename "$child_dir")
+        repo=$(printf "%-${longest_child_dir_name_length}s" "$repo")
 
         # Get the date and time of the most recently modified file in the child directory
         # Format: %Y-%m-%d %H:%M:%S
