@@ -3,6 +3,15 @@
 # Bash script to print, in a CSV table format
 # the disk usage, and the most recently modified file, in each child directory of the given directory
 
+# Args:
+# 1. The directory to scan
+# 2. The number of lines to reprint the header
+# 3. The number of seconds to wait between scans
+# 4. The CSV output file
+
+# Example:
+# ./dir-stats.sh /path/to/dir 10 10 /path/to/output.csv
+
 # If a directory is provided, use it, otherwise use the current directory
 if [ -z "$1" ]; then
     dir="."
@@ -24,11 +33,19 @@ else
     print_header_every_n_lines=10
 fi
 
-# Set the output file
+# Set the number of seconds to wait between scans
+# If a third arg is provided, use it as the number of seconds to wait between scans
 if [ -n "$3" ]; then
-    output_file="$3"
+    sleep_seconds="$3"
 else
-    output_file="dir-stats.csv"
+    sleep_seconds=10
+fi
+
+# Set the CSV output file
+if [ -n "$4" ]; then
+    csv_output_file="$4"
+else
+    csv_output_file="dir-stats.csv"
 fi
 
 # Define the CSV header line
@@ -36,7 +53,7 @@ header_line="Date, Time, Repo, Last Modified Date, Last Modified Time, Seconds s
 
 # Print the header line, to both the console, and append to the output file
 echo "$header_line"
-echo "$header_line" >> "$output_file"
+echo "$header_line" >> "$csv_output_file"
 
 lines_since_header_printed=0
 
@@ -50,13 +67,13 @@ while true; do
     if [ $lines_since_header_printed -eq $print_header_every_n_lines ]; then
         # Print the header line
         echo "$header_line"
-        echo "$header_line" >> "$output_file"
+        echo "$header_line" >> "$csv_output_file"
         # Reset the line count
         lines_since_header_printed=0
     fi
 
     # Get the list of child directories
-    child_dirs=$(find "$dir" -type d)
+    child_dirs=$(find "$dir" -type d -maxdepth 1)
 
     # Loop through the list of child directories
     for child_dir in $child_dirs; do
@@ -90,7 +107,7 @@ while true; do
         # to the console, and append to the output file
         line="$date, $time, $repo, $most_recent_file_modified_date, $most_recent_file_modified_time, $seconds_since_last_modified, $disk_usage_bytes, $disk_usage_human"
         echo "$line"
-        echo "$line" >> "$output_file"
+        echo "$line" >> "$csv_output_file"
 
     done
 
