@@ -48,23 +48,28 @@ else
     csv_output_file="dir-stats.csv"
 fi
 
-# Define the CSV header line
-header_line="Date, Time, Repo, Last Modified Date, Last Modified Time, Seconds since last modified, Size (bytes), Size (human readable)"
-
-# Print the header line, to both the console, and append to the output file
-echo "$header_line"
-echo "$header_line" >> "$csv_output_file"
-
-lines_since_header_printed=0
+lines_since_header_printed=$print_header_every_n_lines
 
 # Loop until the user quits
 while true; do
 
-    # Increment the current line count
-    lines_since_header_printed=$((lines_since_header_printed + 1))
+    # Get the list of child directories
+    child_dirs=$(find "$dir" -maxdepth 1 -type d)
+
+    # Get the length of the longest child directory name's basename
+    longest_child_dir_name_length=$(echo "$child_dirs" | awk '{print length(basename($0))}' | sort -nr | head -1)
 
     # If the current line count is equal to the print header ever n lines
-    if [ $lines_since_header_printed -eq $print_header_every_n_lines ]; then
+    if [ "$lines_since_header_printed" -eq "$print_header_every_n_lines" ]; then
+
+        repo_column_name="Repo"
+        repo_column_name_length=$(echo "$repo_column_name" | wc -c)
+        padding_length=$((longest_child_dir_name_length - repo_column_name_length))
+        padding=$(printf "%${padding_length}s" " ")
+
+        # Define the CSV header line
+        header_line="Date, Time, $repo_column_name$padding, Last Modified Date, Last Modified Time, Seconds since last modified, Size (bytes), Size (human readable)"
+
         # Print the header line
         echo "$header_line"
         echo "$header_line" >> "$csv_output_file"
@@ -72,11 +77,8 @@ while true; do
         lines_since_header_printed=0
     fi
 
-    # Get the list of child directories
-    child_dirs=$(find "$dir" -maxdepth 1 -type d)
-
-    # Get the length of the longest child directory name
-    longest_child_dir_name_length=$(echo "$child_dirs" | awk '{print length($0)}' | sort -nr | head -1)
+    # Increment the current line count
+    lines_since_header_printed=$((lines_since_header_printed + 1))
 
     # Loop through the list of child directories
     for child_dir in $child_dirs; do
@@ -87,8 +89,10 @@ while true; do
         time=$(date +%H:%M:%S)
 
         # Get the repo name, and pad it with spaces to the longest child directory name length
-        repo=$(basename "$child_dir")
-        repo=$(printf "%-${longest_child_dir_name_length}s" "$repo")
+        repo_column_name=$(basename "$child_dir")
+        repo_column_name_length=$(echo "$repo_column_name" | wc -c)
+        padding_length=$((longest_child_dir_name_length - repo_column_name_length))
+        padding=$(printf "%${padding_length}s" " ")
 
         # Get the date and time of the most recently modified file in the child directory
         # Format: %Y-%m-%d %H:%M:%S
@@ -109,10 +113,14 @@ while true; do
 
         # Print the child directory, disk usage, and most recent file
         # to the console, and append to the output file
-        line="$date, $time, $repo, $most_recent_file_modified_date, $most_recent_file_modified_time, $seconds_since_last_modified, $disk_usage_bytes, $disk_usage_human"
+        # Add spaces to the repo name to make it the same length as the longest child directory name
+        line="$date, $time, $repo_column_name$padding, $most_recent_file_modified_date, $most_recent_file_modified_time, $seconds_since_last_modified, $disk_usage_bytes, $disk_usage_human"
         echo "$line"
         echo "$line" >> "$csv_output_file"
 
     done
+
+    # Wait for the specified number of seconds
+    sleep "$sleep_seconds"
 
 done
