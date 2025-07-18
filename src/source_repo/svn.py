@@ -4,7 +4,7 @@
 # Import repo-converter modules
 from utils.context import Context
 from utils.log import log, set_job_result
-from utils import cmd, git
+from utils import cmd, git, lockfiles
 
 # Import Python standard modules
 from pathlib import Path
@@ -52,13 +52,13 @@ def convert(ctx: Context) -> None:
 
     # Get revision information from the svn_info output
     # If the svn_info output doesn't include the last changed rev, there's probably a server problem
-    if not _get_remote_current_rev_from_svn_info(ctx):
+    if not _extract_svn_remote_state_from_svn_info_output(ctx):
         return
 
     # Check if the local repo exists and is valid
     # or doesn't exist / is invalid,
     # thus we need to create / recreate it
-    if not _check_if_repo_exists_locally(ctx, "start"):
+    if not _check_if_repo_exists_locally(ctx, "begin"):
 
         # If the repo doesn't exist locally, initialize it
         _initialize_git_repo(ctx, commands)
@@ -67,7 +67,7 @@ def convert(ctx: Context) -> None:
     _configure_git_repo(ctx, commands)
 
     # Update local repo stats in log metadata
-    _get_local_git_repo_stats(ctx, "start")
+    _get_local_git_repo_stats(ctx, "begin")
 
     # Check if the local repo is already up to date
     if _check_if_repo_already_up_to_date(ctx):
@@ -81,12 +81,12 @@ def convert(ctx: Context) -> None:
     ### EXTERNAL COMMAND: svn log ###
     # This is the big one, to count all revs remaining
     # TODO: Separate the svn log range from calculating batch revisions
-    _log_number_of_revs_out_of_date(ctx, commands)
+    # _log_number_of_revs_out_of_date(ctx, commands)
 
     # Calculate revision range for this fetch
     ### EXTERNAL COMMAND: svn log --limit batch-size ###
-    if not _calculate_batch_revisions(ctx, commands):
-        return
+    # if not _calculate_batch_revisions(ctx, commands):
+    #     return
 
     # Execute the fetch
     ### EXTERNAL COMMAND: git svn fetch ###
@@ -98,7 +98,7 @@ def convert(ctx: Context) -> None:
 
     ## Decide if the fetch was successful or failed
     ## Also update batch end rev in git repo config file
-    _verify_git_svn_fetch_success(ctx, git_svn_fetch_result)
+    # _check_git_svn_fetch_success(ctx, git_svn_fetch_result)
 
     log(ctx, "Ending svn repo conversion job", "info")
 
@@ -123,12 +123,13 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
         "branches"                 : repo_config.get("branches",                 None),
         "code_host_name"           : repo_config.get("code-host-name",           None),
         "destination_git_repo_name": repo_config.get("destination-git-repo-name",None),
-        "fetch_batch_size"         : repo_config.get("fetch-batch-size",         100),
+        # "fetch_batch_size"         : repo_config.get("fetch-batch-size",         100),
+        "fetch_job_timeout"        : repo_config.get("fetch-job-timeout",        600),
         "git_default_branch"       : repo_config.get("git-default-branch",       "trunk"),
         "git_ignore_file_path"     : repo_config.get("git-ignore-file-path",     None),
         "git_org_name"             : repo_config.get("git-org-name",             None),
         "layout"                   : repo_config.get("svn-layout",               None),
-        "log-window-size"          : repo_config.get("log-window-size",          None),
+        "log-window-size"          : repo_config.get("log-window-size",          100 ),
         "password"                 : repo_config.get("password",                 None),
         "repo_url"                 : repo_config.get("repo-url",                 None),
         "repo_parent_url"          : repo_config.get("repo-parent-url",          None),
@@ -203,7 +204,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     # git commands
     cmd_git_default_branch                  = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
     cmd_git_garbage_collection              = arg_git     + ["gc"]
-    cmd_git_svn_fetch                       = arg_git_svn + ["fetch"]
+    cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--quiet", "--quiet"]
     # cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--no-checkout"]
     cmd_git_svn_init                        = arg_git_svn + ["init"] + arg_svn_remote_repo_code_root_url
 
@@ -381,8 +382,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
             if retries_attempted > 0:
                 log(ctx, f"Successfully connected to repo remote after {retries_attempted} retries", "warning")
 
-            ctx.job["svn_info"] = svn_info.get("output","")
-
+            ctx.job["svn_info"] = svn_info.get("output",[])
             return True
 
         # If we've hit the max_retries limit, return here
@@ -407,30 +407,44 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
         # Repeat the loop
 
 
-def _get_remote_current_rev_from_svn_info(ctx: Context) -> bool:
+def _extract_svn_remote_state_from_svn_info_output(ctx: Context) -> bool:
     """
     Extract revision information from svn info command output
     """
 
-    svn_info = ctx.job.get("svn_info",{})
+    cmd_svn_info_output = ctx.job.pop("svn_info",[])
+    svn_info_dict       = {}
 
-    # Combine / cast the output lines into a string
-    svn_info_output_string = " ".join(svn_info)
+    for line in cmd_svn_info_output:
+
+        line_split = line.split(': ')
+
+        if len(line_split) > 1:
+
+            key     = line_split[0]
+            value   = line_split[1]
+
+            svn_info_dict.update({key: value})
 
     # Get last changed revision for this SVN repo from the svn info output
-    if not "Last Changed Rev: " in svn_info_output_string:
+    last_changed_rev_key    = "Last Changed Rev"
+    last_changed_rev        = int(svn_info_dict.get(last_changed_rev_key))
+    ctx.job["stats"]["remote"]["last_changed_revision"] = last_changed_rev
 
-        log_failure_message = "Last Changed Rev not found in svn info output"
+    if not last_changed_rev:
+
+        log_failure_message = f"{last_changed_rev_key} not found in svn info output"
         set_job_result(ctx, "skipped", log_failure_message, False)
-        log(ctx, log_failure_message, "error")
+        log(ctx, log_failure_message, "error", {"svn_info_dict":svn_info_dict})
         return False
 
+    last_changed_date = svn_info_dict.get("Last Changed Date")
+    if last_changed_date:
+        ctx.job["stats"]["remote"]["last_changed_date"] = last_changed_date
 
-    remote_current_rev = int(svn_info_output_string.split("Last Changed Rev: ")[1].split(" ")[0])
-    ctx.job["stats"]["remote"]["last_changed_revision"] = int(remote_current_rev)
-
-    remote_last_changed_date = svn_info_output_string.split("Last Changed Date: ")[1].split(" ")[0]
-    ctx.job["stats"]["remote"]["last_changed_date"] = remote_last_changed_date
+    repo_revision = svn_info_dict.get("Revision")
+    if repo_revision:
+        ctx.job["stats"]["remote"]["repo_revision"] = repo_revision
 
     return True
 
@@ -441,20 +455,28 @@ def _check_if_repo_exists_locally(ctx: Context, event: str = None) -> bool:
     """
 
     # Get config values
-    job_config                          = ctx.job.get("config",{})
-    job_result_action                   = ctx.job.get("result",{}).get("action",{})
-    svn_remote_repo_code_root_url       = job_config.get("svn_remote_repo_code_root_url","")
+    job_config          = ctx.job.get("config",{})
+    job_result_action   = ctx.job.get("result",{}).get("action",{})
+    remote_url          = job_config.get("svn_remote_repo_code_root_url","")
 
     # Check if the svn-remote.svn.url matches the expected SVN remote repo code root URL
-    svn_url_from_local_repo_git_config  = git.get_config(ctx, "svn-remote.svn.url", quiet=True)
-    svn_url_from_local_repo_git_config  = " ".join(svn_url_from_local_repo_git_config) if isinstance(svn_url_from_local_repo_git_config, list) else svn_url_from_local_repo_git_config
-    svn_remote_repo_code_root_url_in_local_repo_git_config = True if svn_url_from_local_repo_git_config and svn_url_from_local_repo_git_config in svn_remote_repo_code_root_url else False
+    local_config_url    = " ".join(git.get_config(ctx, "svn-remote.svn.url", quiet=True))
 
-    if "start" in event:
+    # Fail if the `git config --get svn-remote.svn.url` command failed, or if the value is invalid
+    urls_match          = True if local_config_url and local_config_url in remote_url else False
 
-        if svn_remote_repo_code_root_url_in_local_repo_git_config:
+    # Update repo stats, to get the last maxrev
+    # If there are 0 commits in repo history, then recreate the repo
+    _get_local_git_repo_stats(ctx, "begin")
+    job_stats_local         = ctx.job.get("stats",{}).get("local",{})
+    git_commit_count_begin  = int(job_stats_local.get("git_commit_count_begin", 0))
+    has_commits             = True if git_commit_count_begin > 0 else False
 
-            set_job_result(ctx, "fetching", "valid repo found on disk")
+    if "begin" in event:
+
+        if urls_match and has_commits:
+
+            set_job_result(ctx, "fetching", "valid repo found on disk, with matching URL, and some commits")
             return True
 
         else:
@@ -463,8 +485,8 @@ def _check_if_repo_exists_locally(ctx: Context, event: str = None) -> bool:
 
     elif "end" in event:
 
-        if svn_remote_repo_code_root_url_in_local_repo_git_config:
-            set_job_result(ctx, f"{job_result_action} succeeded", "valid repo found on disk after fetch")
+        if urls_match and has_commits:
+            set_job_result(ctx, f"{job_result_action} succeeded", "valid repo found on disk after fetch, with matching URL, and some commits")
             return True
 
         else:
@@ -477,7 +499,6 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
     Initialize a new Git repository
     """
 
-    # TODO: Move all the arg / command assembly to another function
     # Get config values
     job_config          = ctx.job.get("config",{})
     local_repo_path     = job_config.get("local_repo_path","")
@@ -487,15 +508,14 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
 
     log(ctx, f"Repo not found on disk, initializing new repo", "info")
 
-    # If the directory does exist, then it's not a valid git repo, and needs to be destroyed and recreated
+    # If the directory does exist, then it failed the validation check, and needs to be destroyed and recreated
     if os.path.exists(local_repo_path):
         shutil.rmtree(local_repo_path)
 
-    # Created the needed dirs
+    # Create the needed dirs
     os.makedirs(local_repo_path)
 
     # Initialize the repo
-    # TODO: git svn shouldn't need a password to initialize a repo?
     cmd.run_subprocess(ctx, cmd_git_svn_init, password, name="cmd_git_svn_init")
 
     # Configure the bare clone
@@ -530,10 +550,8 @@ def _configure_git_repo(ctx: Context, commands: dict) -> None:
         if git_config_value:
 
             # Check if these configs are already set the same before trying to set them
-
             # TODO: Test this
-            config_already_set = git.get_config(ctx, git_config_key)
-            config_already_set = " ".join(config_already_set) if isinstance(config_already_set, list) else config_already_set
+            config_already_set = " ".join(git.get_config(ctx, git_config_key))
             config_already_set_matches = config_already_set == git_config_value
             path_exists = os.path.exists(git_config_value)
 
@@ -560,7 +578,7 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
     """
     Functions to collect statistics for local repo
 
-    Called with event "start" and "end"
+    Called with event "begin" and "end"
     """
 
 
@@ -570,24 +588,30 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
 
 
     ## dir size
+    # TODO: Move to git module
     local_repo_path = job_config.get("local_repo_path","")
     total_size      = 0
-    path            = Path(local_repo_path)
+    # path            = Path(local_repo_path)
 
-    for file in path.glob('**/*'): # '**/*' matches all files and directories recursively
-        if file.is_file():
-            total_size += file.stat().st_size
+    # for file in path.glob('**/*'): # '**/*' matches all files and directories recursively
+    #     if file.is_file():
+    #         total_size += file.stat().st_size
 
-    job_stats_local[f"git_repo_dir_size_{event}"] = total_size
+
+    # cmd_du_repo_size = ["du", "-s", local_repo_path]
+    # cmd_du_repo_size_result = cmd.run_subprocess(ctx, cmd_du_repo_size, name="cmd_du_repo_size")
+    # total_size =
+
+    job_stats_local[f"git_dir_size_{event}"] = total_size
 
     if event == "end":
-        git_repo_dir_size_start = job_stats_local.get("git_repo_dir_size_start",0)
-        job_stats_local["git_repo_dir_size_diff"] = total_size - git_repo_dir_size_start
+        git_dir_size_begin = job_stats_local.get("git_dir_size_begin",0)
+        job_stats_local["git_dir_size_added"] = total_size - git_dir_size_begin
 
 
     ## Commit count
-    commit_count = git.count_commits_in_repo(ctx)
-    job_stats_local[f"git_repo_commit_count_{event}"] = commit_count
+    git_commit_count = git.count_commits_in_repo(ctx)
+    job_stats_local[f"git_commit_count_{event}"] = git_commit_count
     ctx.job["stats"]["local"].update(job_stats_local)
 
 
@@ -608,39 +632,40 @@ def _get_local_git_repo_stats(ctx: Context, event: str) -> None:
 
         ctx.job["stats"]["local"].update(
             {
-                f"git_repo_latest_commit_date_{event}": commit_metadata_results_output[0],
-                f"git_repo_latest_commit_short_hash_{event}": commit_metadata_results_output[1],
-                f"git_repo_latest_commit_message_{event}": commit_metadata_results_output[2],
-                f"git_repo_latest_converted_svn_rev_{event}": last_converted_subversion_revision,
+                f"git_latest_commit_date_{event}": commit_metadata_results_output[0],
+                f"git_latest_commit_short_hash_{event}": commit_metadata_results_output[1],
+                f"git_latest_commit_message_{event}": commit_metadata_results_output[2],
+                f"git_latest_commit_rev_{event}": last_converted_subversion_revision,
             }
         )
 
 
     ## Get metadata from previous runs of git svn
     branches_max_rev = 0
-    branches_max_rev_list = git.get_config(ctx, key="svn-remote.svn.branches-maxRev", config_file_path=".git/svn/.metadata", quiet=True)
-    if branches_max_rev_list:
-        branches_max_rev = int(branches_max_rev_list[0])
+    try_branches_max_rev = git.get_config(ctx, key="svn-remote.svn.branches-maxRev", config_file_path=".git/svn/.metadata", quiet=True)
+
+    if try_branches_max_rev:
+        branches_max_rev = int(" ".join(try_branches_max_rev))
 
     ctx.job["stats"]["local"].update(
         {
-            f"git_svn_branches_max_rev_{event}": branches_max_rev
+            f"svn_metadata_branches_max_rev_{event}": branches_max_rev
         }
     )
 
 
 def _check_if_repo_already_up_to_date(ctx: Context) -> bool:
     """
-    Get the git_repo_latest_converted_svn_rev_start from the local git repo
+    Get the git_latest_commit_rev_begin from the local git repo
 
     Compare it against remote_current_rev from the svn info output
     """
 
     job_stats = ctx.job.get("stats",{})
-    git_repo_latest_converted_svn_rev_start = job_stats.get("local",{}).get("git_repo_latest_converted_svn_rev_start")
-    remote_current_rev = job_stats.get("remote",{}).get("last_changed_revision")
+    git_latest_commit_rev_begin = job_stats.get("local",{}).get("git_latest_commit_rev_begin")
+    last_changed_revision = job_stats.get("remote",{}).get("last_changed_revision")
 
-    if git_repo_latest_converted_svn_rev_start and remote_current_rev and git_repo_latest_converted_svn_rev_start == remote_current_rev:
+    if git_latest_commit_rev_begin and last_changed_revision and git_latest_commit_rev_begin == last_changed_revision:
         set_job_result(ctx, "skipped", "repo up to date", True)
         return True
 
@@ -683,7 +708,7 @@ def _cleanup(ctx: Context, commands: dict) -> None:
     # Get dir size of converted git repo
     _get_local_git_repo_stats(ctx, "end")
 
-    _log_recent_commits(ctx, commands)
+    # _log_recent_commits(ctx, commands)
 
     # Run git garbage collection and cleanup branches, even if repo is already up to date
     git.cleanup_branches_and_tags(ctx)
@@ -704,8 +729,8 @@ def _log_number_of_revs_out_of_date(ctx: Context, commands: dict) -> None:
 
     if log_remaining_revs:
 
-        git_repo_latest_converted_svn_rev_start = ctx.job.get("stats",{}).get("local",{}).get("git_repo_latest_converted_svn_rev_start", 1)
-        cmd_svn_log_remaining_revs              = commands["cmd_svn_log"] + ["--revision", f"{git_repo_latest_converted_svn_rev_start}:HEAD"]
+        git_latest_commit_rev_begin = ctx.job.get("stats",{}).get("local",{}).get("git_latest_commit_rev_begin", 1)
+        cmd_svn_log_remaining_revs              = commands["cmd_svn_log"] + ["--revision", f"{git_latest_commit_rev_begin}:HEAD"]
         password                                = job_config.get("password","")
 
         # Parse the output to get the number of remaining revs
@@ -724,27 +749,27 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> bool:
     """
 
     # Get config values
-    job_config                              = ctx.job.get("config",{})
-    job_stats_local                         = ctx.job.get("stats",{}).get("local",{})
-    fetch_batch_size                        = int(job_config.get("fetch_batch_size", 0))
-    password                                = job_config.get("password","")
-    cmd_svn_log                             = commands["cmd_svn_log"]
-    git_repo_latest_converted_svn_rev_start = int(job_stats_local.get("git_repo_latest_converted_svn_rev_start", 0))
-    this_batch_end_rev                      = 0
-    log_failure_message                     = ""
+    job_config                  = ctx.job.get("config",{})
+    job_stats_local             = ctx.job.get("stats",{}).get("local",{})
+    fetch_batch_size            = int(job_config.get("fetch_batch_size", 0))
+    password                    = job_config.get("password","")
+    cmd_svn_log                 = commands["cmd_svn_log"]
+    git_latest_commit_rev_begin = int(job_stats_local.get("git_latest_commit_rev_begin", 0))
+    rev_batch_end               = 0
+    log_failure_message         = ""
 
     # Pick a revision number to start with; may or may not be a real rev number
-    this_batch_start_rev    = int(git_repo_latest_converted_svn_rev_start + 1)
+    rev_batch_begin             = int(git_latest_commit_rev_begin + 1)
 
     # Run the svn log command to get real revision numbers for this batch
-    cmd_svn_log_get_batch_revs  = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{this_batch_start_rev}:HEAD"]
+    cmd_svn_log_get_batch_revs  = cmd_svn_log + ["--limit", str(fetch_batch_size), "--revision", f"{rev_batch_begin}:HEAD"]
     process_result              = cmd.run_subprocess(ctx, cmd_svn_log_get_batch_revs, password, name="cmd_svn_log_get_batch_revs")
     log_details                 = {"process": process_result}
     output_list                 = list(process_result.get("output",""))
     output_string               = " ".join(output_list)
     len_output_list             = len(output_list)
     # Start off as a set type for built-in deduplication
-    list_of_revs_this_batch     = set()
+    rev_list                    = set()
 
     if process_result["return_code"] == 0   and \
         len_output_list > 0                 and \
@@ -765,40 +790,40 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> bool:
 
         for line in output_list:
             if "revision" in line:
-                list_of_revs_this_batch.add(int(line.split("revision=\"")[1].split("\"")[0]))
+                rev_list.add(int(line.split("revision=\"")[1].split("\"")[0]))
 
         # Then convert to a list for sorting
-        list_of_revs_this_batch = sorted(list_of_revs_this_batch)
+        rev_list = sorted(rev_list)
 
         # Update the this batch's starting rev to the first real rev number after the previous end rev
-        this_batch_start_rev = min(list_of_revs_this_batch)
-        ctx.job["stats"]["local"]["this_batch_start_rev"] = this_batch_start_rev
+        rev_batch_begin = min(rev_list)
+        ctx.job["stats"]["local"]["rev_batch_begin"] = rev_batch_begin
 
         # Get the last revision number
-        this_batch_end_rev = max(list_of_revs_this_batch)
-        ctx.job["stats"]["local"]["this_batch_end_rev"] = this_batch_end_rev
+        rev_batch_end = max(rev_list)
+        ctx.job["stats"]["local"]["rev_batch_end"] = rev_batch_end
 
     else:
         log_failure_message = "Failed to get batch revs from svn log"
 
 
     ## Count how many revs are in the svn log output
-    len_list_of_revs_this_batch = len(list_of_revs_this_batch)
+    len_rev_list = len(rev_list)
     # Grab the min, in case we are close to the current rev,
     # and there are fewer revs remaining than our current batch size
-    fetching_batch_count = min(len_list_of_revs_this_batch, fetch_batch_size)
+    git_commit_count_to_add = min(len_rev_list, fetch_batch_size)
     # Store it in the job stats dict
-    ctx.job["stats"]["local"]["fetching_batch_count"]       = fetching_batch_count
-    ctx.job["stats"]["local"]["list_of_revs_this_batch"]    = list_of_revs_this_batch
+    ctx.job["stats"]["local"]["git_commit_count_to_add"]    = git_commit_count_to_add
+    ctx.job["stats"]["local"]["rev_list"]               = rev_list
 
 
     ## Ensure that this rev range won't cause a problem with branches_max_rev
-    branches_max_rev = job_stats_local.get("git_svn_branches_max_rev_start", 0)
+    branches_max_rev = job_stats_local.get("git_svn_branches_max_rev_begin", 0)
 
-    if branches_max_rev > this_batch_start_rev:
-        log(ctx, f"git_svn_branches_max_rev_start {branches_max_rev} > this_batch_start_rev {this_batch_start_rev}, unsetting svn-remote.svn.branches-maxRev and svn-remote.svn.tags-maxRev to remediate", "warning")
-        git.unset_config(ctx, key="svn-remote.svn.branches-maxRev", config_file_path=".git/svn/.metadata")
-        git.unset_config(ctx, key="svn-remote.svn.tags-maxRev", config_file_path=".git/svn/.metadata")
+    # if branches_max_rev > rev_batch_begin:
+    #     log(ctx, f"git_svn_branches_max_rev_begin {branches_max_rev} > rev_batch_begin {rev_batch_begin}, unsetting svn-remote.svn.branches-maxRev and svn-remote.svn.tags-maxRev to remediate", "warning")
+    #     git.set_config(ctx, "svn-remote.svn.branches-maxRev", "0", config_file_path=".git/svn/.metadata")
+    #     git.set_config(ctx, "svn-remote.svn.tags-maxRev", "0", config_file_path=".git/svn/.metadata")
 
     # ## Check if the output isn't as long as we were expecting
     # This isn't a valid check, as
@@ -824,7 +849,7 @@ def _calculate_batch_revisions(ctx: Context, commands: dict) -> bool:
         return True
 
 
-def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
+def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
     """
     Execute the git svn fetch operation
     """
@@ -833,70 +858,71 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
     cmd_git_svn_fetch       = commands["cmd_git_svn_fetch"]
     job_config              = ctx.job.get("config",{})
     job_stats_local         = ctx.job.get("stats",{}).get("local",{})
-    log_window_size         = job_config.get("log-window-size","")
+    log_window_size         = job_config.get("log-window-size", 100)
     max_retries             = job_config.get("max_retries","")
     password                = job_config.get("password","")
     repo_key                = job_config.get("repo_key","")
-    this_batch_end_rev      = job_stats_local.get("this_batch_end_rev","")
-    this_batch_start_rev    = job_stats_local.get("this_batch_start_rev","")
-    fetching_batch_count    = job_stats_local.get("fetching_batch_count","")
+    rev_batch_begin         = job_stats_local.get("rev_batch_begin","")
+    rev_batch_end           = job_stats_local.get("rev_batch_end","")
+    last_changed_revision   = ctx.job.get("stats",{}).get("remote",{}).get("last_changed_revision")
 
     # If we have batch revisions, use them
-    # It should be assumed at this point that we have these revisions
-    if this_batch_start_rev and this_batch_end_rev:
-        cmd_git_svn_fetch += ["--revision", f"{this_batch_start_rev}:{this_batch_end_rev}"]
-
-    # Try setting the log window size to see if it helps with stability
-    if log_window_size:
-        cmd_git_svn_fetch += ["--log-window-size", str(log_window_size)]
+    if rev_batch_begin and rev_batch_end:
+        cmd_git_svn_fetch += ["--revision", f"{rev_batch_begin}:{rev_batch_end}"]
 
     log(ctx, f"Repo out of date: {repo_key}; fetching", "info")
-
-    # Delete duplicate lines from the git config file, before the fetch
-    git.deduplicate_git_config_file(ctx)
-
-    # Start the fetch
-    log(ctx, f'fetching with {" ".join(cmd_git_svn_fetch)}', "debug")
 
     # Do while loop for retries
     retries_attempted = 0
     while True:
 
+        # Delete duplicate lines from the git config file, before the fetch
+        git.deduplicate_git_config_file(ctx)
+
+        _get_local_git_repo_stats(ctx, "begin")
+        job_stats_local         = ctx.job.get("stats",{}).get("local",{})
+        branches_max_rev_begin  = job_stats_local.get("svn_metadata_branches_max_rev_begin")
+
+        if branches_max_rev_begin > last_changed_revision:
+            log(ctx, f"branches_max_rev_begin {branches_max_rev_begin} > last_changed_revision {last_changed_revision}, unsetting svn-remote.svn.branches-maxRev and svn-remote.svn.tags-maxRev to remediate", "warning")
+            git.set_config(ctx, "svn-remote.svn.branches-maxRev", "0", config_file_path=".git/svn/.metadata")
+            git.set_config(ctx, "svn-remote.svn.tags-maxRev", "0", config_file_path=".git/svn/.metadata")
+
+        # Try setting the log window size to see if it helps with stability
+        cmd_git_svn_fetch_with_window = cmd_git_svn_fetch + ["--log-window-size", str(log_window_size)]
+
+        # Start the fetch
+        log(ctx, f'fetching with {" ".join(cmd_git_svn_fetch_with_window)}', "debug")
+
         # Run the command, capture the output
-        result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name=f"cmd_git_svn_fetch_{retries_attempted}")
+        result = cmd.run_subprocess(ctx, cmd_git_svn_fetch_with_window, password, name=f"cmd_git_svn_fetch_{retries_attempted}")
+        result.update({"retries_attempted": retries_attempted})
 
-        # If the command's output has a connection error in the last line, retry
-        output = result.get("output",[])
-        if output:
-            last_line = output[-1]
+        _get_local_git_repo_stats(ctx, "end")
 
-            if "Can't create session: Unable to connect to a repository at URL" in last_line:
-                log(ctx, f"git svn fetch failed to connect to repo remote on attempt {retries_attempted} of MAX_RETRIES={max_retries}, retrying", "warning")
+        ## Check for success or failure conditions
+        # Because this function is only called after determining that this repo is out of date,
+        # any git svn fetch command which adds zero new commits to the local git repo was a failure,
+        # regardless of what the return code says
 
-            elif result["return_code"] != 0:
-                log(ctx, f"git svn fetch failed, return_code: {result['return_code']}; {retries_attempted} of MAX_RETRIES={max_retries}, retrying", "warning")
+        # If successful, break the while true loop here
+        if _check_git_svn_fetch_success(ctx, result):
+            return True
 
-            else:
-
-                # Only exit the loop if:
-                    # the output has lines
-                    # and the last line is not a connection failure
-                    # and return_code is 0
-                    # or we hit max_retries
-                break
-
-        # If we've hit the max_retries limit, return here
-        if retries_attempted >= max_retries:
-
-            log_failure_message = f"git svn fetch failed, reached max retries {max_retries}"
-            set_job_result(ctx, "failed fetch", log_failure_message, False)
-            log(ctx, log_failure_message, "error")
-            break
+        # If we've hit the max_retries limit, break the while true loop with an error here
+        elif retries_attempted >= max_retries:
+            return False
 
         # Otherwise, prepare for retry
         else:
 
             retries_attempted += 1
+
+            # Divide the log window size in half for the next try
+            log_window_size = int(log_window_size) // 2
+
+            # Try clearing the lock file
+            lockfiles.clear_lock_files(ctx)
 
             # Log the failure
             retry_delay_seconds = random.randrange(1, 5)
@@ -906,19 +932,12 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> dict:
         # Repeat the loop
 
 
-    # Do not store in ctx.job, because then it gets output to logs
-    # ctx.job["git_svn_fetch_result"] = result
-
-    # Return the output of the fetch, to be evaluated for success / fail in another function
-    return result
-
-
-def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> None:
+def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> None:
     """
     Check the local repo clone to verify the git svn fetch command completed successfully
 
     Which signals do we need to base a success / fail decision on?
-    - New commits in local git repo (hash_start != hash_end)
+    - New commits in local git repo (hash_begin != hash_end)
     - SVN rev numbers in new commit messages in local git repo
 
     What actions do we need to take in each case?
@@ -930,7 +949,7 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
                 - Has the repo URL in the .git/config file
 
         Complete success:
-            - this_batch_end_rev is included in a git commit body
+            - rev_batch_end is included in a git commit body
 
         Partial success:
             - Does git svn fetch commit converted commits to the local repo in a partial success state?
@@ -938,6 +957,7 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
             - Some errors were present
 
     """
+
 
     ## Gather needed inputs
     action                          = "git svn fetch"
@@ -948,12 +968,18 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
     job_config                      = ctx.job.get("config","")
     job_stats_local                 = ctx.job.get("stats","").get("local","")
     structured_log_dict             = {"process": git_svn_fetch_result}
+    max_retries                     = job_config.get("max_retries","")
 
+
+    if git_svn_fetch_result["return_code"] != 0:
+        errors.append(f"Exited with return_code {git_svn_fetch_result['return_code']} != 0")
+
+    if git_svn_fetch_result["retries_attempted"] >= max_retries:
+        errors.append(f"Reached max retries {max_retries}")
 
     # Check if the repo is valid after the fetch
     if not _check_if_repo_exists_locally(ctx, "end"):
-        errors.append("Repo not valid")
-
+        errors.append("Repo validity check failed")
 
     ## Check for any errors in the command output
     # TODO: Test the error message processing
@@ -1064,40 +1090,38 @@ def _verify_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> N
                             git_svn_fetch_output_for_errors.remove(line)
 
 
-    ## Get the latest commit from the git repo's commit logs
-    # Update the .git/config file with the ending revision number
-    latest_converted_svn_rev = int(job_stats_local.get("git_repo_latest_converted_svn_rev_end", 0))
+    # ## Get the latest commit from the git repo's commit logs
+    # # Update the .git/config file with the ending revision number
+    # latest_converted_svn_rev = int(job_stats_local.get("git_latest_commit_rev_end", 0))
 
-    # If the ending revision number matches the batch end rev number,
-    # then we know we succeeded
-    this_batch_end_rev = int(job_stats_local.get("this_batch_end_rev",""))
-    if not (latest_converted_svn_rev and this_batch_end_rev and latest_converted_svn_rev == this_batch_end_rev):
-        warnings.append(f"git_repo_latest_converted_svn_rev_end: {latest_converted_svn_rev} != this_batch_end_rev: {this_batch_end_rev}")
+    # # If the ending revision number matches the batch end rev number,
+    # # then we know we succeeded
+    # rev_batch_end = int(job_stats_local.get("rev_batch_end",0))
+    # if not (latest_converted_svn_rev and rev_batch_end and latest_converted_svn_rev == rev_batch_end):
+    #     warnings.append(f"git_latest_commit_rev_end: {latest_converted_svn_rev} != rev_batch_end: {rev_batch_end}")
 
 
     ## Get the batch size, and git commits before and after, to check if they add up
-    fetching_batch_count        = int(job_stats_local.get("fetching_batch_count", 0))
-    git_repo_commit_count_end   = int(job_stats_local.get("git_repo_commit_count_end",   0))
-    git_repo_commit_count_start = int(job_stats_local.get("git_repo_commit_count_start", 0))
-    git_commits_added           = int(git_repo_commit_count_end - git_repo_commit_count_start)
-    git_commits_missed          = int(fetching_batch_count - git_commits_added)
+    git_commit_count_end    = int(job_stats_local.get("git_commit_count_end",   0))
+    git_commit_count_begin  = int(job_stats_local.get("git_commit_count_begin", 0))
+    git_commit_count_added  = int(git_commit_count_end - git_commit_count_begin)
+    # git_commit_count_to_add = int(job_stats_local.get("git_commit_count_to_add", 0))
+    # git_commit_count_missed = int(git_commit_count_to_add - git_commit_count_added)
 
-    ctx.job["stats"]["local"].update({"git_commits_added": git_commits_added})
-    ctx.job["stats"]["local"].update({"git_commits_missed": git_commits_missed})
+    ctx.job["stats"]["local"].update({"git_commit_count_added": git_commit_count_added})
+    # ctx.job["stats"]["local"].update({"git_commit_count_missed": git_commit_count_missed})
 
-    if git_commits_added == 0:
-        errors.append(f"git_commits_added == 0, fetch failed to add any new commits")
+    if git_commit_count_added == 0:
+        errors.append(f"git_commit_count_added == 0, fetch failed to add any new commits")
 
-    elif git_commits_added != fetching_batch_count:
-        warnings.append(f"git_commits_added: {git_commits_added} != fetching_batch_count: {fetching_batch_count}; git_commits_missed {git_commits_missed}")
+    # elif git_commit_count_added != git_commit_count_to_add:
+    #     warnings.append(f"git_commit_count_added: {git_commit_count_added} != git_commit_count_to_add: {git_commit_count_to_add}; git_commit_count_missed {git_commit_count_missed}")
 
 
     ## Count how many, and which revs were checked in this fetch
     # Verify each of them are in the git log output
     # TODO: Implement this
     # git_svn_fetch_output
-
-
 
 
 

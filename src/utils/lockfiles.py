@@ -17,7 +17,9 @@ def clear_lock_files(ctx: Context) -> bool:
     """
 
     # Get the local repo path
-    repo_path = ctx.job.get("job", {}).get("local_repo_path","")
+    repo_path = ctx.job.get("config", {}).get("local_repo_path","")
+    if not repo_path:
+        log(ctx, "No repo_path", "error")
 
     return_value    = False
 

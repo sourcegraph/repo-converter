@@ -355,7 +355,7 @@ def git_global_config(ctx: Context) -> None:
     cmd.run_subprocess(ctx, cmd_git_default_branch, quiet=True, name="cmd_git_default_branch")
 
 
-def set_config(ctx: Context, key: str, value: str) -> bool:
+def set_config(ctx: Context, key: str, value: str, config_file_path: str = None) -> bool:
     """
     A more generic method to set a config value in a repo's config file
 
@@ -363,21 +363,31 @@ def set_config(ctx: Context, key: str, value: str) -> bool:
     Returns False only if the command failed
     """
 
+    # Validate if the config_file_path exists, but do not use it
+    if config_file_path and not _get_and_validate_local_repo_path(ctx, sub_dir=config_file_path):
+        return
+
     local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
-    cmd_git_set_config = ["git", "-C", local_repo_path, "config", "--replace-all", key, value]
+    cmd_git_set_config = ["git", "-C", local_repo_path, "config"]
+
+    if config_file_path:
+        cmd_git_set_config += ["--file", config_file_path]
+
+    cmd_git_set_config += ["--replace-all", key, value]
+
     result = {
         "empty_dict": "true"
     }
 
     try:
-        result = cmd.run_subprocess(ctx, cmd_git_set_config, quiet=True, name="cmd_git_set_config")
-        # log(ctx, f"git.set_config succeeded; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "info", result)
+        result = cmd.run_subprocess(ctx, cmd_git_set_config, quiet=False, name="cmd_git_set_config")
+        log(ctx, f"git.set_config succeeded; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "info", result)
         return True
     except:
-        # log(ctx, f"git.set_config failed; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "error", result)
+        log(ctx, f"git.set_config failed; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "error", result)
         return False
 
 
@@ -404,7 +414,13 @@ def unset_config(ctx: Context, key: str, config_file_path: str = None) -> bool:
 
     cmd_git_unset_config += ["--unset", key]
 
+    before = get_config(ctx, key, config_file_path)
+    log(ctx, f"git.unset_config before: {before}")
+
     result = cmd.run_subprocess(ctx, cmd_git_unset_config, quiet=True, name="cmd_git_unset_config")
+
+    after = get_config(ctx, key, config_file_path)
+    log(ctx, f"git.unset_config after: {after}")
 
     if result["return_code"] == 0:
         return True

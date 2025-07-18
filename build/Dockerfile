@@ -33,6 +33,7 @@ RUN apt-get update && \
         gcc \
         git \
         git-svn \
+        lsof \
         python3 \
         python3-dev \
         python3-pip \

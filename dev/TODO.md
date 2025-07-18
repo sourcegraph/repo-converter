@@ -62,9 +62,83 @@
 
 ### Stability
 
+- Add a bool arg to the get_repo_stats function
+    - If true (default), persist stats to ctx.job dict
+    - If false, just return stats dict to caller
+
+- Add to the concurrency monitor:
+    - cmd.status_update_and_cleanup_zombie_processes(ctx)
+    - details for each running job
+        - Number of commits begin, added
+        - "svn-remote.svn.branches-maxRev"
+
+
+- Maybe we don't need to handle batch processing, just infinite retries?
+    - We still need rev numbers to show progress of conversion jobs
+    - It'd be much simpler if we could use the data already stored by `git svn fetch`, than have to query this data from the server
+    - These rev numbers are available:
+        - Done - Last Changed Rev from `svn info` output
+        - Done - Last converted rev from `git for-each-ref -limit=1` output, and / or the `.git/svn/something/origin/branch/.commit-map-repo-uuid` binary file
+            - Would the size of this file tell us how many commits have been converted
+        - Done - Count of commits from local git repo history
+        - Done - Last rev checked, from the `.git/svn/.metadata` file
+    - So we have all the data we need, what's stopping us from using it instead of `svn log` data?
+    - But wait... isn't the situation we started in?
+        - Jobs timed out, because they were trying to boil the ocean / convert the entire repo in one go
+        - This was a big problem, because the script only ran in series, so it'd hold up all the other repos
+        - The script now runs in parallel, so other job slots can continue processing
+    - Initial scan through repo rev index, at `--log-window-size n` number of revs per network request, can take a really long time
+        - Running the `svn log 1:HEAD --limit 1` command didn't take this long
+
+
+TODO: run the svn commands, for each rev returned in the svn log command, to see:
+a) if they do actually change any files in the repo, and the git svn committing part is broken, or
+b) if they don't change any files in the repo, and it's subversion gaslighting us5
+svn log -v -c 1728081 $URL
+svn diff -c 1728081 $URL
+
+
+TODO: move env_vars["MAX_RETRIES"] to config file
+
+
+- `git svn fetch --revision [BASE:HEAD] --log-window-size [100]`
+    - BASE
+        - If any local commits, BASE is the most recent commit (local git HEAD)
+        - If no local commits, BASE defaults to 0, which is super inefficient, as it has to make (first_rev/log-window-size) requests to the SVN server, just to find the starting rev
+    - HEAD
+        - (remote)
+        - Matches "Last Changed Rev" from the `svn info` command output
+
+    - log-window-size
+        - For each HTTP request to the Subversion server, the number of revs to query for
+
+- `cat .git/svn/.metadata`
+; This file is used internally by git-svn
+; You should not have to edit it
+[svn-remote "svn"]
+        reposRoot = https://svn.apache.org/repos/asf
+        uuid = 13f79535-47bb-0310-9956-ffa450edef68
+        branches-maxRev = 1886214
+        tags-maxRev = 1886140
+
+    - branches-maxRev
+    - tags-maxRev
+        - the last revs that git svn has checked for branches / tags
+        - future iterations can start at this number, to prevent duplicate work, checking old revs
+        - if the user changes the branches in scope, this number must be reset
+        - TODO: Add these values to the get repo stats
+
+
+
+
+
+
 - `git svn fetch`
     - Turns out, the `fetch` command is absolutely intolerant of invalid revs in the `--revisions` range, i.e. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, no changes
     - Simplifying local repo state tracking for the purposes of fetch batch ranges, just using the SVN rev number from the latest git commit message
+
+
+
 
 - `svn log` commands
     - Longest commands, which seem to be timing out and causing issues
