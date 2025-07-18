@@ -73,7 +73,7 @@ while true; do
     fi
 
     # Get the list of child directories
-    child_dirs=$(find -maxdepth 1 "$dir" -type d)
+    child_dirs=$(find "$dir" -maxdepth 1 -type d)
 
     # Get the length of the longest child directory name
     longest_child_dir_name_length=$(echo "$child_dirs" | awk '{print length($0)}' | sort -nr | head -1)
