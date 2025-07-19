@@ -36,6 +36,10 @@ def convert(ctx: Context) -> None:
 
     repo_key = ctx.job.get("config",{}).get("repo_key")
 
+    # ctx.job["result"]["process"]["pid"]    = os.getpid()
+    # ctx.job["result"]["process"]["ppid"]   = os.getppid()
+    # ctx.job["result"]["process"]["pgrp"]   = os.getpgrp()
+
     # Extract repo conversion job config values from the repos list in ctx,
     # and set default values for required but undefined configs
     _extract_repo_config_and_set_default_values(ctx)
@@ -190,7 +194,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     # git commands
     cmd_git_default_branch                  = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
     cmd_git_garbage_collection              = arg_git     + ["gc"]
-    cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--quiet", "--quiet"]
+    cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--quiet"]
     cmd_git_svn_init                        = arg_git_svn + ["init"] + arg_svn_remote_repo_code_root_url
 
      # Add authentication, if provided
@@ -800,7 +804,7 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
             retry_delay_seconds = (random.randrange(1, 5) * retries_attempted)
 
             # Log the failure
-            log(ctx, f"{repo_key}; git svn fetch failed, retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
+            log(ctx, f"{repo_key}; retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
 
             # Sleep the delay
             time.sleep(retry_delay_seconds)
@@ -836,7 +840,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
 
 
     ## Gather needed inputs
-    job_stats_local_git_repo_stats  = _get_local_git_repo_stats(ctx)
+    current_job_stats_local_git_repo_stats  = _get_local_git_repo_stats(ctx)
 
     job_config                      = ctx.job.get("config",{})
     max_retries                     = job_config.get("max_retries")
@@ -977,19 +981,22 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     #     warnings.append(f"git_latest_commit_rev_end: {latest_converted_svn_rev} != rev_batch_end: {rev_batch_end}")
 
     ## Commit count checks
+    job_stats_local                     = ctx.job.get("stats",{}).get("local",{})
 
     # Get the number of commits which were already in the local git repo before the job started
-    git_commit_count_begin              = job_stats_local_git_repo_stats.get("git_commit_count_begin", 0)
+    git_commit_count_begin              = job_stats_local.get("git_commit_count_begin")
 
     # Get the current number of commits in the local git repo after this fetch attempt (includes all retries)
-    current_git_commit_count            = job_stats_local_git_repo_stats.get("git_commit_count",       0)
+    current_git_commit_count            = current_job_stats_local_git_repo_stats.get("git_commit_count")
+
 
 
     ## This try commit counts
     # Order is important, must be before ## Whole job commit counts,
     # because this tries to use the git_commit_count_added_whole_job from the previous retry
     # Get the count of commits from the end of the previous try
-    git_commit_count_after_previous_try = job_stats_local_git_repo_stats.get("git_commit_count_added_whole_job")
+    git_commit_count_after_previous_try = job_stats_local.get("git_commit_count_added_whole_job")
+
     # If this is the first try, then use the commit count from the beginning of the job
     if not git_commit_count_after_previous_try:
         git_commit_count_after_previous_try = git_commit_count_begin
@@ -1014,27 +1021,43 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
 
 
     ## Add git_dir_size_
-    git_dir_size = job_stats_local_git_repo_stats.get("git_dir_size")
+    git_dir_size = current_job_stats_local_git_repo_stats.get("git_dir_size")
     if git_dir_size:
         ctx.job["stats"]["local"].update({f"git_dir_size_try_{retries_attempted}": git_dir_size})
 
 
     # Check if git svn has blown past svn info's "Last Changed Rev"
-    # Only a problem when the repo has 0 commits
-    branches_max_rev        = job_stats_local_git_repo_stats.get("svn_metadata_branches_max_rev", 0)
-    last_changed_revision   = ctx.job.get("stats",{}).get("remote",{}).get("last_changed_revision")
+    branches_max_rev            = current_job_stats_local_git_repo_stats.get("svn_metadata_branches_max_rev", 0)
+    last_changed_revision       = ctx.job.get("stats",{}).get("remote",{}).get("last_changed_revision")
+    git_latest_commit_rev       = current_job_stats_local_git_repo_stats.get("git_latest_commit_rev", 0)
 
     if (
-        current_git_commit_count == 0 and
-        branches_max_rev > last_changed_revision
+        branches_max_rev > last_changed_revision and
+        current_git_commit_count == 0
     ):
 
         # If git svn has blown past svn info's "Last Changed Rev"
-        log(ctx, f"{repo_key}; Repo is empty, and branches_max_rev {branches_max_rev} > last_changed_revision {last_changed_revision}, unsetting svn-remote.svn.branches-maxRev and svn-remote.svn.tags-maxRev to remediate", "warning")
+        errors.append(f"{repo_key}; Repo is empty, and branches_max_rev {branches_max_rev} > last_changed_revision {last_changed_revision}, unsetting svn-remote.svn.branches-maxRev and svn-remote.svn.tags-maxRev to remediate")
 
         # Remediate the situation
         # NOTE: This causes this run of the git svn fetch command to start back from svn repo revision 1,
         # which may take a long time
+        git.set_config(ctx, "svn-remote.svn.branches-maxRev", "0", config_file_path=".git/svn/.metadata")
+        git.set_config(ctx, "svn-remote.svn.tags-maxRev",     "0", config_file_path=".git/svn/.metadata")
+
+    # If the repo is out of date,
+    # and branches_max_rev is higher than the last changed rev that we're trying to sync
+    # this repo will always be out of date, unless we can back up branches_max_rev to let us sync
+    # the last changed rev
+    if (
+        branches_max_rev        > last_changed_revision and
+        last_changed_revision   > git_latest_commit_rev
+    ):
+        # branches_max_rev_setback = last_changed_revision - 1
+        # errors.append(f"{repo_key}; branches_max_rev {branches_max_rev} > last_changed_revision {last_changed_revision} > git_latest_commit_rev {git_latest_commit_rev}, meaning this repo would never catch up; trying to remediate by resetting branches_max_rev to git_latest_commit_rev {git_latest_commit_rev}")
+        # git.set_config(ctx, "svn-remote.svn.branches-maxRev", f"{branches_max_rev_setback}", config_file_path=".git/svn/.metadata")
+        # git.set_config(ctx, "svn-remote.svn.tags-maxRev",     f"{branches_max_rev_setback}", config_file_path=".git/svn/.metadata")
+        errors.append(f"{repo_key}; branches_max_rev {branches_max_rev} > last_changed_revision {last_changed_revision} > git_latest_commit_rev {git_latest_commit_rev}, meaning this repo would never catch up; unsetting svn-remote.svn.branches-maxRev and svn-remote.svn.tags-maxRev to remediate")
         git.set_config(ctx, "svn-remote.svn.branches-maxRev", "0", config_file_path=".git/svn/.metadata")
         git.set_config(ctx, "svn-remote.svn.tags-maxRev",     "0", config_file_path=".git/svn/.metadata")
 
@@ -1045,7 +1068,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     if warnings:
         ctx.job["result"]["warnings"]   = warnings
     action                          = "git svn fetch"
-    reason                          = f"{repo_key}; "
+    reason                          = ""
     structured_log_dict             = {"process": git_svn_fetch_result}
 
     ## Make final success / fail call

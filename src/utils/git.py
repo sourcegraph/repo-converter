@@ -212,12 +212,12 @@ def get_count_of_commits_in_repo(ctx: Context) -> int:
     cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits", ignore_stderr=True)
 
     if cmd_git_count_commits_result["return_code"] == 0:
-
         count_commits = ''.join(cmd_git_count_commits_result["output"]) if isinstance(cmd_git_count_commits_result["output"], list) else cmd_git_count_commits_result["output"]
-        return int(count_commits)
 
-    else:
-        return None
+        if count_commits:
+            return int(count_commits)
+
+    return None
 
 
 def deduplicate_git_config_file(ctx: Context) -> None:
