@@ -148,8 +148,8 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
     processed_config["local_repo_path"] = local_repo_path
 
     # Read env vars into job config
-    processed_config["log_recent_commits"]  = ctx.env_vars["LOG_RECENT_COMMITS"]
-    processed_config["log_remaining_revs"]  = ctx.env_vars["LOG_REMAINING_REVS"]
+    # processed_config["log_recent_commits"]  = ctx.env_vars["LOG_RECENT_COMMITS"]
+    # processed_config["log_remaining_revs"]  = ctx.env_vars["LOG_REMAINING_REVS"]
     processed_config["max_retries"]         = ctx.env_vars["MAX_RETRIES"]
 
     # Get last run from local repo
