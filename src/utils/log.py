@@ -19,7 +19,7 @@ def log(
         message: str,
         level_name: str = "DEBUG",
         structured_data: dict = None,
-        correlation_id: str = None,
+        correlation_id: str = "",
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
         ) -> None:
@@ -61,7 +61,7 @@ def log(
 def _build_structured_payload(
         ctx: Context,
         structured_data: dict = {},
-        correlation_id: str = None,
+        correlation_id: str = "",
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
         ) -> dict:
@@ -118,8 +118,23 @@ def _build_structured_payload(
         payload.update(structured_data)
 
     # Merge any job data from the context
-    if ctx.job.get("job", {}):
-        payload.update(ctx.job)
+    if ctx.job:
+
+        ctx_job_result  = ctx.job.get("result",{})
+        start_timestamp = ctx_job_result.get("start_timestamp")
+        end_timestamp   = ctx_job_result.get("end_timestamp")
+        execution_time  = ctx_job_result.get("execution_time")
+
+        # If the job is still running
+        if start_timestamp and not end_timestamp and not execution_time:
+
+            # Then add a running_time_seconds
+            ctx.job["result"]["running_time_seconds"] = int(time.time() - start_timestamp)
+
+        payload.update({"job": dict(ctx.job)})
+
+    # Remove any null values
+    payload = _remove_null_values(payload)
 
     return payload
 
@@ -200,3 +215,35 @@ def _format_uptime(uptime_seconds: float) -> str:
     parts.append(f"{seconds}s")
 
     return " ".join(parts)
+
+
+def _remove_null_values(payload: dict) -> dict:
+    """
+    Recursive function to remove keys from payload where values are null, or empty strings,
+    but keep values set to 0
+    """
+
+    if type(payload) is dict:
+
+        return dict((key, _remove_null_values(value)) for key, value in payload.items() if value == 0 or (value is not None and value != "" and _remove_null_values(value)))
+
+    elif type(payload) is list:
+
+        return [_remove_null_values(value) for value in payload if value == 0 or (value is not None and value != "" and _remove_null_values(value))]
+
+    else:
+        return payload
+
+
+def set_job_result(ctx: Context, action: str = "", reason: str = "", success: bool = None) -> None:
+    """
+    Set the result subdict for job logs
+    """
+
+    ctx.job["result"].update(
+        {
+            "action": action,
+            "reason": reason,
+            "success": success
+        }
+    )

@@ -33,6 +33,7 @@ RUN apt-get update && \
         gcc \
         git \
         git-svn \
+        lsof \
         python3 \
         python3-dev \
         python3-pip \
@@ -45,14 +46,18 @@ RUN apt-get update && \
     systemctl enable cron && \
     systemctl start cron
 
-# cd to /sourcegraph/repo-converter in the image
-WORKDIR /sourcegraph/repo-converter
+# Set Git defaults, system-wide, in /etc/gitconfig
+RUN git config --system safe.directory "*" && \
+    git config --system init.defaultBranch main
+
+# cd to /sg/repo-converter in the image
+WORKDIR /sg/repo-converter
 
 # Copy the requirements file into the image
 COPY build/requirements.txt build/requirements.txt
 
 # Install required Python modules
-RUN --mount=type=cache,target=~/.cache/pip \
+RUN --mount=type=cache,target=/tmp/pip-cache \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --root-user-action=ignore -r build/requirements.txt
 
@@ -81,10 +86,15 @@ COPY src/ src/
 # The contents of this file changes every build
 COPY build/.env build/.env
 
-# Create and switch to user sourcegraph, so podman can access directories and files it created in a previous run
-# https://github.com/containers/podman/issues/4016
-RUN useradd -u 1000 -m sourcegraph
+# Create the user, with a home directory
+RUN groupadd sourcegraph --gid 10002 && \
+     useradd sourcegraph --uid 10001 --gid sourcegraph --create-home --home-dir /home/sourcegraph
+
+# Give ownership of the whole /sg dir and all its contents to the new user
+RUN chown -R sourcegraph:sourcegraph /sg
+
+# Switch to the new user
 USER sourcegraph
 
 # Start the container
-CMD ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]
+CMD ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]

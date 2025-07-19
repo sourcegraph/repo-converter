@@ -12,25 +12,24 @@ import os
 
 def _get_and_validate_local_repo_path(
         ctx: Context,
-        function_name: str,
-        local_repo_path: str,
-        sub_dir: str = None
+        sub_dir: str = "",
+        quiet: bool = False
     ) -> str:
 
     # Get the local repo path
-    repo_path = ""
+    job_config      = ctx.job.get("config",{})
+    local_repo_path = job_config.get("local_repo_path")
+    repo_key        = job_config.get("repo_key")
 
-    if local_repo_path:
-        repo_path = local_repo_path
-    elif ctx.job["job"]["local_repo_path"]:
-        repo_path = local_repo_path
-    else:
-        log(ctx, f"No local repo path provided to {function_name}", "warning")
+    if not local_repo_path:
+        if not quiet:
+            log(ctx, f"{repo_key}; No local repo path provided to function", "error")
         return None
 
     # Validate the repo path exists
-    if not os.path.exists(repo_path):
-        log(ctx, f"Path {repo_path} provided to {function_name} doesn't exist", "warning")
+    if not os.path.exists(local_repo_path):
+        if not quiet:
+            log(ctx, f"{repo_key}; Path {local_repo_path} provided to function doesn't exist", "warning")
         return None
 
     # Validate the repo path is a valid git repo
@@ -42,30 +41,30 @@ def _get_and_validate_local_repo_path(
         "--is-inside-work-tree",
         # "--is-inside-git-dir",
     ]
-    valid_repo_path = cmd.run_subprocess(ctx, cmd_git_validate_repo_path, quiet=True, name="cmd_git_validate_repo_path").get("output","")
+
+    valid_repo_path = cmd.run_subprocess(ctx, cmd_git_validate_repo_path, quiet=True, name="cmd_git_validate_repo_path").get("output")
     if not valid_repo_path:
-        log(ctx, f"Not a valid repo path: {local_repo_path}", "debug")
+        if not quiet:
+            log(ctx, f"{repo_key}; Not a valid repo path: {local_repo_path}", "debug")
+        return None
     else:
-        log(ctx, f"Valid repo path: {local_repo_path}", "debug")
+        # log(ctx, f"Valid repo path: {local_repo_path}", "debug")
+        pass
 
     # If a sub_dir was provided, append it
     if sub_dir:
-        repo_path += f"/{sub_dir}"
+        local_repo_path += f"/{sub_dir}"
 
         # Validate the repo path + sub_dir exists
-        if not os.path.exists(repo_path):
-            log(ctx, f"Path {repo_path} needed for {function_name} doesn't exist", "warning")
+        if not os.path.exists(local_repo_path):
+            if not quiet:
+                log(ctx, f"{repo_key}; Path {local_repo_path} needed for function doesn't exist", "warning")
             return None
 
-    return repo_path
+    return local_repo_path
 
 
-def cleanup_branches_and_tags(
-        ctx: Context,
-        local_repo_path: str,
-        cmd_git_default_branch: str,
-        git_default_branch: str
-    ) -> None:
+def cleanup_branches_and_tags(ctx: Context) -> None:
     """
     git svn, and git tfs, have a bad habit of creating converted branches as remote branches,
     so the Sourcegraph clone doesn't show them to users
@@ -75,9 +74,22 @@ def cleanup_branches_and_tags(
     so if the git config file doesn't exist at this point, big problem
     """
 
-    packed_refs_file_path = _get_and_validate_local_repo_path(ctx, "cleanup_branches_and_tags", local_repo_path, ".git/packed-refs")
-    if not packed_refs_file_path:
+    job_config  = ctx.job.get("config",{})
+    repo_key    = job_config.get("repo_key")
+
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
+    if not local_repo_path:
+        log(ctx, f"{repo_key}; Repo missing local_repo_path", "error")
         return
+
+    packed_refs_file_path = _get_and_validate_local_repo_path(ctx, ".git/packed-refs")
+    if not packed_refs_file_path:
+        log(ctx, f"{repo_key}; Repo missing .git/packed-refs", "error")
+        return
+
+    # Get the local repo path
+    git_default_branch              = job_config.get("git_default_branch")
+    cmd_git_repo_set_default_branch = ["git", "-C", local_repo_path, "symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
 
     local_branch_prefix         = "refs/heads/"
     local_tag_prefix            = "refs/tags/"
@@ -112,7 +124,7 @@ def cleanup_branches_and_tags(
 
         except Exception as exception:
 
-            log(ctx, f"Exception while cleaning branches and tags: {exception}", "error")
+            log(ctx, f"{repo_key}; Exception while cleaning branches and tags: {exception}", "error")
             continue
 
         # If the path is a local tag, then delete it
@@ -165,7 +177,7 @@ def cleanup_branches_and_tags(
 
         else:
 
-            log(ctx, f"Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
+            log(ctx, f"{repo_key}; Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
             output_list_of_strings_and_line_number_tuples.append([str(input_lines[i]), i])
 
     # Sort by the path in the tuple
@@ -185,13 +197,30 @@ def cleanup_branches_and_tags(
             packed_refs_file.write(f"{line}\n")
 
     # Reset the default branch
-    cmd.run_subprocess(ctx, cmd_git_default_branch, quiet=True, name="cmd_git_default_branch")
+    cmd.run_subprocess(ctx, cmd_git_repo_set_default_branch, quiet=True, name="cmd_git_repo_set_default_branch")
+
+def get_count_of_commits_in_repo(ctx: Context) -> int:
+    """
+    Count and return the total number of commits in the git repo, across all branches
+    """
+
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
+    if not local_repo_path:
+        return
+
+    cmd_git_count_commits = ["git", "-C", local_repo_path, "rev-list", "--all", "--count"]
+    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits", ignore_stderr=True)
+
+    if cmd_git_count_commits_result["return_code"] == 0:
+        count_commits = ''.join(cmd_git_count_commits_result["output"]) if isinstance(cmd_git_count_commits_result["output"], list) else cmd_git_count_commits_result["output"]
+
+        if count_commits:
+            return int(count_commits)
+
+    return None
 
 
-def deduplicate_git_config_file(
-        ctx: Context,
-        local_repo_path: str
-    ) -> None:
+def deduplicate_git_config_file(ctx: Context) -> None:
     """
     git svn has a bad habit of appending duplicate lines to a git config file
     This function removes the duplicate lines, as a sacrifice to the git gods,
@@ -202,7 +231,7 @@ def deduplicate_git_config_file(
     however, if the git config file doesn't exist for a repo that's supposed to exist and be updated, big problem
     """
 
-    git_config_file_path = _get_and_validate_local_repo_path(ctx, "deduplicate_git_config_file", local_repo_path, ".git/config")
+    git_config_file_path = _get_and_validate_local_repo_path(ctx, ".git/config")
     if not git_config_file_path:
         return
 
@@ -218,7 +247,7 @@ def deduplicate_git_config_file(
         # Read the whole file's contents into memory
         config_file_data = config_file.readlines()
 
-        log(ctx, f"deduplicate_git_config_file; git_config_file lines before: {len(config_file_data)}", "debug")
+        # log(ctx, f"git_config_file lines before: {len(config_file_data)}", "debug")
 
         # Move the file pointer back to the beginning of the file to start overwriting from there
         config_file.seek(0)
@@ -238,15 +267,15 @@ def deduplicate_git_config_file(
         # Delete the rest of the file's contents
         config_file.truncate()
 
-        log(ctx, f"deduplicate_git_config_file; git_config_file lines after: {len(lines_seen)}", "debug")
+        # log(ctx, f"git_config_file lines after: {len(lines_seen)}", "debug")
 
 
-def garbage_collection(ctx: Context, local_repo_path:str) -> None:
+def garbage_collection(ctx: Context) -> None:
     """
     Garbage collection routine
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "garbage_collection", local_repo_path)
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
@@ -254,24 +283,100 @@ def garbage_collection(ctx: Context, local_repo_path:str) -> None:
     cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, name="cmd_git_garbage_collection")
 
 
-def get_config(ctx: Context, local_repo_path: str, key: str) -> str:
+def get_config(ctx: Context, key: str, config_file_path: str = "", quiet: bool=False) -> list:
     """
     A more generic method to get a config value from a repo's config file
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "get_config", local_repo_path)
+    # Validate if the config_file_path exists, but do not use it
+    if config_file_path and not _get_and_validate_local_repo_path(ctx, sub_dir=config_file_path, quiet=quiet):
+        return
+
+    local_repo_path = _get_and_validate_local_repo_path(ctx, quiet=quiet)
     if not local_repo_path:
         return
 
-    cmd_git_get_config = ["git", "-C", local_repo_path, "config", "--get", key]
+    cmd_git_get_config = ["git", "-C", local_repo_path, "config"]
 
-    try:
-        value = cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config").get("output","")
-    except:
-        value = None
+    if config_file_path:
+        cmd_git_get_config += ["--file", config_file_path]
+
+    cmd_git_get_config += ["--get", key]
+
+    value = []
+    result = cmd.run_subprocess(ctx, cmd_git_get_config, quiet=True, name="cmd_git_get_config")
+
+    if result["return_code"] == 0:
+
+        value = list(result.get("output",""))
+        # log(ctx, f"git.get_config succeeded; key: {key}; value: {value}; cmd_git_get_config: {cmd_git_get_config}; result: {value}", "info")
+
+    else:
+
+        # log(ctx, f"git.get_config failed; key: {key}; value: {value}; cmd_git_get_config: {cmd_git_get_config}; result: {value}", "error")
+        pass
 
     return value
 
+
+def get_latest_commit_metadata(ctx: Context, commit_metadata_field_list: list[str] = None) -> list:
+    """
+    Get metadata from the most recent commit from the local git repo
+    Args:
+        commit_metadata_field_list
+        See https://git-scm.com/docs/git-for-each-ref#_field_names
+    """
+
+    local_repo_path = _get_and_validate_local_repo_path(ctx, quiet=True)
+    if not local_repo_path:
+        return
+
+    # Set a default value if none is provided
+    if not commit_metadata_field_list:
+        commit_metadata_field_list = [
+            "committerdate:short",
+            "objectname:short",
+            "contents:subject",
+            "contents:body"
+        ]
+    # git for-each-ref --count 1 --sort -committerdate --format '%(committerdate:short) %(objectname:short) %(contents:subject) $(contents:body)'
+
+    # Approach 1:
+        # Run this command once, with all the metadata fields in one list
+        # All of the metadata would come from the same commit,
+        # but no assurance that the field has a value,
+        # therefore no assurance that the return list matches the input list
+
+    # Approach 2:
+        # Run this command in a loop, for each field in the input field list
+        # Some assurance that the return list should match the input list
+        # But different fields may come back from different commits,
+        # if a new commit is committed between executions
+
+    # Approach 3:
+        # Switch to GitPython
+
+    # Approach 1:
+    commit_metadata_string = ")%0a%(".join(commit_metadata_field_list)
+    cmd_git_get_latest_ref = [
+        "git", "-C", local_repo_path,
+        "for-each-ref", "--count=1", "--sort=-committerdate", f"--format=%({commit_metadata_string})"
+    ]
+
+    commit_metadata_return_list = []
+    result = cmd.run_subprocess(ctx, cmd_git_get_latest_ref, quiet=True, name="cmd_git_get_latest_ref")
+
+    if result["return_code"] == 0:
+
+        commit_metadata_return_list = list(result.get("output",""))
+        # log(ctx, f"git.get_latest_commit_metadata succeeded; result: {commit_metadata_return_list}", "info")
+
+    else:
+
+        # log(ctx, f"git.get_latest_commit_metadata failed; result: {commit_metadata_return_list}", "error")
+        pass
+
+    return commit_metadata_return_list
 
 def git_global_config(ctx: Context) -> None:
     """
@@ -287,7 +392,7 @@ def git_global_config(ctx: Context) -> None:
     cmd.run_subprocess(ctx, cmd_git_default_branch, quiet=True, name="cmd_git_default_branch")
 
 
-def set_config(ctx: Context, local_repo_path: str, key: str, value: str) -> bool:
+def set_config(ctx: Context, key: str, value: str, config_file_path: str = "") -> bool:
     """
     A more generic method to set a config value in a repo's config file
 
@@ -295,20 +400,35 @@ def set_config(ctx: Context, local_repo_path: str, key: str, value: str) -> bool
     Returns False only if the command failed
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "get_config", local_repo_path)
+    # Validate if the config_file_path exists, but do not use it
+    if config_file_path and not _get_and_validate_local_repo_path(ctx, sub_dir=config_file_path):
+        return
+
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
-    cmd_git_set_config = ["git", "-C", local_repo_path, "config", "--set", key, value, "--replace-all"]
+    cmd_git_set_config = ["git", "-C", local_repo_path, "config"]
 
-    try:
-        cmd.run_subprocess(ctx, cmd_git_set_config, quiet=True, name="cmd_git_set_config")
+    if config_file_path:
+        cmd_git_set_config += ["--file", config_file_path]
+
+    cmd_git_set_config += ["--replace-all", key, value]
+
+    result = {
+        "empty_dict": "true"
+    }
+
+    result = cmd.run_subprocess(ctx, cmd_git_set_config, quiet=True, name="cmd_git_set_config")
+    if result.get("return_code") == 0:
+        # log(ctx, f"git.set_config succeeded; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "info", result)
         return True
-    except:
+    else:
+        # log(ctx, f"git.set_config failed; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "error", result)
         return False
 
 
-def unset_config(ctx: Context, local_repo_path: str, key: str) -> bool:
+def unset_config(ctx: Context, key: str, config_file_path: str = "") -> bool:
     """
     A more generic method to unset a config value from a repo's config file
 
@@ -316,14 +436,30 @@ def unset_config(ctx: Context, local_repo_path: str, key: str) -> bool:
     Returns False only if the command failed
     """
 
-    local_repo_path = _get_and_validate_local_repo_path(ctx, "get_config", local_repo_path)
+    # Validate if the config_file_path exists, but do not use it
+    if config_file_path and not _get_and_validate_local_repo_path(ctx, sub_dir=config_file_path):
+        return
+
+    local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
         return
 
-    cmd_git_unset_config = ["git", "-C", local_repo_path, "config", "--unset", key]
+    cmd_git_unset_config = ["git", "-C", local_repo_path, "config"]
 
-    try:
-        cmd.run_subprocess(ctx, cmd_git_unset_config, quiet=True, name="cmd_git_unset_config")
+    if config_file_path:
+        cmd_git_unset_config += ["--file", config_file_path]
+
+    cmd_git_unset_config += ["--unset", key]
+
+    # before = get_config(ctx, key, config_file_path)
+    # log(ctx, f"git.unset_config before: {before}")
+
+    result = cmd.run_subprocess(ctx, cmd_git_unset_config, quiet=True, name="cmd_git_unset_config")
+
+    # after = get_config(ctx, key, config_file_path)
+    # log(ctx, f"git.unset_config after: {after}")
+
+    if result["return_code"] == 0:
         return True
-    except:
+    else:
         return False

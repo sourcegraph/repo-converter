@@ -1,4 +1,4 @@
-name: Cleanup old Docker Images from GitHub Container Registry
+name: Cleanup old images from GitHub Container Registry
 
 on:
 
@@ -12,17 +12,18 @@ on:
       package-name:
         type: string
         description: Package name
-        required: true
+        default: repo-converter
+        required: false
       min-versions-to-keep:
         type: number
         description: Minimum number of versions to keep
         default: 20
-        required: true
+        required: false
       delete-only-untagged-versions:
         type: boolean
         description: Delete only untagged versions?
         default: true
-        required: true
+        required: false
 
 
 jobs:
@@ -36,7 +37,7 @@ jobs:
         with:
           # Setting defaults for the scheduled runs
           # https://stackoverflow.com/a/73495922
-          delete-only-untagged-versions: ${{ github.event.inputs.delete-only-untagged-versions || true }}
-          min-versions-to-keep: ${{ github.event.inputs.min-versions-to-keep || 20 }}
-          package-name: ${{ github.event.inputs.package-name || 'repo-updater' }}
           package-type: container
+          package-name: ${{ github.event.inputs.package-name || 'repo-updater' }}
+          min-versions-to-keep: ${{ github.event.inputs.min-versions-to-keep || 20 }}
+          delete-only-untagged-versions: ${{ github.event.inputs.delete-only-untagged-versions || true }}

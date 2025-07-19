@@ -6,19 +6,26 @@
 services:
 
   repo-converter:
-    image: ghcr.io/sourcegraph/repo-converter:v0.3.1
-    volumes:
-      - ../../../config/repos-to-convert.yaml:/sourcegraph/repos-to-convert.yaml:ro
-      - ../../../dev/toprc:/root/.config/procps/toprc
-      - ../../../../src-serve-root/:/sourcegraph/src-serve-root
+    image: ghcr.io/sourcegraph/repo-converter:v0.4.0
     environment:
-      - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
-      - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO if unspecified
+      - LOG_LEVEL=DEBUG
+      - REPO_CONVERTER_INTERVAL_SECONDS=600
+      - TRUNCATED_OUTPUT_MAX_LINES=20
+    # It seems like the only way this works for both podman and docker compose,
+    # is to run the container as UID=10001 and GID 10002,
+    # both on the host,
+    # and inside the container
+    user: ${CURRENT_UID_GID}
+    volumes:
+      - ../../../src-serve-root/:/sg/src-serve-root
+      - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
+      - ../../dev/toprc:/home/sourcegraph/.config/procps/toprc
 
   src-serve-git:
     container_name: src-serve-git-ubuntu.local
+    user: ${CURRENT_UID_GID}
     volumes:
-      - ../../../../src-serve-root/:/sourcegraph/src-serve-root:ro
+      - ../../../src-serve-root/:/sg/src-serve-root:ro
 
 networks:
   default:

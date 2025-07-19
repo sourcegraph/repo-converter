@@ -147,7 +147,7 @@ azure-git: # Both Git and TFVC on the same server, need to provide different ser
 gitolite:
   type: git
   code-host-name: git.example.com
-  git-ssh-command-args: -i /sourcegraph/.ssh/id_rsa -o HostKeyAlgorithms=ssh-rsa -o PubkeyAcceptedKeyTypes=ssh-rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+  git-ssh-command-args: -i /sg/.ssh/id_rsa -o HostKeyAlgorithms=ssh-rsa -o PubkeyAcceptedKeyTypes=ssh-rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
   repos:
     - repo-main:
         repo-url: ssh://git@git.example.com/repo.git

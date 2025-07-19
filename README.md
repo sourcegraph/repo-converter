@@ -67,7 +67,7 @@ Deploying via containers allows for easier upgrades, troubleshooting, monitoring
 3. Copy the `config.yaml` and `service-account-key.json` files using the instructions on the instance's Cloud Ops dashboard
     - Paste them into `./config/cloud-agent-config.yaml` and `./config/cloud-agent-service-account-key.json`
 4. Modify the contents of the `./config/cloud-agent-config.yaml` file:
-    - `serviceAccountKeyFile: /sourcegraph/cloud-agent-service-account-key.json` so that the Go binary inside the agent container finds this file in the path that's mapped via the docker-compose.yaml files
+    - `serviceAccountKeyFile: /sg/cloud-agent-service-account-key.json` so that the Go binary inside the agent container finds this file in the path that's mapped via the docker-compose.yaml files
     - Only include the `- dialAddress` entries that this cloud agent instance can reach, remove the others, so the Cloud instance doesn't try using this agent instance for code hosts it can't reach
     - Use extra caution when pasting the config.yaml in Windows, as it may use Windows' line endings or extra spaces, which breaks YAML, as a whitespace-dependent format
 5. Run `docker compose up -d`

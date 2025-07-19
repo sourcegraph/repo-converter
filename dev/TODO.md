@@ -1,41 +1,31 @@
 # TODO
 
-## Logging
+## Observability
 
-- Objective:
-    - Make the conversion process go faster, and more stable, in the customer's environment
-- How do we achieve this?
-    - Identify which commands are taking a long time, or failing, and why
-- Okay, how?
-    - Adopt structured logging, and a log parsing method to get this data
+- Implement OpenTelemetry
 
-- Update customer production, gather log events on which repos take how long, and why
+- Find a tool to search / filter through logs
+    - See Slack thread with Eng
+    - Amped the `dev/query_logs.py` script in the meantime
 
-- How to get process execution times from logs, and analyze them
-    - Find a tool to search / filter through logs
-        - See Slack thread with Eng
-```shell
-(echo '"date","time","timestamp", "cycle", "correlation_id", "execution_time_seconds","return_code","status_message_reason","args"'; podman logs repo-converter | jq -r 'select(.message == "Process finished" and (.process.args // "" | contains("svn"))) | [.date, .time, .timestamp, .cycle, .correlation_id, .process.execution_time_seconds, .process.return_code, .process.status_message_reason, .process.args] | @csv') | pbcopy
-```
+- Build up log event context, ex. canonical logs
+    - Store job metadata in a dict, key is pid?
+    - And be able to retrieve this context in cmd.log_process_status()
+        - What little data do we have from a child process reap event, which we can lookup in the dict?
+        - grandparent pid?
 
-- Build up log event context, ex. canonical logs, and be able to retrieve this context in cmd.log_process_status()
+- Add to the status monitor thread loop:
+    - Details of each running job
+        - Number of commits at the beginning
+        - Number of commits added in the current job
+        - "svn-remote.svn.branches-maxRev"
+        - retries_attempted
+        - Commit date of the most recently converted revision
+        - Commit date of the SVN Last Changed Rev
 
 - Enhance error events with automatic error context capture and correlation IDs
     - Remote server response errors, ex. svn: E175012: Connection timed out
     - Decorators and context managers for logging context?
-
-- Log a repo status update table?
-    - Repo name
-        - URL
-        - Status (up to date / out of date)
-        - Last run's status (success / fail / timeout)
-        - Progress (% of commits)
-        - Commits converted
-        - Commits remaining
-        - Total commits
-        - Local commit
-        - Remote commit
-        - Size on disk
 
 - Amp's suggestion
     - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
@@ -48,38 +38,55 @@
 
 ### Stability
 
-- `svn log` commands
-    - Longest commands, which seem to be timing out and causing issues
-    - We may be able to make the conversion process much smoother if we can use fewer of these log commands
-    - What do we use them for? Why?
-        - Get first commit for a new repo
-        - Get last commit number for a batch range
-    - These commands may be duplicative?
-    - This command is executed 3 times per sync job, which one is taking so long?
+- Maybe we don't need to handle batch processing, just infinite retries?
+    - We still need rev numbers to show progress of conversion jobs
+    - It'd be much simpler if we could use the data already stored by `git svn fetch`, than have to query this data from the server
+    - These rev numbers are available:
+        - Done - Last Changed Rev from `svn info` output
+        - Done - Last converted rev from `git for-each-ref -limit=1` output, and / or the `.git/svn/something/origin/branch/.commit-map-repo-uuid` binary file
+            - Would the size of this file tell us how many commits have been converted
+        - Done - Count of commits from local git repo history
+        - Done - Last rev checked, from the `.git/svn/.metadata` file
+    - So we have all the data we need, what's stopping us from using it instead of `svn log` data?
+    - But wait... isn't the situation we started in?
+        - Jobs timed out, because they were trying to boil the ocean / convert the entire repo in one go
+        - This was a big problem, because the script only ran in series, so it'd hold up all the other repos
+        - The script now runs in parallel, so other job slots can continue processing
+    - Initial scan through repo rev index, at `--log-window-size n` number of revs per network request, can take a really long time
+        - Running the `svn log 1:HEAD --limit 1` command didn't take this long
 
-```log
-2025-07-01; 02:35:50.400278; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --revision 1:HEAD
-2025-07-01; 02:35:51.983007; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 1 --revision 1:HEAD
-2025-07-01; 02:35:52.695285; aa7797a; 0a93e01bc45b; run 1; DEBUG; subprocess_run() starting process: svn log --xml --with-no-revprops --non-interactive https://svn.apache.org/repos/asf/crunch/site --limit 2 --revision 1377700:HEAD
+- `git svn fetch --revision [BASE:HEAD] --log-window-size [100]`
+    - Does actually commit each individual revision as its converted
+        - This may not be visible, as the git.garbage_collection() and git.cleanup_branches_and_tags() functions have to run to make the branches visible (local)
+    - Absolutely intolerant of invalid revs in the `--revisions` range
+        - ex. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, and no changes
+    - BASE
+        - If any local commits, BASE is the most recent commit (local git HEAD)
+        - If no local commits, BASE defaults to 0, which is super inefficient, as it has to make (first_rev/log-window-size) requests to the SVN server, just to find the starting rev
+    - HEAD
+        - (remote)
+        - Matches "Last Changed Rev" from the `svn info` command output
+    - log-window-size
+        - For each HTTP request to the Subversion server, the number of revs to query for
 
-2025-07-01; 15:09:44.641140; 924a81c; 3fef96dbf2ce; run 576; DEBUG; pid 101567; still running; running for 3:07:58.451094; psutils_process_dict: {'args': '', 'cmdline': ['svn', 'log', '--xml', '--with-no-revprops', '--non-interactive', 'https://svn.apache.org/repos/asf/lucene', '--revision', '1059418:HEAD'], 'cpu_times': pcputimes(user=471.92, system=0.45, children_user=0.0, children_system=0.0, iowait=0.0), 'memory_info': pmem(rss=11436032, vms=22106112, shared=9076736, text=323584, lib=0, data=2150400, dirty=0), 'memory_percent': 0.13784979013949392, 'name': 'svn', 'net_connections_count': 1, 'net_connections': '13.90.137.153:443:CLOSE_WAIT', 'num_fds': 5, 'open_files': [], 'pid': 101567, 'ppid': 101556, 'status': 'running', 'threads': [pthread(id=101567, user_time=471.92, system_time=0.45)]};
-```
-
-- Keep the output revision numbers from `git svn log --xml` commands in a file on disk, then append to it when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
-    - Use an XML parsing library or regex matches to extract revision numbers, but store as JSON in the file
-- Compare svn log file against `git log` output, to ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
-- When to run the next svn log command? When the last commit ID number in the svn log file has been converted
-    - Can SVN repo history be changed? Would we need to re-run svn log periodically to update the local log file?
-
-- Implement more accurate conversion job success validation before updating git config with latest rev
-- Break down `clone_svn_repo()` into smaller, focused methods
-- Improve state management / switching for create / update / running
-- Add better error handling for subcommands with specific error types
-- Use GitPython more extensively?
+- `cat .git/svn/.metadata`
+    ```
+    ; This file is used internally by git-svn
+    ; You should not have to edit it
+    [svn-remote "svn"]
+            reposRoot = https://svn.apache.org/repos/asf
+            uuid = 13f79535-47bb-0310-9956-ffa450edef68
+            branches-maxRev = 1886214
+            tags-maxRev = 1886140
+    ```
+    - branches-maxRev
+    - tags-maxRev
+        - The last revs that git svn has checked for branches / tags
+        - Future iterations can start at this number, to prevent duplicate work, checking old revs
+        - If the user changes the branches in scope, this number must be reset
 
 ### Performance
 
-- Fix batch processing logic
 - SVN commands hanging
     - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
 
@@ -114,50 +121,27 @@
     - `git svn create-ignore`
     - `git svn show-ignore`
     - https://git-scm.com/docs/git-svn#Documentation/git-svn.txt-emcreate-ignoreem
+
 - Test layout tags and branches as lists / arrays
-- If list of repos is blank in repos-to-convert, try and parse the list from the server?
 
 ## Config
 
-- Move the config schema to a separate YAML file, bake it into the image, read it into Context on container startup, and provide for each field:
-    - Name
-    - Description
-    - Default values
-    - Valid data types
-    - Required? (ex. either repo-url or repo-parent-url)
-    - Valid parents (global / server / repo), so child keys can be validated that they're under a valid parent key
-    - Usage
-    - Examples
-
-- Make `repos_to_convert_fields` a part of Context, so the `sanitize_repos_to_convert` function can save it, to make it available to `check_required_fields`
+- Move the config schema to a separate YAML file
+    - Bake it into the image
+    - Read it into Context on container startup, so the `sanitize_repos_to_convert` function can update it, to make it available to `check_required_fields`
+    - Provide, for each field:
+        - Name
+        - Description
+        - Default values
+        - Valid data types
+        - Required? (ex. either repo-url or repo-parent-url)
+        - Valid parents (global / server / repo), so child keys can be validated that they're under a valid parent key
+        - Usage
+        - Examples
 
 - Implement proper type validation with clear error messages for config file inputs
 
 - Create server-specific concurrency semaphore from repos-to-convert value, if present
-
-- Add a fetch-interval-seconds config to repos-to-convert.yaml file
-    - Under global, server, or repo config
-    - For each repo in the repos_dict
-        - Add a "next sync time" field in the dict
-    - convert_svn_repos loop
-        - Try and read it
-                - next_fetch_time = repo_key.get(next-fetch-time, None)
-        - If it's defined and in the future, skip this run
-            - if next_fetch_time
-                - if next_fetch_time >= time.now()
-                    - Log.debug(repo_key next fetch time is: yyyy-mm-dd HH:MM:SS, skipping)
-                    - continue
-                - Else
-                    - Log.debug(repo_key next fetch time was: yyyy-mm-dd HH:MM:SS, fetching)
-        - Doing this before forking the process reduces zombies and debug process log noise for repos which are already up to date, and don’t get a ton of commits
-    - convert_svn_repo
-        - Set the next fetch time to None, so the forking loop doesn't fork again for this repo fetch interval
-            - repo_key[next-fetch-time] = None
-        - Check if this repo has a fetch interval defined
-            - fetch_interval_seconds = repo_key.get(fetch-interval-seconds, None)
-            - If yes, calculate and store the next fetch time
-            - If fetch_interval_seconds
-                - repo_key[next-fetch-time] = fetch_interval_seconds + time.now()
 
 - Env vars vs config file
     - Env vars
@@ -174,15 +158,41 @@
 
 ## Processes
 
+- How do I get more information about the child PID which was reaped in these lines, in `./src/utils/signal_handler.py`?
+
+    ```python
+    if os.WIFEXITED(status) and os.WEXITSTATUS(status) != 0:
+        # "message": "SIGCHLD handler reaped child PID 10747 with exit code 129",
+        log(ctx, f"SIGCHLD handler reaped child PID {pid} with exit code {os.WEXITSTATUS(status)}", "warning")
+    ```
+    - Maintain a list of processes, with their metadata, from when they're launched, and updated on an interval, then look up the PID's information in the signal handler from the list
+        - Track PIDs when launching: Store process metadata (command, start time, purpose) in a dict when creating child processes
+        - Cross-reference with active processes: Check if the PID exists in ctx.active_repo_conversion_processes
+    - Use process monitoring libraries?
+
+- Prevent stack traces during shutdown; from Amp:
+    - The SIGTERM signals are received across different cycles (11, 0, 1) because:
+        - Signal handler registers itself recursively: In signal_handler.py:19, the handler is registered as a lambda that calls itself
+        - Process group kill triggers more signals: When the handler calls os.killpg() at line 39, it sends SIGTERM to all processes in the group, including itself
+        - Multiple threads/processes receive signals: Each active process/thread receives its own SIGTERM and logs the "Received signal" message
+    - Stack Trace During Shutdown occur because:
+        - Signal handler called during JSON logging: The signal handler interrupts the logging process while it's serializing JSON data (line 51-52 in traceback)
+        - Recursive signal handling: The handler tries to log while already handling a signal, creating a nested call
+        - Multiprocessing cleanup fails: The FileNotFoundError at line 100 indicates the multiprocessing manager's socket connection was already closed when trying to access self.active_jobs[server_name]
+    - Root Causes
+        - Non-reentrant signal handling: The signal handler isn't designed to handle recursive calls safely
+        - Race condition: The multiprocessing manager shuts down before all processes finish cleanup
+        - Signal propagation: os.killpg() creates a cascade of signals across the process group
+    - The application does eventually shut down gracefully, but the multiple signal receptions and stack traces indicate the shutdown process could be more robust.
+
 - Multiprocessing / state / zombie cleanup
-    - Learn more about multiprocessing pools
     - Implement better multiprocessing status and state tracking
+        - Multiprocessing pools?
     - Integrate subprocess methods together
         - State tracking, in ctx.child_procs = {}
-        - Cleanup of zombie processes
+        - Cleanup of zombie processes, and richer process status updates, in cmd.status_update_and_cleanup_zombie_processes()?
+        - svn._check_if_conversion_is_already_running_in_another_process() vs concurrency_manager.acquire_job_slot()
         - Clean up of process state
-    - Improve zombie process detection and cleanup
-        - Library to cleanup zombie processes, or how does Amp suggest we manage zombies?
 
 - Add to the process status check and cleanup function to
     - Get the last lines of stdout from a running process,
@@ -195,7 +205,7 @@
 
 ## Builds
 
-- GitHub Action build tags
+- GitHub Actions build tags
     - Want
         - latest: Latest release tag
         - insiders: Latest of any build
@@ -215,16 +225,19 @@
             -
         - workflow_dispatch
             - gha-env-vars-workflow-dispatch.sh
+- GitHub Actions cleanup jobs
 - Wolfi Python base image for Docker / podman build
 - Container runAs user
-    - src serve-git and repo-converter both run as root, which is not ideal
-    - Need to create a new user on the host, add it to the host's sourcegraph group, get the UID, and configure the runAs user for the containers with this UID
+    - It seems like the only way this works for both Podman and Docker Compose, is to:
+        - Bake the image with a specific UID/GID,
+        - and change the app service user account's UID/GID on the host OS to match
+    - Changed the UID of the service account on the host to 10001, and GID to 10002
+    - I hope I'm wrong on this limitation, adding this to the TODO list to figure out later
 
 ## Dev
 
 - Add proper doc strings to all classes and methods
     - https://www.dataquest.io/blog/documenting-in-python-with-docstrings
-
 
 ## Expansion
 
@@ -234,24 +247,23 @@
     - Run it in MSP, to build up our Perforce test depots from public OSS repos
 
 - Git clone
-    - SSH clone
-        - Move git SSH clone from outside bash script into this script
-        - See if the GitPython module fetches the repo successfully, or has a way to clone multiple branches
-            - Fetch (just the default branch)
-            - Fetch all branches
-            - Clone all branches
-        - From the git remote --help
-            - Imitate git clone but track only selected branches
-            -     mkdir project.git
-            -     cd project.git
-            -     git init
-            -     git remote add -f -t master -m master origin git://example.com/git.git/
-            -     git merge origin
+    - Move Git SSH clone Bash script into this containers
+    - See if the GitPython module fetches the repo successfully, or has a way to clone multiple branches
+        - Fetch (just the default branch)
+        - Fetch all branches
+        - Clone all branches
+    - From the git remote --help
+        - Imitate git clone but track only selected branches
+            - mkdir project.git
+            - cd project.git
+            - git init
+            - git remote add -f -t master -m master origin git://example.com/git.git/
+            - git merge origin
 
 ## Notes
 
 - Authors file
-    - java -jar /sourcegraph/svn-migration-scripts.jar authors https://svn.apache.org/repos/asf/eagle > authors.txt
+    - java -jar /sg/svn-migration-scripts.jar authors https://svn.apache.org/repos/asf/eagle > authors.txt
     - Kinda useful, surprisingly fast
 
 - git list all config for a repo

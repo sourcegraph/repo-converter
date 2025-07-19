@@ -53,7 +53,7 @@ def load_from_file(ctx: Context) -> None:
 
     ctx.repos = repos
 
-    log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
+    # log(ctx, f"Parsed {len(ctx.repos)} repos from {repos_to_convert_file_path}", "info")
 
     repos_to_log = {"repos": ctx.repos}
     log(ctx, "Repos to convert", "debug", repos_to_log)
@@ -84,17 +84,8 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
     # The inputs that have specific type requirements
     # Dictionary of tuples, must have commas in the values set
 
-    # TODO: Move the config schema to a separate JSON file, and provide for each field:
-        # Name
-        # Description
-        # Valid parents (global / server / repo)
-        # Valid types
-        # Required? (ex. either repo-url or repo-parent-url)
-        # Usage
-        # Examples
-        # Default values
-
     repos_to_convert_fields = {}
+
 
     # TODO: Implement these
     repos_to_convert_fields[ "max-concurrent-conversions"    ] = (int,           )
@@ -115,6 +106,7 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
     repos_to_convert_fields[ "bare-clone"                    ] = (bool,          )
     repos_to_convert_fields[ "branches"                      ] = (str, list      )
     repos_to_convert_fields[ "git-ignore-file-path"          ] = (str,           )
+    repos_to_convert_fields[ "log-window-size"               ] = (int,           )
     repos_to_convert_fields[ "repo-url"                      ] = (str,           ) # Required: Either repo-parent-url or repo-url
     repos_to_convert_fields[ "source-repo-name"              ] = (str,           )
     repos_to_convert_fields[ "svn-layout"                    ] = (str, list      )
@@ -237,7 +229,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
     repos_to_convert_file_path = ctx.env_vars["REPOS_TO_CONVERT"]
 
     # TODO: Read dict from creds env var, and add to the repos_dict for all repos in the server they apply to
-    env_credentials = ctx.env_vars["CREDENTIALS"]
+    # env_credentials = ctx.env_vars["CREDENTIALS"]
 
     source_repo_types = (
         "git",

@@ -5,11 +5,21 @@
 # Do not import the logger module; it'd create a circular import
 
 # Import Python standard modules
+from collections import defaultdict
 from datetime import datetime
 import os
 import psutil
 import time
 
+class NestedDefaultDict(defaultdict):
+    """
+    Helper class to prevent KeyErrors on job dict
+    """
+    def __init__(self, *args, **kwargs):
+        super(NestedDefaultDict, self).__init__(NestedDefaultDict, *args, **kwargs)
+
+    def __repr__(self):
+        return repr(dict(self))
 
 class Context:
     """
@@ -61,7 +71,8 @@ class Context:
     repos = {}
 
     # Space to store structure log information for repo sync jobs
-    job = {}
+    # job = {}
+    job = NestedDefaultDict()
 
     # Set of secrets to redact in logs
     secrets = set()
@@ -156,6 +167,35 @@ class Context:
             if attribute not in psutil_attributes:
                 self.psutils_process_attributes_to_fetch.remove(attribute)
 
+
+    def reset_job(self):
+        """
+        Resets the job dict for each repo conversion job,
+        to prevent log events from including old data from other jobs
+        """
+
+        self.job = NestedDefaultDict()
+
+        # self.job = {
+        #     "job": {
+        #         "id": "",
+        #         "config": {
+        #             "repo_key": "",
+        #             "repo_type": "",
+        #             "server_name": ""
+        #         },
+        #         "result": {
+        #             "action": "",
+        #             "reason": "",
+        #             "success": "",
+        #             "run_time_seconds": "",
+        #         },
+        #         "stats": {
+        #             "local": {},
+        #             "remote": {}
+        #         }
+        #     }
+        # }
 
     def update_repos(self, repos_dict):
         """

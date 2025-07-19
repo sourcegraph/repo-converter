@@ -202,7 +202,7 @@ def log_process_status(
                 psutils_dict_input["net_connections"] = connections_list
 
     # Truncate long lists of open files, ex. git svn fetch processes
-    if "open_files" in psutils_dict_input.keys() and len(psutils_dict_input["open_files"]) > 0:
+    if psutils_dict_input.get("open_files", ""):
         psutils_dict_output["open_files"] = truncate_output(ctx, psutils_dict_input["open_files"])
 
     # Copy the remaining attributes to be logged, without overwriting any already copied over
@@ -311,16 +311,16 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
         except psutil.TimeoutExpired as exception:
 
             # Ignore logging main function processes which are still running
-            if "cmdline" in subprocess_psutils_dict.keys() and subprocess_psutils_dict["cmdline"] == ["/usr/bin/python3", "/sourcegraph/repo-converter/src/main.py"]:
+            if "cmdline" in subprocess_psutils_dict.keys() and subprocess_psutils_dict["cmdline"] == ["/usr/bin/python3", "/sg/repo-converter/src/main.py"]:
                 continue
 
             # TODO: This is the log event that we're really looking for,
             # for long-running processes
             # How do we enrich these events, with process metadata in JSON keys?
-            # repo
-            # command
-            # url
-            # process.id
+                # repo
+                # command
+                # url
+                # process.id
 
             subprocess_dict["status_message"] = "still running"
 
@@ -338,9 +338,9 @@ def run_subprocess(
         ctx: Context,
         args: Union[str, List[str]],
         password: Optional[str] = None,
-        echo_password: Optional[bool] = None,
         quiet: Optional[bool] = False,
-        name: Optional[str] = None
+        name: Optional[str] = None,
+        ignore_stderr: bool = False,
     ) -> Dict[str, Any]:
     """
     Middleware function to
@@ -369,7 +369,7 @@ def run_subprocess(
     # which isn't set in subprocess_psutils_dict
     subprocess_dict                         = {}
     subprocess_dict["name"]                 = name          # For command logging
-    subprocess_dict["output"]               = None          # For consumption by the calling function
+    subprocess_dict["output"]               = []            # For consumption by the calling function
     subprocess_dict["pid"]                  = None          # In case psutils doesn't get a pid in subprocess_psutils_dict
     subprocess_dict["return_code"]          = None          # Integer exit code
     subprocess_dict["status_message_reason"]= None          # Reason for process failure
@@ -384,8 +384,14 @@ def run_subprocess(
         subprocess_dict["args"] = args
 
     # Generate a correlation ID for this subprocess run
-    subprocess_id = str(uuid.uuid4())[:8]
-    subprocess_dict["id"] = subprocess_id
+    subprocess_span = str(uuid.uuid4())[:8]
+    subprocess_dict["span"] = subprocess_span
+
+    # Redirect stderr to stdout for simplicity
+    stderr = subprocess.STDOUT
+    # Unless we want to ignore it
+    if ignore_stderr:
+        stderr=subprocess.DEVNULL
 
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet
@@ -394,8 +400,8 @@ def run_subprocess(
 
     # Log a starting message
     subprocess_dict["start_time"] = datetime.now()
-    if not quiet:
-        log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+    # if not quiet:
+    #     log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
     # Try to run the subprocess, and catch subprocess exceptions
     try:
@@ -404,7 +410,7 @@ def run_subprocess(
         sub_process = psutil.Popen(
             args        = args,
             preexec_fn  = os.setsid, # Create new process group for better cleanup
-            stderr      = subprocess.STDOUT, # Redirect stderr to stdout for simplicity
+            stderr      = stderr,
             stdin       = subprocess.PIPE,
             stdout      = subprocess.PIPE,
             text        = True,
@@ -446,14 +452,11 @@ def run_subprocess(
         if not quiet:
             log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
-        # If echo_password is provided to this function,
+        # If password is provided to this function,
         # feed the password string into the subprocess' stdin pipe;
         # password could be an empty or arbitrary string as a workaround if a process needed it
         # communicate() also waits for the process to finish
-        if echo_password:
-            output = sub_process.communicate(password)
-        else:
-            output = sub_process.communicate()
+        output = sub_process.communicate(password)
 
         # Get the process' stdout and/or stderr
         # Have to do this inside the try / except block, in case the output isn't valid
@@ -505,7 +508,7 @@ def run_subprocess(
         if any([
             "git" in subprocess_dict["args"],
             "svn" in subprocess_dict["args"]
-        ]) and lockfiles.clear_lock_files(ctx, subprocess_psutils_dict):
+        ]) and lockfiles.clear_lock_files(ctx):
 
             # Change the log_level so the failed process doesn't log as an error
             subprocess_dict["log_level"] = "warning"
