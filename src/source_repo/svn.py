@@ -113,7 +113,7 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
         "code_host_name"           : repo_config.get("code-host-name",           None),
         "destination_git_repo_name": repo_config.get("destination-git-repo-name",None),
         # "fetch_batch_size"         : repo_config.get("fetch-batch-size",         100),
-        "fetch_job_timeout"        : repo_config.get("fetch-job-timeout",        600),
+        # "fetch_job_timeout"        : repo_config.get("fetch-job-timeout",        600),
         "git_default_branch"       : repo_config.get("git-default-branch",       "trunk"),
         "git_ignore_file_path"     : repo_config.get("git-ignore-file-path",     None),
         "git_org_name"             : repo_config.get("git-org-name",             None),
@@ -846,7 +846,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     max_retries                     = job_config.get("max_retries")
     repo_key                        = job_config.get("repo_key")
 
-    git_svn_fetch_output            = git_svn_fetch_result.get("output",[])
+    git_svn_fetch_output            = git_svn_fetch_result.pop("output",[])
     return_code                     = git_svn_fetch_result.get("return_code")
     retries_attempted               = git_svn_fetch_result.get("retries_attempted")
 
@@ -866,7 +866,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
         errors.append("Repo validity check _check_if_repo_exists_locally failed")
 
     ## Check for any errors in the command output
-    # TODO: Test the error message processing
+    # TODO: Fix the error message processing, probably a regex match issue
 
     # Shorten the number of lines in the git svn output,
     # by removing lines which we know are not errors / may be false positives
@@ -924,6 +924,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
             "Failed to strip path",
         ],
         "local system": [
+            "Too many open files",
             "No space left on device",
             "Path not found",
             "Repository is locked",
