@@ -109,8 +109,6 @@ def _custom_json_renderer(logger, method_name, event_dict):
     if "event" in event_dict:
         event_dict["message"] = event_dict.pop("event")
 
-    # TODO: Ensure the ctx.job dict is logged, if present
-
     # Sort top level keys,
     # Also sorts (almost) all subdicts alphabetically
     event_dict = sort_dict_by_key_order(event_dict, top_level_key_order)

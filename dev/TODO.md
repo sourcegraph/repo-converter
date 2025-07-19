@@ -1,55 +1,31 @@
 # TODO
 
-## Logging
+## Observability
 
-- Objective:
-    - Make the conversion process go faster, and more stable, in the customer's environment
-- How do we achieve this?
-    - Identify which commands are taking a long time, or failing, and why
-- Okay, how?
-    - Done
-        - Implement structured logging
-        - Update customer production
-        - Collect log events
-        - Query log events from JSON lines to CSV, using `dev/query_logs.py`
-        - Analyze log events to understand which commands are taking the longest (`svn log`, by a mile)
-    - In Progress
-        - Implement a better way to run the `svn log` command, to take less time
-    - To Do
-        - Analyze failure events:
-            - Which commands are failing most?
-            - Why?
-        - Implement OpenTelemetry
+- Implement OpenTelemetry
 
 - Find a tool to search / filter through logs
     - See Slack thread with Eng
     - Amped the `dev/query_logs.py` script in the meantime
 
 - Build up log event context, ex. canonical logs
-        - Store job metadata in a dict, key is pid?
+    - Store job metadata in a dict, key is pid?
     - And be able to retrieve this context in cmd.log_process_status()
         - What little data do we have from a child process reap event, which we can lookup in the dict?
         - grandparent pid?
 
-- Add more details to the "Concurrency status" messages, including:
-    - Batch size
-    - Number of commits already converted in the local git repo
-    - Commit date of the most recently converted revision
+- Add to the status monitor thread loop:
+    - Details of each running job
+        - Number of commits at the beginning
+        - Number of commits added in the current job
+        - "svn-remote.svn.branches-maxRev"
+        - retries_attempted
+        - Commit date of the most recently converted revision
+        - Commit date of the SVN Last Changed Rev
 
 - Enhance error events with automatic error context capture and correlation IDs
     - Remote server response errors, ex. svn: E175012: Connection timed out
     - Decorators and context managers for logging context?
-
-- Log a repo status event at the end of the svn.py module
-    - Remote
-        - SVN
-            - Revs remaining to convert, if LOG_REMAINING_REVS
-            - Total rev count, if LOG_REMAINING_REVS
-    - Local
-        - Git
-            - Difference between svn_info last changed date, and git last commit date
-    - Last run's status (success / fail)
-    - Progress (% of revs converted)
 
 - Amp's suggestion
     - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
@@ -61,18 +37,6 @@
 ## SVN
 
 ### Stability
-
-- TIL Apache is moving their svn repos to GitHub
-    - https://svn.apache.org/repos/asf/allura/STATUS
-        - Apache Allura source code is in a Git repository:
-        - https://git-wip-us.apache.org/repos/asf/allura
-
-
-- Add to the concurrency monitor:
-    - details for each running job
-        - Number of commits begin, added
-        - "svn-remote.svn.branches-maxRev"
-
 
 - Maybe we don't need to handle batch processing, just infinite retries?
     - We still need rev numbers to show progress of conversion jobs
@@ -91,87 +55,37 @@
     - Initial scan through repo rev index, at `--log-window-size n` number of revs per network request, can take a really long time
         - Running the `svn log 1:HEAD --limit 1` command didn't take this long
 
-
-TODO: run the svn commands, for each rev returned in the svn log command, to see:
-a) if they do actually change any files in the repo, and the git svn committing part is broken, or
-b) if they don't change any files in the repo, and it's subversion gaslighting us5
-svn log -v -c 1728081 $URL
-svn diff -c 1728081 $URL
-
-
-TODO: move env_vars["MAX_RETRIES"] to config file
-
-
 - `git svn fetch --revision [BASE:HEAD] --log-window-size [100]`
+    - Does actually commit each individual revision as its converted
+        - This may not be visible, as the git.garbage_collection() and git.cleanup_branches_and_tags() functions have to run to make the branches visible (local)
+    - Absolutely intolerant of invalid revs in the `--revisions` range
+        - ex. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, and no changes
     - BASE
         - If any local commits, BASE is the most recent commit (local git HEAD)
         - If no local commits, BASE defaults to 0, which is super inefficient, as it has to make (first_rev/log-window-size) requests to the SVN server, just to find the starting rev
     - HEAD
         - (remote)
         - Matches "Last Changed Rev" from the `svn info` command output
-
     - log-window-size
         - For each HTTP request to the Subversion server, the number of revs to query for
 
 - `cat .git/svn/.metadata`
-; This file is used internally by git-svn
-; You should not have to edit it
-[svn-remote "svn"]
-        reposRoot = https://svn.apache.org/repos/asf
-        uuid = 13f79535-47bb-0310-9956-ffa450edef68
-        branches-maxRev = 1886214
-        tags-maxRev = 1886140
-
+    ```
+    ; This file is used internally by git-svn
+    ; You should not have to edit it
+    [svn-remote "svn"]
+            reposRoot = https://svn.apache.org/repos/asf
+            uuid = 13f79535-47bb-0310-9956-ffa450edef68
+            branches-maxRev = 1886214
+            tags-maxRev = 1886140
+    ```
     - branches-maxRev
     - tags-maxRev
-        - the last revs that git svn has checked for branches / tags
-        - future iterations can start at this number, to prevent duplicate work, checking old revs
-        - if the user changes the branches in scope, this number must be reset
-        - TODO: Add these values to the get repo stats
-
-
-
-
-
-
-- `git svn fetch`
-    - Turns out, the `fetch` command is absolutely intolerant of invalid revs in the `--revisions` range, i.e. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, no changes
-    - Simplifying local repo state tracking for the purposes of fetch batch ranges, just using the SVN rev number from the latest git commit message
-
-
-
-
-- `svn log` commands
-    - Longest commands, which seem to be timing out and causing issues
-    - What do we use them for? Why?
-        - Limitations of `git svn fetch`:
-            - Does not have a --batch-size arg, but does have a --revisions (range) arg
-            - Does not commit synced changes to the local git repo until the job completes, so we have to run it in batches
-        - The big one: Count all revs remaining to convert, as a progress indicator - Disabled this by default
-        - The small one: Get first and last rev numbers to start and end this batch - Seems to be necessary, but combined into one, and limited to batch size
-        - The smallest one: Log recent commits, to visually verify a successful fetch - Disabled by default
-    - We may be able to make the conversion process much smoother if we can use fewer of these log commands
-        - Keep the output revision numbers from `git svn log --xml` commands in a file on disk
-        - Append to this file when there are new revisions, so getting counts of revisions in each repo is slow once, fast many times
-        - Use an XML parsing library or regex matches to extract revision numbers, but store as JSON in the file
-    - The problem with the `git svn` CLI, is that failures still exit 0, so we have to bubble wrap around it
-
-    - Compare svn log file against `git log` output, to ensure that each of the SVN revision numbers is found in the git log, and raise an error if any are missing or out of order
-
-    - When to run the next svn log command?
-        - When the last commit ID number in the svn log file has been converted
-    - Can SVN repo history be changed?
-        - Would we need to re-run svn log periodically to update the local log file?
-
-- Implement more accurate conversion job success validation before updating git config with latest rev
-- Add better error handling for subcommands with specific error types
-- Use git.get_config(), git.set_config(), and GitPython more extensively?
+        - The last revs that git svn has checked for branches / tags
+        - Future iterations can start at this number, to prevent duplicate work, checking old revs
+        - If the user changes the branches in scope, this number must be reset
 
 ### Performance
-
-- Dynamically reduce batch size on timeouts
-    - If timeout error, retry with half the batch size
-    - If the batch size succeeded, persist the batch size for the one repo, with a comment as to why the change was made
 
 - SVN commands hanging
     - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
@@ -207,50 +121,27 @@ TODO: move env_vars["MAX_RETRIES"] to config file
     - `git svn create-ignore`
     - `git svn show-ignore`
     - https://git-scm.com/docs/git-svn#Documentation/git-svn.txt-emcreate-ignoreem
+
 - Test layout tags and branches as lists / arrays
-- If list of repos is blank in repos-to-convert, try and parse the list from the server?
 
 ## Config
 
-- Move the config schema to a separate YAML file, bake it into the image, read it into Context on container startup, and provide for each field:
-    - Name
-    - Description
-    - Default values
-    - Valid data types
-    - Required? (ex. either repo-url or repo-parent-url)
-    - Valid parents (global / server / repo), so child keys can be validated that they're under a valid parent key
-    - Usage
-    - Examples
-
-- Make `repos_to_convert_fields` a part of Context, so the `sanitize_repos_to_convert` function can save it, to make it available to `check_required_fields`
+- Move the config schema to a separate YAML file
+    - Bake it into the image
+    - Read it into Context on container startup, so the `sanitize_repos_to_convert` function can update it, to make it available to `check_required_fields`
+    - Provide, for each field:
+        - Name
+        - Description
+        - Default values
+        - Valid data types
+        - Required? (ex. either repo-url or repo-parent-url)
+        - Valid parents (global / server / repo), so child keys can be validated that they're under a valid parent key
+        - Usage
+        - Examples
 
 - Implement proper type validation with clear error messages for config file inputs
 
 - Create server-specific concurrency semaphore from repos-to-convert value, if present
-
-- Add a fetch-interval-seconds config to repos-to-convert.yaml file
-    - Under global, server, or repo config
-    - For each repo in the repos_dict
-        - Add a "next sync time" field in the dict
-    - convert_svn_repos loop
-        - Try and read it
-                - next_fetch_time = repo_key.get(next-fetch-time, None)
-        - If it's defined and in the future, skip this run
-            - if next_fetch_time
-                - if next_fetch_time >= time.now()
-                    - Log.debug(repo_key next fetch time is: yyyy-mm-dd HH:MM:SS, skipping)
-                    - continue
-                - Else
-                    - Log.debug(repo_key next fetch time was: yyyy-mm-dd HH:MM:SS, fetching)
-        - Doing this before forking the process reduces zombies and debug process log noise for repos which are already up to date, and don’t get a ton of commits
-    - convert_svn_repo
-        - Set the next fetch time to None, so the forking loop doesn't fork again for this repo fetch interval
-            - repo_key[next-fetch-time] = None
-        - Check if this repo has a fetch interval defined
-            - fetch_interval_seconds = repo_key.get(fetch-interval-seconds, None)
-            - If yes, calculate and store the next fetch time
-            - If fetch_interval_seconds
-                - repo_key[next-fetch-time] = fetch_interval_seconds + time.now()
 
 - Env vars vs config file
     - Env vars
@@ -274,10 +165,10 @@ TODO: move env_vars["MAX_RETRIES"] to config file
         # "message": "SIGCHLD handler reaped child PID 10747 with exit code 129",
         log(ctx, f"SIGCHLD handler reaped child PID {pid} with exit code {os.WEXITSTATUS(status)}", "warning")
     ```
-    - Maintain a list of processes, with their metadata, from when they're launched, and updated on an interval, then look up that information in the signal handler
+    - Maintain a list of processes, with their metadata, from when they're launched, and updated on an interval, then look up the PID's information in the signal handler from the list
         - Track PIDs when launching: Store process metadata (command, start time, purpose) in a dict when creating child processes
         - Cross-reference with active processes: Check if the PID exists in ctx.active_repo_conversion_processes
-    - Use process monitoring libraries
+    - Use process monitoring libraries?
 
 - Prevent stack traces during shutdown; from Amp:
     - The SIGTERM signals are received across different cycles (11, 0, 1) because:
@@ -295,14 +186,13 @@ TODO: move env_vars["MAX_RETRIES"] to config file
     - The application does eventually shut down gracefully, but the multiple signal receptions and stack traces indicate the shutdown process could be more robust.
 
 - Multiprocessing / state / zombie cleanup
-    - Learn more about multiprocessing pools
     - Implement better multiprocessing status and state tracking
+        - Multiprocessing pools?
     - Integrate subprocess methods together
         - State tracking, in ctx.child_procs = {}
-        - Cleanup of zombie processes
+        - Cleanup of zombie processes, and richer process status updates, in cmd.status_update_and_cleanup_zombie_processes()?
+        - svn._check_if_conversion_is_already_running_in_another_process() vs concurrency_manager.acquire_job_slot()
         - Clean up of process state
-    - Improve zombie process detection and cleanup
-        - Library to cleanup zombie processes, or how does Amp suggest we manage zombies?
 
 - Add to the process status check and cleanup function to
     - Get the last lines of stdout from a running process,
@@ -315,7 +205,7 @@ TODO: move env_vars["MAX_RETRIES"] to config file
 
 ## Builds
 
-- GitHub Action build tags
+- GitHub Actions build tags
     - Want
         - latest: Latest release tag
         - insiders: Latest of any build
@@ -335,6 +225,7 @@ TODO: move env_vars["MAX_RETRIES"] to config file
             -
         - workflow_dispatch
             - gha-env-vars-workflow-dispatch.sh
+- GitHub Actions cleanup jobs
 - Wolfi Python base image for Docker / podman build
 - Container runAs user
     - It seems like the only way this works for both Podman and Docker Compose, is to:
@@ -347,7 +238,6 @@ TODO: move env_vars["MAX_RETRIES"] to config file
 
 - Add proper doc strings to all classes and methods
     - https://www.dataquest.io/blog/documenting-in-python-with-docstrings
-
 
 ## Expansion
 

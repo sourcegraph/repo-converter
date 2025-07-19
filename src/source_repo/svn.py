@@ -466,7 +466,7 @@ def _check_if_repo_exists_locally(ctx: Context, event: str = "") -> bool:
     # log(ctx, f"{repo_key}; urls_match: {urls_match}; local_config_url: {local_config_url}; remote_url: {remote_url}", "debug")
 
     # If there are 0 commits in repo history, then recreate the repo
-    # TODO: For conversion jobs where the svn repo subdir only has commits near the end of a long repo history,
+    # For conversion jobs where the svn repo subdir only has commits near the end of a long repo history,
     # deleting the repo for not having any commits does unblock the repo from past issues,
     # but also causes this job to start from rev 1 again, which can take a long time
     has_commits = False
@@ -555,7 +555,7 @@ def _configure_git_repo(ctx: Context, commands: dict) -> None:
     repo_key                = job_config.get("repo_key")
 
     # Set the default branch local to this repo, after init
-    # TODO: Move this to git module
+    # TODO: Move to git module
     cmd.run_subprocess(ctx, commands["cmd_git_default_branch"], quiet=True, name="cmd_git_default_branch")
 
     # Set repo configs, as a list of tuples [(git config key, git config value),]
@@ -866,7 +866,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
         errors.append("Repo validity check _check_if_repo_exists_locally failed")
 
     ## Check for any errors in the command output
-    # TODO: Fix the error message processing, probably a regex match issue
+    # TODO: Fix error message processing, probably a regex match issue
 
     # Shorten the number of lines in the git svn output,
     # by removing lines which we know are not errors / may be false positives

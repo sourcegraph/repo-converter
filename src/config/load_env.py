@@ -37,11 +37,9 @@ def load_env_vars() -> dict:
     env_vars["BUILD_DATE"]                              = str(environ.get("BUILD_DATE"                              , "" ))
     env_vars["BUILD_DIRTY"]                             = str(environ.get("BUILD_DIRTY"                             , "" ))
     env_vars["BUILD_TAG"]                               = str(environ.get("BUILD_TAG"                               , "" ))
-    env_vars["CREDENTIALS"]                             = str(environ.get("CREDENTIALS"                             , "" ))
+    # env_vars["CREDENTIALS"]                             = str(environ.get("CREDENTIALS"                             , "" ))
     # DEBUG INFO WARNING ERROR CRITICAL
     env_vars["LOG_LEVEL"]                               = str(environ.get("LOG_LEVEL"                               , "INFO" ))
-    env_vars["LOG_RECENT_COMMITS"]                      = int(environ.get("LOG_RECENT_COMMITS"                      , 0  ))
-    env_vars["LOG_REMAINING_REVS"]                      = str(environ.get("LOG_REMAINING_REVS"                      , "" ))
     env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"]   = int(environ.get("MAX_CONCURRENT_CONVERSIONS_PER_SERVER"   , 10 ))
     env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]       = int(environ.get("MAX_CONCURRENT_CONVERSIONS_GLOBAL"       , 10 ))
     # Max cycles of the main loop, then the container exits
@@ -64,11 +62,5 @@ def load_env_vars() -> dict:
     elif env_vars["BUILD_COMMIT"]:
         build_tag_or_commit_for_logs = env_vars["BUILD_COMMIT"]
     env_vars["BUILD_TAG_OR_COMMIT_FOR_LOGS"] = build_tag_or_commit_for_logs
-
-
-    # TODO: Try to load the environment variables from the REPOS_TO_CONVERT file
-    # Check if the default config file exists
-    # If yes, read configs from it
-    # If no, use the environment variables
 
     return env_vars

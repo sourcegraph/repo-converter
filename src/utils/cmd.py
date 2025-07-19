@@ -317,10 +317,10 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             # TODO: This is the log event that we're really looking for,
             # for long-running processes
             # How do we enrich these events, with process metadata in JSON keys?
-            # repo
-            # command
-            # url
-            # process.id
+                # repo
+                # command
+                # url
+                # process.id
 
             subprocess_dict["status_message"] = "still running"
 
