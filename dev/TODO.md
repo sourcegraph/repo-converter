@@ -62,12 +62,13 @@
 
 ### Stability
 
-- Add a bool arg to the get_repo_stats function
-    - If true (default), persist stats to ctx.job dict
-    - If false, just return stats dict to caller
+- TIL Apache is moving their svn repos to GitHub
+    - https://svn.apache.org/repos/asf/allura/STATUS
+        - Apache Allura source code is in a Git repository:
+        - https://git-wip-us.apache.org/repos/asf/allura
+
 
 - Add to the concurrency monitor:
-    - cmd.status_update_and_cleanup_zombie_processes(ctx)
     - details for each running job
         - Number of commits begin, added
         - "svn-remote.svn.branches-maxRev"

@@ -19,7 +19,7 @@ def log(
         message: str,
         level_name: str = "DEBUG",
         structured_data: dict = None,
-        correlation_id: str = None,
+        correlation_id: str = "",
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
         ) -> None:
@@ -61,7 +61,7 @@ def log(
 def _build_structured_payload(
         ctx: Context,
         structured_data: dict = {},
-        correlation_id: str = None,
+        correlation_id: str = "",
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
         ) -> dict:
@@ -235,7 +235,7 @@ def _remove_null_values(payload: dict) -> dict:
         return payload
 
 
-def set_job_result(ctx: Context, action: str = None, reason: str = None, success: bool = None) -> None:
+def set_job_result(ctx: Context, action: str = "", reason: str = "", success: bool = None) -> None:
     """
     Set the result subdict for job logs
     """

@@ -339,7 +339,8 @@ def run_subprocess(
         args: Union[str, List[str]],
         password: Optional[str] = None,
         quiet: Optional[bool] = False,
-        name: Optional[str] = None
+        name: Optional[str] = None,
+        ignore_stderr: bool = False,
     ) -> Dict[str, Any]:
     """
     Middleware function to
@@ -386,6 +387,12 @@ def run_subprocess(
     subprocess_span = str(uuid.uuid4())[:8]
     subprocess_dict["span"] = subprocess_span
 
+    # Redirect stderr to stdout for simplicity
+    stderr = subprocess.STDOUT
+    # Unless we want to ignore it
+    if ignore_stderr:
+        stderr=subprocess.DEVNULL
+
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet
     # so events are only logged if this level his higher than the LOG_LEVEL the container is running at
@@ -403,7 +410,7 @@ def run_subprocess(
         sub_process = psutil.Popen(
             args        = args,
             preexec_fn  = os.setsid, # Create new process group for better cleanup
-            stderr      = subprocess.STDOUT, # Redirect stderr to stdout for simplicity
+            stderr      = stderr,
             stdin       = subprocess.PIPE,
             stdout      = subprocess.PIPE,
             text        = True,

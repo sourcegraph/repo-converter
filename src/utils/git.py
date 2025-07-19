@@ -12,7 +12,7 @@ import os
 
 def _get_and_validate_local_repo_path(
         ctx: Context,
-        sub_dir: str = None,
+        sub_dir: str = "",
         quiet: bool = False
     ) -> str:
 
@@ -76,6 +76,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     local_repo_path = _get_and_validate_local_repo_path(ctx)
     packed_refs_file_path = _get_and_validate_local_repo_path(ctx, ".git/packed-refs")
     if not packed_refs_file_path:
+        log(ctx, "Repo missing .git/packed-refs", "error")
         return
 
     # Get the local repo path
@@ -191,7 +192,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     # Reset the default branch
     cmd.run_subprocess(ctx, cmd_git_repo_set_default_branch, quiet=True, name="cmd_git_repo_set_default_branch")
 
-def count_commits_in_repo(ctx: Context) -> int:
+def get_count_of_commits_in_repo(ctx: Context) -> int:
     """
     Count and return the total number of commits in the git repo, across all branches
     """
@@ -201,7 +202,7 @@ def count_commits_in_repo(ctx: Context) -> int:
         return
 
     cmd_git_count_commits = ["git", "-C", local_repo_path, "rev-list", "--all", "--count"]
-    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits")
+    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits", ignore_stderr=True)
 
     if cmd_git_count_commits_result["return_code"] == 0:
 
@@ -275,7 +276,7 @@ def garbage_collection(ctx: Context) -> None:
     cmd.run_subprocess(ctx, cmd_git_garbage_collection, quiet=True, name="cmd_git_garbage_collection")
 
 
-def get_config(ctx: Context, key: str, config_file_path: str = None, quiet: bool=False) -> list[str]:
+def get_config(ctx: Context, key: str, config_file_path: str = "", quiet: bool=False) -> list:
     """
     A more generic method to get a config value from a repo's config file
     """
@@ -311,9 +312,12 @@ def get_config(ctx: Context, key: str, config_file_path: str = None, quiet: bool
     return value
 
 
-def get_latest_commit_metadata(ctx: Context, commit_metadata_list: list[str] = None) -> dict:
+def get_latest_commit_metadata(ctx: Context, commit_metadata_field_list: list[str] = None) -> list:
     """
     Get metadata from the most recent commit from the local git repo
+    Args:
+        commit_metadata_field_list
+        See https://git-scm.com/docs/git-for-each-ref#_field_names
     """
 
     local_repo_path = _get_and_validate_local_repo_path(ctx, quiet=True)
@@ -321,25 +325,50 @@ def get_latest_commit_metadata(ctx: Context, commit_metadata_list: list[str] = N
         return
 
     # Set a default value if none is provided
-    if not commit_metadata_list:
-        commit_metadata_list = [
+    if not commit_metadata_field_list:
+        commit_metadata_field_list = [
             "committerdate:short",
             "objectname:short",
             "contents:subject",
             "contents:body"
         ]
 
-    commit_metadata_string = ")%0a%(".join(commit_metadata_list)
+    # Approach 1:
+        # Run this command once, with all the metadata fields in one list
+        # All of the metadata would come from the same commit,
+        # but no assurance that the field has a value,
+        # therefore no assurance that the return list matches the input list
 
+    # Approach 2:
+        # Run this command in a loop, for each field in the input field list
+        # Some assurance that the return list should match the input list
+        # But different fields may come back from different commits,
+        # if a new commit is committed between executions
+
+    # Approach 3:
+        # Switch to GitPython
+
+    # Approach 1:
+    commit_metadata_string = ")%0a%(".join(commit_metadata_field_list)
     cmd_git_get_latest_ref = [
         "git", "-C", local_repo_path,
         "for-each-ref", "--count=1", "--sort=-committerdate", f"--format=%({commit_metadata_string})"
     ]
 
+    commit_metadata_return_list = []
     result = cmd.run_subprocess(ctx, cmd_git_get_latest_ref, name="cmd_git_get_latest_ref")
 
-    return result
+    if result["return_code"] == 0:
 
+        commit_metadata_return_list = list(result.get("output",""))
+        # log(ctx, f"git.get_latest_commit_metadata succeeded; result: {commit_metadata_return_list}", "info")
+
+    else:
+
+        # log(ctx, f"git.get_latest_commit_metadata failed; result: {commit_metadata_return_list}", "error")
+        pass
+
+    return commit_metadata_return_list
 
 def git_global_config(ctx: Context) -> None:
     """
@@ -355,7 +384,7 @@ def git_global_config(ctx: Context) -> None:
     cmd.run_subprocess(ctx, cmd_git_default_branch, quiet=True, name="cmd_git_default_branch")
 
 
-def set_config(ctx: Context, key: str, value: str, config_file_path: str = None) -> bool:
+def set_config(ctx: Context, key: str, value: str, config_file_path: str = "") -> bool:
     """
     A more generic method to set a config value in a repo's config file
 
@@ -391,7 +420,7 @@ def set_config(ctx: Context, key: str, value: str, config_file_path: str = None)
         return False
 
 
-def unset_config(ctx: Context, key: str, config_file_path: str = None) -> bool:
+def unset_config(ctx: Context, key: str, config_file_path: str = "") -> bool:
     """
     A more generic method to unset a config value from a repo's config file
 

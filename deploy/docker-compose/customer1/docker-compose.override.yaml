@@ -19,7 +19,7 @@ services:
     volumes:
       - ../../../src-serve-root/:/sg/src-serve-root
       - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
-      - ../../dev/toprc:/root/.config/procps/toprc
+      - ../../dev/toprc:/home/sourcegraph/.config/procps/toprc
 
   src-serve-git:
     container_name: src-serve-git-ubuntu.local

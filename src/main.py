@@ -3,7 +3,7 @@
 
 # Import repo-converter modules
 from config import load_env, load_repos, validate_env
-from utils import cmd, concurrency_manager, concurrency_monitor, convert_repos, git, logger, signal_handler
+from utils import cmd, concurrency_manager, convert_repos, git, logger, signal_handler, status_monitor
 from utils.context import Context
 from utils.log import log
 
@@ -39,12 +39,8 @@ def main():
     # Store them back in the context object
     ctx.concurrency_manager = concurrency_manager.ConcurrencyManager(ctx)
 
-    # Start concurrency_monitor
-    # TODO: Sort out if this is needed / duplicative,
-    # and if needed, does it need to be in a separate thread?
-    # And if it needs to be in a separate thread, how to kill it when the main thread dies
-    # So that the container can die and get restarted
-    concurrency_monitor.start_concurrency_monitor(ctx)
+    # Start status monitor
+    status_monitor.start(ctx)
 
     # Extract the env vars used repeatedly, to keep this DRY
     # These values are only used in the main function
@@ -63,19 +59,11 @@ def main():
         # Load the repos to convert from file, in case the file has been changed while the container is running
         load_repos.load_from_file(ctx)
 
-        # Tidy up zombie processes from the previous run through this loop
-        cmd.status_update_and_cleanup_zombie_processes(ctx)
-        # This may be the right time to check which repos are still in progress, given running PIDs, still running from the previous run through this loop
-
         # Disable git safe directory, to work around "dubious ownership" errors
         git.git_global_config(ctx)
 
         # Run the main application logic
         convert_repos.start(ctx)
-
-        # Tidy up zombie processes which have already completed during this run through this loop
-        cmd.status_update_and_cleanup_zombie_processes(ctx)
-        # Run the same code again, to update the list of running repo conversion jobs in the context dict
 
         # # Log the end of the run
         # log(ctx, "Finishing main loop run", "debug")

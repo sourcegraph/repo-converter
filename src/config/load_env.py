@@ -37,7 +37,6 @@ def load_env_vars() -> dict:
     env_vars["BUILD_DATE"]                              = str(environ.get("BUILD_DATE"                              , "" ))
     env_vars["BUILD_DIRTY"]                             = str(environ.get("BUILD_DIRTY"                             , "" ))
     env_vars["BUILD_TAG"]                               = str(environ.get("BUILD_TAG"                               , "" ))
-    env_vars["CONCURRENCY_MONITOR_INTERVAL"]            = int(environ.get("CONCURRENCY_MONITOR_INTERVAL"            , 60 ))
     env_vars["CREDENTIALS"]                             = str(environ.get("CREDENTIALS"                             , "" ))
     # DEBUG INFO WARNING ERROR CRITICAL
     env_vars["LOG_LEVEL"]                               = str(environ.get("LOG_LEVEL"                               , "INFO" ))
@@ -52,6 +51,7 @@ def load_env_vars() -> dict:
     # Paths inside the container, don't change unless also changing in compose file volume mapping
     env_vars["REPOS_TO_CONVERT"]                        = str(environ.get("REPOS_TO_CONVERT"                        , "/sg/repos-to-convert.yaml" ))
     env_vars["SRC_SERVE_ROOT"]                          = str(environ.get("SRC_SERVE_ROOT"                          , "/sg/src-serve-root" ))
+    env_vars["STATUS_MONITOR_INTERVAL"]                 = int(environ.get("STATUS_MONITOR_INTERVAL"                 , 60 ))
     env_vars["TRUNCATED_OUTPUT_MAX_LINE_LENGTH"]        = int(environ.get("TRUNCATED_OUTPUT_MAX_LINE_LENGTH"        , 200 ))
     env_vars["TRUNCATED_OUTPUT_MAX_LINES"]              = int(environ.get("TRUNCATED_OUTPUT_MAX_LINES"              , 11 ))
 
