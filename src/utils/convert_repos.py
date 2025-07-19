@@ -85,7 +85,7 @@ def start(ctx: Context) -> None:
                 ctx.concurrency_manager.release_job_slot(ctx)
 
                 # log_concurrency_status=True causes an error inside this wrapper function
-                # log(ctx, f"{repo_key}; Finishing repo conversion job in pid={os.getpid()}", "info")
+                log(ctx, f"{repo_key}; Finishing repo conversion job in pid={os.getpid()}", "info")
 
         # Start the process
         # Do not store any reference to the process, otherwise it may cling on as a zombie,

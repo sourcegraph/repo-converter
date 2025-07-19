@@ -52,7 +52,7 @@ def clear_lock_files(ctx: Context) -> bool:
                 log(ctx, f"{repo_key}; Process failed to start due to a lock file in the repo at {lock_file_path}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
                 cmd_rm_lock_file = ["rm", "-f", lock_file_path]
-                cmd.run_subprocess(ctx, cmd_rm_lock_file, name="cmd_rm_lock_file")
+                cmd.run_subprocess(ctx, cmd_rm_lock_file, quiet=True, name="cmd_rm_lock_file")
 
                 return_value = True
 

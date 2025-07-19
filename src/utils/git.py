@@ -18,17 +18,18 @@ def _get_and_validate_local_repo_path(
 
     # Get the local repo path
     job_config      = ctx.job.get("config",{})
-    local_repo_path = job_config.get("local_repo_path","")
+    local_repo_path = job_config.get("local_repo_path")
+    repo_key        = job_config.get("repo_key")
 
     if not local_repo_path:
         if not quiet:
-            log(ctx, f"No local repo path provided to function", "warning")
+            log(ctx, f"{repo_key}; No local repo path provided to function", "error")
         return None
 
     # Validate the repo path exists
     if not os.path.exists(local_repo_path):
         if not quiet:
-            log(ctx, f"Path {local_repo_path} provided to function doesn't exist", "warning")
+            log(ctx, f"{repo_key}; Path {local_repo_path} provided to function doesn't exist", "warning")
         return None
 
     # Validate the repo path is a valid git repo
@@ -41,10 +42,10 @@ def _get_and_validate_local_repo_path(
         # "--is-inside-git-dir",
     ]
 
-    valid_repo_path = cmd.run_subprocess(ctx, cmd_git_validate_repo_path, quiet=True, name="cmd_git_validate_repo_path").get("output","")
+    valid_repo_path = cmd.run_subprocess(ctx, cmd_git_validate_repo_path, quiet=True, name="cmd_git_validate_repo_path").get("output")
     if not valid_repo_path:
         if not quiet:
-            log(ctx, f"Not a valid repo path: {local_repo_path}", "debug")
+            log(ctx, f"{repo_key}; Not a valid repo path: {local_repo_path}", "debug")
         return None
     else:
         # log(ctx, f"Valid repo path: {local_repo_path}", "debug")
@@ -57,7 +58,7 @@ def _get_and_validate_local_repo_path(
         # Validate the repo path + sub_dir exists
         if not os.path.exists(local_repo_path):
             if not quiet:
-                log(ctx, f"Path {local_repo_path} needed for function doesn't exist", "warning")
+                log(ctx, f"{repo_key}; Path {local_repo_path} needed for function doesn't exist", "warning")
             return None
 
     return local_repo_path
@@ -73,15 +74,21 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     so if the git config file doesn't exist at this point, big problem
     """
 
+    job_config  = ctx.job.get("config",{})
+    repo_key    = job_config.get("repo_key")
+
     local_repo_path = _get_and_validate_local_repo_path(ctx)
+    if not local_repo_path:
+        log(ctx, f"{repo_key}; Repo missing local_repo_path", "error")
+        return
+
     packed_refs_file_path = _get_and_validate_local_repo_path(ctx, ".git/packed-refs")
     if not packed_refs_file_path:
-        log(ctx, "Repo missing .git/packed-refs", "error")
+        log(ctx, f"{repo_key}; Repo missing .git/packed-refs", "error")
         return
 
     # Get the local repo path
-    job_config                      = ctx.job.get("config",{})
-    git_default_branch              = job_config.get("git_default_branch","")
+    git_default_branch              = job_config.get("git_default_branch")
     cmd_git_repo_set_default_branch = ["git", "-C", local_repo_path, "symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
 
     local_branch_prefix         = "refs/heads/"
@@ -117,7 +124,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
 
         except Exception as exception:
 
-            log(ctx, f"Exception while cleaning branches and tags: {exception}", "error")
+            log(ctx, f"{repo_key}; Exception while cleaning branches and tags: {exception}", "error")
             continue
 
         # If the path is a local tag, then delete it
@@ -170,7 +177,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
 
         else:
 
-            log(ctx, f"Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
+            log(ctx, f"{repo_key}; Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
             output_list_of_strings_and_line_number_tuples.append([str(input_lines[i]), i])
 
     # Sort by the path in the tuple
@@ -240,7 +247,7 @@ def deduplicate_git_config_file(ctx: Context) -> None:
         # Read the whole file's contents into memory
         config_file_data = config_file.readlines()
 
-        log(ctx, f"git_config_file lines before: {len(config_file_data)}", "debug")
+        # log(ctx, f"git_config_file lines before: {len(config_file_data)}", "debug")
 
         # Move the file pointer back to the beginning of the file to start overwriting from there
         config_file.seek(0)
@@ -260,7 +267,7 @@ def deduplicate_git_config_file(ctx: Context) -> None:
         # Delete the rest of the file's contents
         config_file.truncate()
 
-        log(ctx, f"git_config_file lines after: {len(lines_seen)}", "debug")
+        # log(ctx, f"git_config_file lines after: {len(lines_seen)}", "debug")
 
 
 def garbage_collection(ctx: Context) -> None:
@@ -356,7 +363,7 @@ def get_latest_commit_metadata(ctx: Context, commit_metadata_field_list: list[st
     ]
 
     commit_metadata_return_list = []
-    result = cmd.run_subprocess(ctx, cmd_git_get_latest_ref, name="cmd_git_get_latest_ref")
+    result = cmd.run_subprocess(ctx, cmd_git_get_latest_ref, quiet=True, name="cmd_git_get_latest_ref")
 
     if result["return_code"] == 0:
 
@@ -411,12 +418,12 @@ def set_config(ctx: Context, key: str, value: str, config_file_path: str = "") -
         "empty_dict": "true"
     }
 
-    try:
-        result = cmd.run_subprocess(ctx, cmd_git_set_config, quiet=False, name="cmd_git_set_config")
-        log(ctx, f"git.set_config succeeded; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "info", result)
+    result = cmd.run_subprocess(ctx, cmd_git_set_config, quiet=True, name="cmd_git_set_config")
+    if result.get("return_code") == 0:
+        # log(ctx, f"git.set_config succeeded; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "info", result)
         return True
-    except:
-        log(ctx, f"git.set_config failed; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "error", result)
+    else:
+        # log(ctx, f"git.set_config failed; key: {key}; value: {value}; cmd_git_set_config: {cmd_git_set_config}; result: {result}", "error", result)
         return False
 
 
@@ -443,13 +450,13 @@ def unset_config(ctx: Context, key: str, config_file_path: str = "") -> bool:
 
     cmd_git_unset_config += ["--unset", key]
 
-    before = get_config(ctx, key, config_file_path)
-    log(ctx, f"git.unset_config before: {before}")
+    # before = get_config(ctx, key, config_file_path)
+    # log(ctx, f"git.unset_config before: {before}")
 
     result = cmd.run_subprocess(ctx, cmd_git_unset_config, quiet=True, name="cmd_git_unset_config")
 
-    after = get_config(ctx, key, config_file_path)
-    log(ctx, f"git.unset_config after: {after}")
+    # after = get_config(ctx, key, config_file_path)
+    # log(ctx, f"git.unset_config after: {after}")
 
     if result["return_code"] == 0:
         return True
