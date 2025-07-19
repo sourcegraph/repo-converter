@@ -339,6 +339,7 @@ def get_latest_commit_metadata(ctx: Context, commit_metadata_field_list: list[st
             "contents:subject",
             "contents:body"
         ]
+    # git for-each-ref --count 1 --sort -committerdate --format '%(committerdate:short) %(objectname:short) %(contents:subject) $(contents:body)'
 
     # Approach 1:
         # Run this command once, with all the metadata fields in one list

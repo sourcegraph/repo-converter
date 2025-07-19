@@ -779,6 +779,10 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         result = cmd.run_subprocess(ctx, cmd_git_svn_fetch_with_window, password, name=f"cmd_git_svn_fetch_{retries_attempted}")
         result.update({"retries_attempted": retries_attempted})
 
+        # Run gc + fix branches, after each try, to make commits / branches visible (local)
+        git.garbage_collection(ctx)
+        git.cleanup_branches_and_tags(ctx)
+
         # If successful, break the while true loop here
         if _check_git_svn_fetch_success(ctx, result):
             return True
