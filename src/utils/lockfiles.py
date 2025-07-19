@@ -17,9 +17,10 @@ def clear_lock_files(ctx: Context) -> bool:
     """
 
     # Get the local repo path
-    repo_path = ctx.job.get("config", {}).get("local_repo_path","")
-    if not repo_path:
-        log(ctx, "No repo_path", "error")
+    local_repo_path = ctx.job.get("config", {}).get("local_repo_path","")
+    repo_key        = ctx.job.get("config", {}).get("repo_key","")
+    if not local_repo_path:
+        log(ctx, f"{repo_key}; No local_repo_path", "error")
 
     return_value    = False
 
@@ -32,7 +33,7 @@ def clear_lock_files(ctx: Context) -> bool:
 
     for command, lock_file in list_of_command_and_lock_file_path_tuples:
 
-        lock_file_path = f"{repo_path}/{lock_file}"
+        lock_file_path = f"{local_repo_path}/{lock_file}"
 
         if os.path.exists(lock_file_path):
 
@@ -48,7 +49,7 @@ def clear_lock_files(ctx: Context) -> bool:
                 except UnicodeDecodeError as exception:
                     lock_file_content = exception
 
-                log(ctx, f"Process failed to start due to a lock file in the repo at {lock_file_path}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
+                log(ctx, f"{repo_key}; Process failed to start due to a lock file in the repo at {lock_file_path}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
                 cmd_rm_lock_file = ["rm", "-f", lock_file_path]
                 cmd.run_subprocess(ctx, cmd_rm_lock_file, name="cmd_rm_lock_file")
@@ -56,6 +57,6 @@ def clear_lock_files(ctx: Context) -> bool:
                 return_value = True
 
             except subprocess.CalledProcessError as exception:
-                log(ctx, f"Failed to delete lock file at {lock_file_path} with exception: {type(exception)}, {exception.args}, {exception}", "error")
+                log(ctx, f"{repo_key}; Failed to delete lock file at {lock_file_path} with exception: {type(exception)}, {exception.args}, {exception}", "error")
 
     return return_value

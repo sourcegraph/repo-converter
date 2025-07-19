@@ -93,7 +93,7 @@ class ConcurrencyManager:
 
                     if active_job_repo == this_job_repo:
                         set_job_result(ctx, "skipped", "Repo job already in progress", False)
-                        log(ctx, f"{this_job_repo} Skipping; Repo job already in progress; started at: {active_job_timestamp}; trace: {active_job_trace}; running for: {int(time.time() - active_job_timestamp)} seconds", "info")
+                        log(ctx, f"{this_job_repo}; Skipping; Repo job already in progress; started at: {active_job_timestamp}; trace: {active_job_trace}; running for: {int(time.time() - active_job_timestamp)} seconds", "info")
                         return False
 
         ## Add this job to the dict of waiting jobs, just in case the blocking semaphore acquire takes a while
@@ -112,17 +112,17 @@ class ConcurrencyManager:
 
         # Check the semaphore value for number of remaining slots
         if server_semaphore.get_value() <= 0:
-            log(ctx, f"{this_job_repo} Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info", log_concurrency_status=True)
+            log(ctx, f"{this_job_repo}; Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info")
 
         ## Check global limit
         if self.global_semaphore.get_value() <= 0:
-            log(ctx, f"{this_job_repo} Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", log_concurrency_status=True)
+            log(ctx, f"{this_job_repo}; Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info")
 
         ## Acquire a slot in the the server-specific semaphore
         # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
         if not server_semaphore.acquire(block=True):
 
-            log(ctx, f"{this_job_repo} server_semaphore.acquire failed", "error", log_concurrency_status=True)
+            log(ctx, f"{this_job_repo}; server_semaphore.acquire failed", "error")
             return False
 
         ## Acquire a slot in the the global semaphore
@@ -132,7 +132,7 @@ class ConcurrencyManager:
             # Release the server semaphore since we couldn't get the global one
             server_semaphore.release()
 
-            log(ctx, f"{this_job_repo} self.global_semaphore.acquire failed", "error", log_concurrency_status=True)
+            log(ctx, f"{this_job_repo}; self.global_semaphore.acquire failed", "error")
             return False
 
         ## Successfully acquired both semaphores
@@ -174,7 +174,7 @@ class ConcurrencyManager:
         ctx.job["result"]["start_timestamp"] = this_job_timestamp
 
         # Log an update
-        log(ctx, f"{this_job_repo} Acquired job slot", "debug")
+        # log(ctx, f"{this_job_repo}; Acquired job slot", "debug")
 
         return True
 
@@ -202,7 +202,7 @@ class ConcurrencyManager:
                 self.per_server_semaphores[server_name] = multiprocessing.Semaphore(self.per_server_limit)
 
                 # Can't log with log_concurrency_status=True, causes a deadlock
-                log(ctx, f"{this_job_repo} Created concurrency limit semaphore for server {server_name} with limit {self.per_server_limit}", "debug")
+                log(ctx, f"{this_job_repo}; Created concurrency limit semaphore for server {server_name} with limit {self.per_server_limit}", "debug")
 
         # Whether the server already had a semaphore in the dict, or one was just created for it, return the semaphore object
         return self.per_server_semaphores[server_name]
@@ -361,7 +361,7 @@ class ConcurrencyManager:
             ctx.job["result"]["end_timestamp"] = int(time.time())
             ctx.job["result"]["execution_time"] = int(ctx.job["result"]["end_timestamp"] - ctx.job["result"]["start_timestamp"])
 
-            log(ctx, f"{this_job_repo} Released job slot", "debug")
+            # log(ctx, f"{this_job_repo}; Released job slot", "debug")
 
         except ValueError as e:
-            log(ctx, f"{this_job_repo} Error releasing job slot: {e}", "error")
+            log(ctx, f"{this_job_repo}; Error releasing job slot: {e}", "error")

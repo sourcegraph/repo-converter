@@ -65,9 +65,6 @@ def main():
         # Run the main application logic
         convert_repos.start(ctx)
 
-        # # Log the end of the run
-        # log(ctx, "Finishing main loop run", "debug")
-
         # Sleep the configured interval
         log(ctx, f"Sleeping main loop for REPO_CONVERTER_INTERVAL_SECONDS={interval} seconds", "debug")
         time.sleep(interval)

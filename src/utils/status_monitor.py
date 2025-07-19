@@ -32,6 +32,8 @@ def start(ctx: Context) -> None:
 
             cmd.status_update_and_cleanup_zombie_processes(ctx)
 
+            # TODO: implement a conversion job status check, with number of commits added, svn config maxRev, etc.
+
             try:
 
                 log(ctx, "Concurrency status", "debug", log_concurrency_status=True)

@@ -34,6 +34,8 @@ def convert(ctx: Context) -> None:
     Entrypoint / main logic / orchestration function
     """
 
+    repo_key = ctx.job.get("config",)
+
     # Extract repo conversion job config values from the repos list in ctx,
     # and set default values for required but undefined configs
     _extract_repo_config_and_set_default_values(ctx)
@@ -85,7 +87,7 @@ def convert(ctx: Context) -> None:
     # Cleanup before exit
     _cleanup(ctx, commands)
 
-    log(ctx, "Ending svn repo conversion job", "info")
+    log(ctx, f"{repo_key}; Finishing repo conversion job in pid={os.getpid()}", "info")
 
 
 def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
