@@ -2,32 +2,43 @@
 
 ## Observability
 
+- Copy the `repo_key` attribute up, between `message` and `log_level`
+    - Then remove `f"{repo_key};` from log event calls
+
+- Only print code / container / process / etc. sections of the log events if `log_level==DEBUG`
+
+- Add PID and PPID to all debug log events
+    - Does the log function run from the same PID as the caller?
+
+- Implement canonical log events
+    - Designate specific events as canonical
+        - Job finish
+    - Add a specific `"canonical_event": true` attribute, to make these easier to filter on
+    - Add enough information to the log event to evaluate:
+        - If the job succeeded / failed
+        - Job execution time
+        - Execution time of remote commands
+        - Remote errors / timeouts
+
+- Add to the status monitor thread loop:
+    - Details of each running repo conversion job
+        - Count of commits at the beginning
+        - Count of commits added in the current job
+        - Most recently converted revision number and commit date
+        - svn info Last Changed Rev and Last Changed Date
+        - "svn-remote.svn.branches-maxRev"
+        - retries_attempted
+
 - Implement OpenTelemetry
 
 - Find a tool to search / filter through logs
     - See Slack thread with Eng
-    - Amped the `dev/query_logs.py` script in the meantime
+    - Amp'ed the `dev/query_logs.py` script in the meantime
+        - These kinds of scripts are throwaway work, as AI has a hard time maintaining them as the log JSON schema changes
 
-- Build up log event context, ex. canonical logs
-    - Store job metadata in a dict, key is pid?
-    - And be able to retrieve this context in cmd.log_process_status()
-        - What little data do we have from a child process reap event, which we can lookup in the dict?
-        - grandparent pid?
-
-- Add to the status monitor thread loop:
-    - Details of each running job
-        - Number of commits at the beginning
-        - Number of commits added in the current job
-        - "svn-remote.svn.branches-maxRev"
-        - retries_attempted
-        - Commit date of the most recently converted revision
-        - Commit date of the SVN Last Changed Rev
-
-- Enhance error events with automatic error context capture and correlation IDs
-    - Remote server response errors, ex. svn: E175012: Connection timed out
-    - Decorators and context managers for logging context?
-
-- Amp's suggestion
+- Amp's suggestions
+    - Enhance error events with automatic error context capture and correlation IDs
+        - Remote server response errors, ex. svn: E175012: Connection timed out
     - Context Managers: Git operations and command execution use context managers to automatically inject relevant metadata for all logs within their scope.
     - Decorator Pattern: Command execution decorator automatically captures all command-related data (args, timing, stdout/stderr, exit codes).
     - This architecture uses a context stack pattern where different operational contexts (git operations, command execution) automatically push their metadata, making all relevant data available to every log statement within that context.
@@ -43,8 +54,7 @@
     - It'd be much simpler if we could use the data already stored by `git svn fetch`, than have to query this data from the server
     - These rev numbers are available:
         - Done - Last Changed Rev from `svn info` output
-        - Done - Last converted rev from `git for-each-ref -limit=1` output, and / or the `.git/svn/something/origin/branch/.commit-map-repo-uuid` binary file
-            - Would the size of this file tell us how many commits have been converted
+        - Done - Last converted rev from `git for-each-ref -limit=1` output
         - Done - Count of commits from local git repo history
         - Done - Last rev checked, from the `.git/svn/.metadata` file
     - So we have all the data we need, what's stopping us from using it instead of `svn log` data?
@@ -52,12 +62,14 @@
         - Jobs timed out, because they were trying to boil the ocean / convert the entire repo in one go
         - This was a big problem, because the script only ran in series, so it'd hold up all the other repos
         - The script now runs in parallel, so other job slots can continue processing
+    - `git svn fetch` does actually commit each individual revision / save it on disk, as its converted
+        - The git.garbage_collection() then git.cleanup_branches_and_tags() functions need to run to make the branches visible (convert remote branches to local)
     - Initial scan through repo rev index, at `--log-window-size n` number of revs per network request, can take a really long time
-        - Running the `svn log 1:HEAD --limit 1` command didn't take this long
+    - Current state: letting the `git svn fetch` command run as long as it needs to, convert as many commits as it can till it dies, then restart the job, either on retry, or the next time the main loop hits this repo again
 
-- `git svn fetch --revision [BASE:HEAD] --log-window-size [100]`
-    - Does actually commit each individual revision as its converted
-        - This may not be visible, as the git.garbage_collection() and git.cleanup_branches_and_tags() functions have to run to make the branches visible (local)
+- `git svn fetch --log-window-size [100] --revision [BASE:HEAD]`
+    - log-window-size
+        - For each HTTP request to the Subversion server, the number of revs to query for
     - Absolutely intolerant of invalid revs in the `--revisions` range
         - ex. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, and no changes
     - BASE
@@ -66,8 +78,6 @@
     - HEAD
         - (remote)
         - Matches "Last Changed Rev" from the `svn info` command output
-    - log-window-size
-        - For each HTTP request to the Subversion server, the number of revs to query for
 
 - `cat .git/svn/.metadata`
     ```
@@ -85,36 +95,6 @@
         - Future iterations can start at this number, to prevent duplicate work, checking old revs
         - If the user changes the branches in scope, this number must be reset
 
-### Performance
-
-- SVN commands hanging
-    - Add a timeout in run_subprocess() for hanging svn info and svn log commands, if data isn't transferring
-
-- Different approach: Sync SVN-to-SVN, then convert from local SVN server
-    - https://kevin.deldycke.com/2012/how-to-create-local-copy-svn-repository
-    - Create an empty local SVN repository:
-        ```shell
-        rm -rf ./svn-repo
-        svnadmin create ./svn-repo
-        sed -i 's/# password-db = passwd/password-db = passwd/' ./svn-repo/conf/svnserve.conf
-        echo "kevin = kevin" >> ./svn-repo/conf/passwd
-        kill `ps -ef | grep svnserve | grep -v grep | awk '{print $2}'`
-        svnserve --daemon --listen-port 3690 --root ./svn-repo
-        ```
-    - Give the synchronization utility permission on the local repository:
-        ```shell
-        echo "#!/bin/sh" > ./svn-repo/hooks/pre-revprop-change
-        chmod 755 ./svn-repo/hooks/pre-revprop-change
-        ```
-    - Initialize the synchronization between the remote server (https://svn.example.com/svn/internal-project) and the local SVN (svn://localhost:3690):
-        ```shell
-        svnsync init --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" svn://localhost:3690 https://svn.example.com/svn/internal-project
-        ```
-    - Once all of this configuration is done, we can start dumping the content of the remote repository to our local copy:
-        ```shell
-        svnsync --non-interactive --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" sync svn://localhost:3690
-        ```
-
 ### Other
 
 - .gitignore files
@@ -125,6 +105,8 @@
 - Test layout tags and branches as lists / arrays
 
 ## Config
+
+- Create server-specific concurrency semaphore from repos-to-convert value, if present
 
 - Move the config schema to a separate YAML file
     - Bake it into the image
@@ -141,8 +123,6 @@
 
 - Implement proper type validation with clear error messages for config file inputs
 
-- Create server-specific concurrency semaphore from repos-to-convert value, if present
-
 - Env vars vs config file
     - Env vars
         - Service-oriented, ex. log level
@@ -156,7 +136,53 @@
         - List of repos to convert
         - Can change without restarting the container
 
-## Processes
+## Process Management
+
+- Make child process reap events more usable
+    - Find all the data we can get from a child process reap event
+        - If not enough data
+            - What data can we make use of, to lookup other data from a dict, ex. `ctx.processes`?
+                - PPID? PPID of the PPID?
+            - Store job sub-tasks' metadata in `ctx.processes`
+    - To be retrieved in `cmd.log_process_status()`
+
+- Determine if it's safe to timeout long-running `git svn fetch` commands, ex. interrupting branch / tag operations on large repos
+    - If no, then don't implement a long-running process timeout
+    - If yes, then find a way to determine if long-running processes are actively working
+        - If the `/usr/bin/perl /usr/lib/git-core/git-svn fetch` command has been sitting flat at 0% CPU for an hour, then it may be safe to kill
+
+- SVN commands hanging
+    - Add a timeout in run_subprocess() for hanging svn info ~~and svn log~~ commands, if data isn't transferring
+        - Does the svn cli not have a timeout built in for this command?
+
+- PID layers, from `docker exec -it repo-converter top`
+    - This output was captured 14 hours into converting a repo that's up to 2 GB on disk so far, with 6 years of history left to catch up on
+    - This is after removing our batch processing bubble-wrap, and just lettin'er buck
+    ```
+        PID    PPID nTH S   CODE   USED   SWAP    RES  %MEM nMaj nMin nDRT  OOMa OOMs  %CPU     TIME+ COMMAND
+          1       0   2 S   2.7m  37.4m   1.5m  35.9m   0.5  991 8.7m    0     0  668   0.0   2:44.22 /usr/bin/python3 /sg/repo-converter/src/main.py
+         85       1   1 S   2.7m  40.8m  11.6m  29.2m   0.4    0  20k    0     0  669   0.0   0:05.82  `- /usr/bin/python3 /sg/repo-converter/src/main.py
+        330      85   1 S   2.7m   1.4m   0.2m   1.2m   0.0    0  364    0     0  666   0.0   0:00.00      `- git -C /sg/src-serve-root/org/repo svn fetch --quiet --username user --log-window-size 100
+        331     330   1 S   1.6m 115.6m  17.8m  97.8m   1.2   56 534m    0     0  674  13.6  66:17.92          `- /usr/bin/perl /usr/lib/git-core/git-svn fetch --quiet --username user --log-window-size 100
+        376     331   1 S   2.7m   1.1g   0.1m   1.1g  14.6  18k 1.4m    0     0  744   0.3   1:18.22              `- git cat-file --batch
+      34015     331   1 S   2.7m  10.0m   0.0m  10.0m   0.1   17 889k    0     0  667   2.0   4:36.38              `- git hash-object -w --stdin-paths --no-filters
+    1850259     331   1 S   2.7m   5.1m   0.0m   5.1m   0.1    0  499    0     0  666   0.0   0:00.00              `- git update-index -z --index-info
+    ```
+    - PID 1
+        - Docker container entrypoint
+    - PID 85
+        - Spawned by `multiprocessing.Process().start()` in `convert_repos.start()`
+    - PID 330
+        - Spawned by `psutil.Popen()` in `cmd.run_subprocess()`
+        - `git svn fetch` command, called from `_git_svn_fetch()` in `svn.convert()`
+    - PID 331
+        - `git-svn` perl script, which runs the `git svn fetch` workload in [sub fetch, in SVN.pm](https://github.com/git/git/blob/v2.50.1/perl/Git/SVN.pm#L2052)
+        - This script is quite naive, no retries, always exits 0, even on failures
+    - PID 376
+        - Long-running `git cat-file` process, which stores converted content in memory
+        - It seems quite likely that this process doesn't free up memory after each commit, so memory requirements for this process alone would be some large portion of a repo's size
+        - The minimum memory requirements for this process would be the contents of the largest commit in the repo's history, otherwise the conversion would never progress beyond this commit
+        - This process' CPU state is usually Sleeping, because it spends almost all of its time receiving content from the subversion server
 
 - How do I get more information about the child PID which was reaped in these lines, in `./src/utils/signal_handler.py`?
 
@@ -218,11 +244,11 @@
         - Push to feature branch
             - gha-env-vars-push-to-branch.sh
         - PR
-            -
+            - TODO
         - Push (merge) to main
-            -
+            - TODO
         - Tag / release
-            -
+            - TODO
         - workflow_dispatch
             - gha-env-vars-workflow-dispatch.sh
 - GitHub Actions cleanup jobs
@@ -239,12 +265,14 @@
 - Add proper doc strings to all classes and methods
     - https://www.dataquest.io/blog/documenting-in-python-with-docstrings
 
+- Switch most git commands in the git module from git cli to GitPython
+
 ## Expansion
 
 - Implement TODOs strewn around the code
 
 - Add git-to-p4 converter
-    - Run it in MSP, to build up our Perforce test depots from public OSS repos
+    - Run it in MSP, to build up our Perforce test depots from public OSS repos from GitHub.com
 
 - Git clone
     - Move Git SSH clone Bash script into this containers
@@ -271,3 +299,31 @@
 
 - Decent example of converting commit messages
     - https://github.com/seantis/git-svn-trac/blob/master/git-svn-trac.py
+
+- Totally different approach: Run our own Subversion server in the Docker Compose deployment
+    - Sync SVN-to-SVN
+    - Then convert from local SVN server
+    - I had initially tried running a Subversion server in a Docker container, and didn't have any luck with it
+    - https://kevin.deldycke.com/2012/how-to-create-local-copy-svn-repository
+        - Create an empty local SVN repository:
+            ```shell
+            rm -rf ./svn-repo
+            svnadmin create ./svn-repo
+            sed -i 's/# password-db = passwd/password-db = passwd/' ./svn-repo/conf/svnserve.conf
+            echo "kevin = kevin" >> ./svn-repo/conf/passwd
+            kill `ps -ef | grep svnserve | grep -v grep | awk '{print $2}'`
+            svnserve --daemon --listen-port 3690 --root ./svn-repo
+            ```
+        - Give the synchronization utility permission on the local repository:
+            ```shell
+            echo "#!/bin/sh" > ./svn-repo/hooks/pre-revprop-change
+            chmod 755 ./svn-repo/hooks/pre-revprop-change
+            ```
+        - Initialize the synchronization between the remote server `https://svn.example.com/svn/internal-project` and the local SVN `svn://localhost:3690`:
+            ```shell
+            svnsync init --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" svn://localhost:3690 https://svn.example.com/svn/internal-project
+            ```
+        - Once all of this configuration is done, we can start dumping the content of the remote repository to our local copy:
+            ```shell
+            svnsync --non-interactive --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" sync svn://localhost:3690
+            ```
