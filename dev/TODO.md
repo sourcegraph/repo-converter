@@ -29,6 +29,9 @@
         - "svn-remote.svn.branches-maxRev"
         - retries_attempted
 
+- A running list, as these values change
+    - Date, Time, repo_key, Dir Size (B), Dir Size Change (B), Latest Converted Commit SVN Rev, Latest Converted Commit Date, SVN Repo Remote Last Changed Rev, branches-maxRev, SVN Repo Remote Current Revision (current index of entire repo)
+
 - Implement OpenTelemetry
 
 - Find a tool to search / filter through logs

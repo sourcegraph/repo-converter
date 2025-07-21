@@ -359,24 +359,24 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     password            = job_config.get("password")
     repo_key            = job_config.get("repo_key")
     cmd_svn_info        = commands["cmd_svn_info"]
-    retries_attempted   = 0
+    tries_attempted     = 1
 
     while True:
 
         # Run the command, capture the output
-        svn_info = cmd.run_subprocess(ctx, cmd_svn_info, password, quiet=True, name=f"svn_info_{retries_attempted}")
+        svn_info = cmd.run_subprocess(ctx, cmd_svn_info, password, quiet=True, name=f"svn_info_{tries_attempted}")
 
         # If the command exited successfully, save the process output dict to the job context
         if svn_info["return_code"] == 0:
 
-            if retries_attempted > 0:
-                log(ctx, f"{repo_key}; Successfully connected to repo remote after {retries_attempted} retries", "warning")
+            if tries_attempted > 1:
+                log(ctx, f"{repo_key}; Successfully connected to repo remote after {tries_attempted} tries", "warning")
 
             ctx.job["svn_info"] = svn_info.get("output",[])
             return True
 
         # If we've hit the max_retries limit, return here
-        elif retries_attempted >= max_retries:
+        elif tries_attempted >= max_retries:
 
             log_failure_message = f"svn info failed to connect to repo remote, reached max retries {max_retries}"
             set_job_result(ctx, "skipped", log_failure_message, False)
@@ -387,11 +387,11 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
         # Otherwise, prepare for retry
         else:
 
-            retries_attempted += 1
+            tries_attempted += 1
 
             # Log the failure
             retry_delay_seconds = random.randrange(1, 5)
-            log(ctx, f"{repo_key}; svn info failed to connect to repo remote, retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
+            log(ctx, f"{repo_key}; svn info failed to connect to repo remote, retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
             time.sleep(retry_delay_seconds)
 
         # Repeat the loop
@@ -759,11 +759,11 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
     max_retries             = job_config.get("max_retries")
     password                = job_config.get("password")
     repo_key                = job_config.get("repo_key")
+    tries_attempted         = 1
 
     log(ctx, f"{repo_key}; Repo out of date, fetching", "info")
 
     # Do while loop for retries
-    retries_attempted = 0
     while True:
 
         # Delete duplicate lines from the git config file, before the fetch
@@ -776,10 +776,12 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         log(ctx, f"{repo_key}; fetching with {' '.join(cmd_git_svn_fetch_with_window)}", "debug")
 
         # Run the fetch command, capture the output
-        result = cmd.run_subprocess(ctx, cmd_git_svn_fetch_with_window, password, name=f"cmd_git_svn_fetch_{retries_attempted}")
-        result.update({"retries_attempted": retries_attempted})
+        result = cmd.run_subprocess(ctx, cmd_git_svn_fetch_with_window, password, name=f"cmd_git_svn_fetch_{tries_attempted}")
+        result.update({"tries_attempted": tries_attempted})
 
-        # Run gc + fix branches, after each try, to make commits / branches visible (local)
+        # Run gc + fix branches, after each try, to:
+        # Make branches visible
+        # Update the HEAD ref to the latest commit on the default branch
         git.garbage_collection(ctx)
         git.cleanup_branches_and_tags(ctx)
 
@@ -788,27 +790,29 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
             return True
 
         # If we've hit the max_retries limit, break the while true loop with an error here
-        elif retries_attempted >= max_retries:
+        elif tries_attempted >= max_retries:
             return False
 
         # Otherwise, prepare for retry
         else:
 
-            retries_attempted += 1
+            tries_attempted += 1
 
             # Divide the log window size in half for the next try
             log_window_size = int(log_window_size) // 2
 
-            # Try clearing lock files
+            # Try clearing lock files,
+            # in case that was the cause of the failure,
+            # or lock files may have been left behind by the failed try
             lockfiles.clear_lock_files(ctx)
 
             # Calculate a semi-random number of seconds to wait before trying
             # Multiply by number of retries attempted, for a bit of a backoff,
             # in case the server is busy
-            retry_delay_seconds = (random.randrange(1, 5) * retries_attempted)
+            retry_delay_seconds = (random.randrange(1, 5) * tries_attempted)
 
             # Log the failure
-            log(ctx, f"{repo_key}; retrying {retries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
+            log(ctx, f"{repo_key}; retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
 
             # Sleep the delay
             time.sleep(retry_delay_seconds)
@@ -843,15 +847,13 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     """
 
     ## Gather needed inputs
-    current_job_stats_local_git_repo_stats  = _get_local_git_repo_stats(ctx)
-
     job_config                      = ctx.job.get("config",{})
     max_retries                     = job_config.get("max_retries")
     repo_key                        = job_config.get("repo_key")
 
-    git_svn_fetch_output            = git_svn_fetch_result.get("output",[])
+    git_svn_fetch_output            = git_svn_fetch_result.pop("output",[])
     return_code                     = git_svn_fetch_result.get("return_code")
-    retries_attempted               = git_svn_fetch_result.get("retries_attempted")
+    tries_attempted                 = git_svn_fetch_result.get("tries_attempted")
 
     ## Prepare outputs
     errors                          = []
@@ -862,7 +864,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     if return_code != 0:
         errors.append(f"Exited with return_code {return_code} != 0")
 
-    if retries_attempted >= max_retries:
+    if tries_attempted >= max_retries:
         errors.append(f"Reached max retries {max_retries}")
 
     # Check if the repo is valid after the fetch
@@ -870,55 +872,39 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
         errors.append("Repo validity check _check_if_repo_exists_locally failed")
 
 
-    len_git_svn_fetch_output_start = len(git_svn_fetch_output)
-    log(ctx, f"git_svn_fetch_output; start; len: {len_git_svn_fetch_output_start}", "debug")
-
-
+    # Filter out the non-error lines from the process output
     git_svn_fetch_output = _remove_non_errors_from_git_svn_fetch_output(ctx, git_svn_fetch_output)
 
-
-    len_git_svn_fetch_output_filtered = len(git_svn_fetch_output)
-    len_git_svn_fetch_output_removed = len_git_svn_fetch_output_start - len_git_svn_fetch_output_filtered
-    log(ctx, f"git_svn_fetch_output; filtered out non-errors; remaining after filtered: {len_git_svn_fetch_output_filtered}; removed by the filter: {len_git_svn_fetch_output_removed}", "debug")
-
-
+    # Search the remaining lines of the process output for known errors
     errors_from_output = _find_errors_in_git_svn_fetch_output(ctx, git_svn_fetch_output)
     if errors_from_output:
         errors += errors_from_output
 
-    # # If the ending revision number matches the Last Changed Rev, then we know we succeeded
-    # latest_converted_svn_rev = int(job_stats_local.get("git_latest_commit_rev_end", 0))
-    # rev_batch_end = int(job_stats_local.get("rev_batch_end",0))
-    # if not (latest_converted_svn_rev and rev_batch_end and latest_converted_svn_rev == rev_batch_end):
-    #     warnings.append(f"git_latest_commit_rev_end: {latest_converted_svn_rev} != rev_batch_end: {rev_batch_end}")
 
     ## Commit count checks
-    job_stats_local                     = ctx.job.get("stats",{}).get("local",{})
+    current_job_stats_local_git_repo_stats  = _get_local_git_repo_stats(ctx)
+    job_stats_local                         = ctx.job.get("stats",{}).get("local",{})
 
     # Get the number of commits which were already in the local git repo before the job started
-    git_commit_count_begin              = job_stats_local.get("git_commit_count_begin")
+    git_commit_count_begin                  = job_stats_local.get("git_commit_count_begin")
 
     # Get the current number of commits in the local git repo after this fetch attempt (includes all retries)
-    current_git_commit_count            = current_job_stats_local_git_repo_stats.get("git_commit_count")
-
+    current_git_commit_count                = current_job_stats_local_git_repo_stats.get("git_commit_count")
 
 
     ## This try commit counts
     # Order is important, must be before ## Whole job commit counts,
     # because this tries to use the git_commit_count_added_whole_job from the previous retry
     # Get the count of commits from the end of the previous try
-    git_commit_count_after_previous_try = job_stats_local.get("git_commit_count_added_whole_job")
+    git_commit_count_after_previous_try     = job_stats_local.get("git_commit_count_added_whole_job", 0) + git_commit_count_begin
 
-    # If this is the first try, then use the commit count from the beginning of the job
-    if not git_commit_count_after_previous_try:
-        git_commit_count_after_previous_try = git_commit_count_begin
     # Calculate the number of commits added since the previous try
-    git_commit_count_added_this_try = current_git_commit_count - git_commit_count_after_previous_try
+    git_commit_count_added_this_try         = current_git_commit_count - git_commit_count_after_previous_try
     # Store the number of commits from this try
-    ctx.job["stats"]["local"].update({f"git_commit_count_try_{retries_attempted}": git_commit_count_added_this_try})
+    ctx.job["stats"]["local"].update({f"git_commit_count_added_try_{tries_attempted}": git_commit_count_added_this_try})
     # If no commits were added on this try, add this to the list of errors
     if git_commit_count_added_this_try == 0:
-        errors.append(f"git_commit_count_added_this_try == 0, this fetch try failed to add any new commits")
+        errors.append(f"git_commit_count_added_this_try == 0, the fetch in this try failed to add any new commits")
 
 
     ## Whole job commit counts
@@ -935,7 +921,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     ## Add git_dir_size_
     git_dir_size = current_job_stats_local_git_repo_stats.get("git_dir_size")
     if git_dir_size:
-        ctx.job["stats"]["local"].update({f"git_dir_size_try_{retries_attempted}": git_dir_size})
+        ctx.job["stats"]["local"].update({f"git_dir_size_try_{tries_attempted}": git_dir_size})
 
 
     # Check if git svn has blown past svn info's "Last Changed Rev"
