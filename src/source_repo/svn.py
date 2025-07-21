@@ -918,10 +918,19 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
         errors.append(f"git_commit_count_added_whole_job == 0, all fetches in this job so far have failed to add any new commits")
 
 
-    ## Add git_dir_size_
-    git_dir_size = current_job_stats_local_git_repo_stats.get("git_dir_size")
-    if git_dir_size:
-        ctx.job["stats"]["local"].update({f"git_dir_size_try_{tries_attempted}": git_dir_size})
+    ## Add git_dir_size
+    # Same logic as commit counts
+
+    # Get the number of commits which were already in the local git repo before the job started
+    current_git_dir_size                = current_job_stats_local_git_repo_stats.get("git_dir_size")
+    git_dir_size_begin                  = job_stats_local.get("git_dir_size_begin")
+    git_dir_size_after_previous_try     = job_stats_local.get("git_dir_size_added_whole_job", 0) + git_dir_size_begin
+
+    git_dir_size_added_this_try         = current_git_dir_size - git_dir_size_after_previous_try
+    ctx.job["stats"]["local"].update({f"git_dir_size_added_try_{tries_attempted}": git_dir_size_added_this_try})
+
+    git_dir_size_added_whole_job        = current_git_dir_size - git_dir_size_begin
+    ctx.job["stats"]["local"].update({"git_dir_size_added_whole_job": git_dir_size_added_whole_job})
 
 
     # Check if git svn has blown past svn info's "Last Changed Rev"
