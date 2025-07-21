@@ -775,7 +775,7 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         # Start the fetch
         log(ctx, f"{repo_key}; fetching with {' '.join(cmd_git_svn_fetch_with_window)}", "debug")
 
-        # Run the command, capture the output
+        # Run the fetch command, capture the output
         result = cmd.run_subprocess(ctx, cmd_git_svn_fetch_with_window, password, name=f"cmd_git_svn_fetch_{retries_attempted}")
         result.update({"retries_attempted": retries_attempted})
 
@@ -842,7 +842,6 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
 
     """
 
-
     ## Gather needed inputs
     current_job_stats_local_git_repo_stats  = _get_local_git_repo_stats(ctx)
 
@@ -850,13 +849,14 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     max_retries                     = job_config.get("max_retries")
     repo_key                        = job_config.get("repo_key")
 
-    git_svn_fetch_output            = git_svn_fetch_result.pop("output",[])
+    git_svn_fetch_output            = git_svn_fetch_result.get("output",[])
     return_code                     = git_svn_fetch_result.get("return_code")
     retries_attempted               = git_svn_fetch_result.get("retries_attempted")
 
     ## Prepare outputs
     errors                          = []
     warnings                        = []
+
 
     ## Basic checks
     if return_code != 0:
@@ -869,115 +869,22 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     if not _check_if_repo_exists_locally(ctx):
         errors.append("Repo validity check _check_if_repo_exists_locally failed")
 
-    ## Check for any errors in the command output
-    # TODO: Fix error message processing, probably a regex match issue
 
-    # Shorten the number of lines in the git svn output,
-    # by removing lines which we know are not errors / may be false positives
-    not_errors = [
-        r"\"\\tA\\t",                   # "\tA\tdir/file.ext",          # Add a new file
-        r"\"\\tM\\t",                   # "\tM\tdir/file.ext",          # Modify a file
-        r"\"\\tD\\t",                   # "\tD\tdir/file.ext",          # Delete a file
-        r"Checked through r[0-9]+",     # "Checked through r123456"     # Many of the lines
-        "Ignoring error from SVN",      # "W: Ignoring error from SVN, path probably does not exist: (160013): Filesystem has no item: File not found..."
-    ]
+    len_git_svn_fetch_output_start = len(git_svn_fetch_output)
+    log(ctx, f"git_svn_fetch_output; start; len: {len_git_svn_fetch_output_start}", "debug")
 
-    # Remove the not_error lines from the output list
-    for not_error in not_errors:
-        git_svn_fetch_output = [x for x in git_svn_fetch_output if not re.search(not_error, x)]
 
-    # Check for expected error messages
-    # We should keep this list tidy, as execution time is
-    # len(error_messages) x len(git_svn_fetch_result_output)
+    git_svn_fetch_output = _remove_non_errors_from_git_svn_fetch_output(ctx, git_svn_fetch_output)
 
-    # Dicts of lists of regex patterns
-    error_message_regex_patterns_dict = {
-        "timeout": [
-            "Connection timed out",
-        ],
-        "auth": [
-            "Authentication failed",
-            "Authorization failed",
-            "Invalid credentials",
-            "Permission denied",
-            "cannot fetch directory .* not authorized",
-        ],
-        "connectivity": [
-            "Can't create session",
-            "Unable to connect to a repository at URL",
-            "Error running context",
-            "Connection refused",
-            "SVN connection failed somewhere",
-            "Invalid repository URL",
-            "SSL handshake failed",
-            "Repository not found",
-        ],
-        "repo config": [
-            "SVN repository location required as a command-line argument",
-            "Unable to determine upstream SVN information from working tree history",
-            "svn-remote .* unknown",
-            "svn-remote .* not defined",
-            "Failed to read .* in config",
-        ],
-        "data integrity": [
-            "Last fetched revision of .* but we are about to fetch",
-            "was not found in commit",
-            "Cannot find SVN revision",
-            "Checksum mismatch",
-            "Failed to read object",
-            "Failed to strip path",
-        ],
-        "local system": [
-            "Too many open files",
-            "No space left on device",
-            "Path not found",
-            "Repository is locked",
-            "Working copy locked",
-            "Couldn't unlink index",
-            "Failed to open .* for writing",
-            "Failed to close",
-        ],
-        "other": [
-            "Error from SVN",
-            "svn: E",
-            "Author: .* not defined in .* file",
-            "failed with exit code",
-            "useSvmProps set, but failed to read SVM properties",
-            "useSvnsyncProps set, but failed to read svnsync property",
-            "abort:",
-            "error:",
-            "fatal:",
-        ]
-    }
 
-    # This loop could take a while, as some svn fetch jobs come back with up to 2k lines
-    # Navigate down the dict structure,
-    # top few loops are O(n) for the number patterns in error_message_regex_patterns_dict
-    for error_category in error_message_regex_patterns_dict.keys():
-        for error_message_regex_pattern in error_message_regex_patterns_dict.get(error_category):
+    len_git_svn_fetch_output_filtered = len(git_svn_fetch_output)
+    len_git_svn_fetch_output_removed = len_git_svn_fetch_output_start - len_git_svn_fetch_output_filtered
+    log(ctx, f"git_svn_fetch_output; filtered out non-errors; remaining after filtered: {len_git_svn_fetch_output_filtered}; removed by the filter: {len_git_svn_fetch_output_removed}", "debug")
 
-            regex_pattern = rf".*{error_message_regex_pattern}.*"
-            regex = re.compile(regex_pattern, flags=re.IGNORECASE)
 
-            # We need the line match, but testing the match across the entire list first to reduce the exponential runtime
-            list_match = regex.search(" ".join(git_svn_fetch_output))
-
-            if list_match:
-                for match_group in list_match.groups():
-                    for line in git_svn_fetch_output:
-
-                        # Re-running the match, as list_match may match across lines,
-                        # but we only want to match within each line
-                        line_match = regex.search(line)
-
-                        if line_match:
-
-                            errors.append(f"Error message: {error_category}: {line}")
-
-                            # Remove the svn fetch error line from the process output list to avoid duplicate output,
-                            # if one line in the error message matches multiple error_messages
-                            git_svn_fetch_output.remove(line)
-
+    errors_from_output = _find_errors_in_git_svn_fetch_output(ctx, git_svn_fetch_output)
+    if errors_from_output:
+        errors += errors_from_output
 
     # # If the ending revision number matches the Last Changed Rev, then we know we succeeded
     # latest_converted_svn_rev = int(job_stats_local.get("git_latest_commit_rev_end", 0))
@@ -1099,3 +1006,160 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     log(ctx, f"{repo_key}; {reason}", log_level, structured_log_dict)
 
     return success
+
+
+def _remove_non_errors_from_git_svn_fetch_output(ctx: Context, git_svn_fetch_output: list = []) -> list:
+    """
+    Filter out lines from the git svn fetch output which are known to not be problems
+    Keep this list tidy, as execution time is len(error_messages) x len(git_svn_fetch_result_output)
+    """
+
+    if not git_svn_fetch_output:
+        return []
+
+    log(ctx, f"before len(git_svn_fetch_output): {len(git_svn_fetch_output)}")
+
+    ## Check for any errors in the command output
+    # Note: git_svn_fetch_output can be very long
+    # "output_line_count": 309940,
+
+    # Shorten the number of lines in the git svn output,
+    # by removing lines which we know are not errors / may be false positives
+    # Sort in order from most lines in typical output to least, to remove the most lines earliest
+    ignore_lines = [
+        r"\\tA\\t.*",                       # "\tA\tdir/file.ext",          # Add a new file
+        r"\\tM\\t.*",                       # "\tM\tdir/file.ext",          # Modify a file
+        r"r[0-9]+ = .*",                    # r[rev] = [hash] (refs/remotes/origin/tags/[tag])
+        r"Checked through r[0-9]+",         # "Checked through r123456"     # Many of the lines
+        r"\\tD\\t.*",                       # "\tD\tdir/file.ext",          # Delete a file
+        r"W: \+empty_dir: .*",
+        r"W: -empty_dir: .*",
+        r"Index mismatch: \w+ != \w+",
+        r"rereading \w+",
+        r"W: Ignoring error from SVN.*",     # "W: Ignoring error from SVN, path probably does not exist: (160013): Filesystem has no item: File not found..."
+        r"Auto packing the repository in background for optimum performance.",
+        r"See \\\"git help gc\\\" for manual housekeeping.",
+        r"Authentication realm: .*",
+        r"Password for '.*':",
+        r"This may take a while on large repositories",
+        r"W: Do not be alarmed at the above message git-svn is just searching aggressively for old history.",
+        r"branch_from: .*",
+        r"Found possible branch point: .*",
+        r"Initializing parent: .*",
+        r"Found branch parent: .*",
+        r"Following parent with do_switch",
+        r"Successfully followed parent",
+        r"Checking svn:mergeinfo changes since r.*",
+        r"W: svn cherry-pick ignored .*",
+    ]
+
+    # Compile regex patterns for efficiency
+    ignore_lines_compiled_regexes = []
+    for ignore_line in ignore_lines:
+        compiled_regex = re.compile(ignore_line)
+        ignore_lines_compiled_regexes.append((ignore_line, compiled_regex))
+
+    # Remove the ignored lines, and empty lines from the output list
+    for ignore_line, compiled_regex in ignore_lines_compiled_regexes:
+        git_svn_fetch_output = [line for line in git_svn_fetch_output if line and not compiled_regex.search(line)]
+
+    return git_svn_fetch_output
+
+
+def _find_errors_in_git_svn_fetch_output(ctx: Context, git_svn_fetch_output: list = []) -> list:
+    """
+    Check for expected error messages
+    Keep this list tidy, as execution time is len(error_messages) x len(git_svn_fetch_result_output)
+    """
+
+    if not git_svn_fetch_output:
+        return []
+
+    errors = []
+
+    # Dicts of lists of regex patterns
+    # Be sure to escape any special characters needed in this list
+    # These strings get .* added both before and after
+    error_message_regex_patterns_dict = {
+        "Timeout": [
+            "Connection timed out",
+        ],
+        "Connectivity issue": [
+            "Can't create session",
+            "SVN connection failed somewhere",
+            "Invalid repository URL",
+            "SSL handshake failed",
+            "Repository not found",
+        ],
+        "auth": [
+            "Authentication failed",
+            "Authorization failed",
+            "Invalid credentials",
+            "Permission denied",
+            "cannot fetch directory .* not authorized",
+        ],
+        "repo config": [
+            "SVN repository location required as a command-line argument",
+            "Unable to determine upstream SVN information from working tree history",
+            "svn-remote .* unknown",
+            "svn-remote .* not defined",
+            "Failed to read .* in config",
+        ],
+        "data integrity": [
+            "Last fetched revision of .* but we are about to fetch",
+            "was not found in commit",
+            "Cannot find SVN revision",
+            "Checksum mismatch",
+            "Failed to read object",
+            "Failed to strip path",
+        ],
+        "local system": [
+            "Too many open files",
+            "No space left on device",
+            "Path not found",
+            "Repository is locked",
+            "Working copy locked",
+            "Couldn't unlink index",
+            "Failed to open .* for writing",
+            "Failed to close",
+        ],
+        "other": [
+            "Error from SVN",
+            "svn: E",
+            "Author: .* not defined in .* file",
+            "failed with exit code",
+            "useSvmProps set, but failed to read SVM properties",
+            "useSvnsyncProps set, but failed to read svnsync property",
+            "abort:",
+            "error:",
+            "fatal:",
+        ]
+    }
+
+    # Compile all regex patterns once for efficiency
+    compiled_patterns = []
+    for error_category, patterns in error_message_regex_patterns_dict.items():
+        for pattern in patterns:
+            regex_pattern = rf".*{pattern}.*"
+            compiled_regex = re.compile(regex_pattern)
+            compiled_patterns.append((error_category, compiled_regex))
+
+    # Single pass through output lines - O(lines x patterns)
+    matched_lines = set()  # Track matched lines to avoid duplicates
+    for line in git_svn_fetch_output:
+        if line in matched_lines:
+            continue
+
+        for error_category, compiled_regex in compiled_patterns:
+            if compiled_regex.search(line):
+                errors.append(f"Error message: {error_category}: {line}")
+                matched_lines.add(line)
+                break  # Stop checking other patterns for this line
+
+    # Remove the matched lines from the output
+    remaining_output = [line for line in git_svn_fetch_output if line not in matched_lines]
+
+    if remaining_output:
+        ctx.job["result"]["remaining_output"] = remaining_output
+
+    return errors
