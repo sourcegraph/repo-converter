@@ -9,7 +9,7 @@ services:
     image: ghcr.io/sourcegraph/repo-converter:latest
     environment:
       - LOG_LEVEL=DEBUG
-      - REPO_CONVERTER_INTERVAL_SECONDS=600
+      - REPO_CONVERTER_INTERVAL_SECONDS=60
       - TRUNCATED_OUTPUT_MAX_LINES=20
     # It seems like the only way this works for both podman and docker compose,
     # is to run the container as UID=10001 and GID 10002,
