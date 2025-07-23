@@ -61,7 +61,7 @@ class ConcurrencyManager:
         # log(ctx, f"Initialized concurrency manager", "debug", structured_data_to_log)
 
 
-    def acquire_job_slot(self, ctx: Context) -> bool:
+    def acquire_job_slot(self, ctx: Context, job: dict) -> bool:
         """
         Check if:
         - Repo already has a job in progress
@@ -74,13 +74,12 @@ class ConcurrencyManager:
         """
 
         # Get job information from context
-        this_job_config     = ctx.job.get("config","")
+        log_job             = {"job": job}
+        this_job_timestamp  = int(time.time())
+        this_job_trace      = job.get("trace","")
+        this_job_config     = job.get("config",{})
         this_job_repo       = this_job_config.get("repo_key","")
         server_name         = this_job_config.get("server_name","")
-
-        this_job_trace      = ctx.job.get("trace","")
-        this_job_timestamp  = int(time.time())
-
 
         ## Check if this repo already has a job in progress
         # TODO: Remove the duplicate logic in svn.py, and integrate the missing bits in here
@@ -93,7 +92,7 @@ class ConcurrencyManager:
 
                     if active_job_repo == this_job_repo:
                         set_job_result(ctx, "skipped", "Repo job already in progress", False)
-                        log(ctx, f"{this_job_repo}; Skipping; Repo job already in progress; started at: {active_job_timestamp}; trace: {active_job_trace}; running for: {int(time.time() - active_job_timestamp)} seconds", "info")
+                        log(ctx, f"Skipping; Repo job already in progress; started at: {active_job_timestamp}; trace: {active_job_trace}; running for: {int(time.time() - active_job_timestamp)} seconds", "info", log_job)
                         return False
 
         ## Add this job to the dict of waiting jobs, just in case the blocking semaphore acquire takes a while
@@ -108,21 +107,21 @@ class ConcurrencyManager:
 
         ## Check per-server limit
         # Get the semaphore object for this server
-        server_semaphore = self._get_server_semaphore(ctx)
+        server_semaphore = self._get_server_semaphore(ctx, job)
 
         # Check the semaphore value for number of remaining slots
         if server_semaphore.get_value() <= 0:
-            log(ctx, f"{this_job_repo}; Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info")
+            log(ctx, f"Hit per-server concurrency limit; MAX_CONCURRENT_CONVERSIONS_PER_SERVER={self.per_server_limit}, waiting for a server slot", "info", log_job)
 
         ## Check global limit
         if self.global_semaphore.get_value() <= 0:
-            log(ctx, f"{this_job_repo}; Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info")
+            log(ctx, f"Hit global concurrency limit; MAX_CONCURRENT_CONVERSIONS_GLOBAL={self.global_limit}, waiting for a slot", "info", log_job)
 
         ## Acquire a slot in the the server-specific semaphore
         # Want to block, so that the main loop has to wait until all repos get a chance to run through before finishing
         if not server_semaphore.acquire(block=True):
 
-            log(ctx, f"{this_job_repo}; server_semaphore.acquire failed", "error")
+            log(ctx, f"server_semaphore.acquire failed", "error", log_job)
             return False
 
         ## Acquire a slot in the the global semaphore
@@ -132,7 +131,7 @@ class ConcurrencyManager:
             # Release the server semaphore since we couldn't get the global one
             server_semaphore.release()
 
-            log(ctx, f"{this_job_repo}; self.global_semaphore.acquire failed", "error")
+            log(ctx, f"self.global_semaphore.acquire failed", "error", log_job)
             return False
 
         ## Successfully acquired both semaphores
@@ -174,20 +173,21 @@ class ConcurrencyManager:
         ctx.job["result"]["start_timestamp"] = this_job_timestamp
 
         # Log an update
-        # log(ctx, f"{this_job_repo}; Acquired job slot", "debug")
+        # log(ctx, f"Acquired job slot", "debug", log_job)
 
         return True
 
 
-    def _get_server_semaphore(self, ctx: Context):
+    def _get_server_semaphore(self, ctx: Context, job: dict):
         """
         Get or create a semaphore for the given server.
         """
 
         # Get job information from context
-        this_job_config = ctx.job.get("config","")
-        this_job_repo   = this_job_config.get("repo_key","")
-        server_name     = this_job_config.get("server_name","")
+        log_job             = {"job": job}
+        this_job_config     = job.get("config",{})
+        this_job_repo       = this_job_config.get("repo_key","")
+        server_name         = this_job_config.get("server_name","")
 
         # Wait for the lock to be free
         with self.per_server_semaphores_lock:
@@ -202,7 +202,7 @@ class ConcurrencyManager:
                 self.per_server_semaphores[server_name] = multiprocessing.Semaphore(self.per_server_limit)
 
                 # Can't log with log_concurrency_status=True, causes a deadlock
-                log(ctx, f"{this_job_repo}; Created concurrency limit semaphore for server {server_name} with limit {self.per_server_limit}", "debug")
+                log(ctx, f"Created concurrency limit semaphore for server {server_name} with limit {self.per_server_limit}", "debug", log_job)
 
         # Whether the server already had a semaphore in the dict, or one was just created for it, return the semaphore object
         return self.per_server_semaphores[server_name]
@@ -349,14 +349,22 @@ class ConcurrencyManager:
         return status
 
 
-    def release_job_slot(self, ctx: Context) -> None:
+    def release_job_slot(self, ctx: Context, job: dict) -> None:
         """Release both global and server-specific semaphores."""
 
+        # # Get job information from context
+        # this_job_trace  = ctx.job.get("trace","")
+        # this_job_config = ctx.job.get("config",{})
+        # this_job_repo   = this_job_config.get("repo_key","")
+        # server_name     = this_job_config.get("server_name","")
+
         # Get job information from context
-        this_job_trace  = ctx.job.get("trace","")
-        this_job_config = ctx.job.get("config","")
-        this_job_repo   = this_job_config.get("repo_key","")
-        server_name     = this_job_config.get("server_name","")
+        log_job             = {"job": job}
+        this_job_trace      = job.get("trace","")
+        this_job_config     = job.get("config",{})
+        this_job_repo       = this_job_config.get("repo_key","")
+        server_name         = this_job_config.get("server_name","")
+
 
         try:
 
@@ -372,7 +380,7 @@ class ConcurrencyManager:
                     if active_job_repo == this_job_repo and active_job_trace == this_job_trace:
 
                         # Release per-server semaphore
-                        server_semaphore = self._get_server_semaphore(ctx)
+                        server_semaphore = self._get_server_semaphore(ctx, job)
                         server_semaphore.release()
 
                         # Release global semaphore
@@ -387,7 +395,7 @@ class ConcurrencyManager:
             ctx.job["result"]["end_timestamp"] = int(time.time())
             ctx.job["result"]["execution_time"] = int(ctx.job["result"]["end_timestamp"] - ctx.job["result"]["start_timestamp"])
 
-            # log(ctx, f"{this_job_repo}; Released job slot", "debug")
+            # log(ctx, f"Released job slot", "debug", log_job)
 
         except ValueError as e:
-            log(ctx, f"{this_job_repo}; Error releasing job slot: {e}", "error")
+            log(ctx, f"Error releasing job slot: {e}", "error", log_job)

@@ -3,7 +3,7 @@
 
 # Import repo-converter modules
 from config import load_env, load_repos, validate_env
-from utils import cmd, concurrency_manager, convert_repos, git, logger, signal_handler, status_monitor
+from utils import concurrency_manager, fork_conversion_processes, git, logger, signal_handler, status_monitor
 from utils.context import Context
 from utils.log import log
 
@@ -35,12 +35,17 @@ def main():
     # Register signal handlers for graceful shutdown
     signal_handler.register_signal_handler(ctx)
 
-    # Create semaphores for concurrency limits
-    # Store them back in the context object
+    # Create an instance of the concurrency manager class in the context object
+    # This doesn't seem to be working as expected
     ctx.concurrency_manager = concurrency_manager.ConcurrencyManager(ctx)
 
-    # Start status monitor
+    # Start status monitor, as a thread in the main process
     status_monitor.start(ctx)
+
+    # Set the start method to spawn before creating any child processes
+    # This fails on Podman, may also fail on Docker
+    # AttributeError: Can't pickle local object 'start.<locals>.conversion_wrapper'
+    # multiprocessing.set_start_method('spawn', force=True)
 
     # Extract the env vars used repeatedly, to keep this DRY
     # These values are only used in the main function
@@ -63,7 +68,7 @@ def main():
         git.git_global_config(ctx)
 
         # Run the main application logic
-        convert_repos.start(ctx)
+        fork_conversion_processes.start(ctx)
 
         # Sleep the configured interval
         log(ctx, f"Sleeping main loop for REPO_CONVERTER_INTERVAL_SECONDS={interval} seconds", "debug")

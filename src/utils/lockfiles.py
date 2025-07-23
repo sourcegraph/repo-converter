@@ -22,11 +22,13 @@ def clear_lock_files(ctx: Context) -> bool:
     repo_key        = ctx.job.get("config", {}).get("repo_key","")
 
     if not local_repo_path:
-        log(ctx, f"{repo_key}; No local_repo_path", "error")
+        log(ctx, f"No local_repo_path", "error")
 
+    # Use a set for found_lock_files, for deduplication in case the find command finds an existing lock file
+    found_lock_files    = set()
     local_repo_path     += "/.git"
-    found_lock_files    = []
     lock_file_deleted   = False
+    command             = "git svn fetch"
 
     # Check if known frequent lock files
     list_of_command_and_lock_file_path_tuples = [
@@ -41,7 +43,7 @@ def clear_lock_files(ctx: Context) -> bool:
 
         lock_file_path = f"{local_repo_path}/{lock_file}"
         if os.path.exists(lock_file_path):
-            found_lock_files.append(lock_file_path)
+            found_lock_files.add(lock_file_path)
 
 
     # Search for any other lock files
@@ -54,7 +56,7 @@ def clear_lock_files(ctx: Context) -> bool:
         # Run the search
         for root, dirs, files in os.walk(local_repo_path):
             if file_to_search_for in files:
-                found_lock_files.append(os.path.join(root, file_to_search_for ))
+                found_lock_files.add(os.path.join(root, file_to_search_for ))
 
 
     for found_lock_file in found_lock_files:
@@ -71,7 +73,7 @@ def clear_lock_files(ctx: Context) -> bool:
             except UnicodeDecodeError as exception:
                 lock_file_content = exception
 
-            log(ctx, f"{repo_key}; Process failed to start due to a lock file in the repo at {found_lock_file}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
+            log(ctx, f"Process failed to start due to a lock file in the repo at {found_lock_file}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
             cmd_rm_lock_file = ["rm", "-f", found_lock_file]
             cmd.run_subprocess(ctx, cmd_rm_lock_file, quiet=True, name="cmd_rm_lock_file")
@@ -79,6 +81,9 @@ def clear_lock_files(ctx: Context) -> bool:
             lock_file_deleted = True
 
         except subprocess.CalledProcessError as exception:
-            log(ctx, f"{repo_key}; Failed to delete lock file at {found_lock_file} with exception: {type(exception)}, {exception.args}, {exception}", "error")
+            log(ctx, f"Failed to delete lock file at {found_lock_file} with exception: {type(exception)}, {exception.args}, {exception}", "error")
+
+        except FileNotFoundError:
+            log(ctx, f"Lock file found at {found_lock_file}, but didn't exist at the time of deletion", "error")
 
     return lock_file_deleted

@@ -333,7 +333,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
             if isinstance(repo, str):
 
                 repo_key = repo
-                # log(ctx, f"Repo {repo_key} is just a string and doesn't have any config of its own", "debug")
+                # log(ctx, f"Repo is just a string and doesn't have any config of its own", "debug")
 
             # If it's a dict, then it does define some repo-specific configs,
             # so grab these repo-specific configs,
@@ -347,7 +347,7 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
                 if repo[repo_key] is not None:
                     repo_dict = repo_dict | repo[repo_key]
 
-                # log(ctx, f"Repo {repo_key} is a dict, and has some config of its own: {repo[repo_key]}", "debug")
+                # log(ctx, f"Repo is a dict, and has some config of its own: {repo[repo_key]}", "debug")
 
 
             # If the repo's settings didn't specify a destination-git-repo-name, then assume it from repo_key

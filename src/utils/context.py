@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Context class for managing application state across modules
 
-# Note: The logger imports this module
-# Do not import the logger module; it'd create a circular import
+# Note: The log module imports this module
+# Do not import the log module; it'd create a circular import
 
 # Import Python standard modules
 from collections import defaultdict
