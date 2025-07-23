@@ -383,7 +383,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
 
             log_failure_message = f"svn info failed to connect to repo remote, reached max retries {max_retries}"
             set_job_result(ctx, "skipped", log_failure_message, False)
-            log(ctx, f"{log_failure_message}", "error")
+            log(ctx, f"{log_failure_message}", "error", {"process": svn_info})
 
             return False
 
@@ -394,7 +394,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
 
             # Log the failure
             retry_delay_seconds = random.randrange(1, 5)
-            log(ctx, f"svn info failed to connect to repo remote, retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
+            log(ctx, f"svn info failed to connect to repo remote, retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug", {"process": svn_info})
             time.sleep(retry_delay_seconds)
 
         # Repeat the loop
