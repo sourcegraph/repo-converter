@@ -30,6 +30,9 @@ def start(ctx: Context) -> None:
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
 
+        # Reset the job so it doesn't get passed to other log events
+        ctx.reset_job()
+
         # Get repo's configuration dict
         repo_config = ctx.repos[repo_key]
         server_name = repo_config["max-concurrent-conversions-server-name"]
@@ -94,3 +97,6 @@ def start(ctx: Context) -> None:
             name=f"convert_{repo_type}_{repo_key}",
             args=[ctx, job]
         ).start()
+
+        # Reset the job so it doesn't get passed to other log events
+        ctx.reset_job()

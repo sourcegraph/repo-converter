@@ -61,6 +61,9 @@ def main():
         # Log the start of the run
         log(ctx, f"Starting main loop run", "debug", log_env_vars = True)
 
+        # Reset the job so it doesn't get passed to other log events
+        ctx.reset_job()
+
         # Load the repos to convert from file, in case the file has been changed while the container is running
         load_repos.load_from_file(ctx)
 
