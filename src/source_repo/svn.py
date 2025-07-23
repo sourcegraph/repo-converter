@@ -914,10 +914,10 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     job_stats_local                         = ctx.job.get("stats",{}).get("local",{})
 
     # Get the number of commits which were already in the local git repo before the job started
-    git_commit_count_begin                  = job_stats_local.get("git_commit_count_begin")
+    git_commit_count_begin                  = job_stats_local.get("git_commit_count_begin",0)
 
     # Get the current number of commits in the local git repo after this fetch attempt (includes all retries)
-    current_git_commit_count                = current_job_stats_local_git_repo_stats.get("git_commit_count")
+    current_git_commit_count                = current_job_stats_local_git_repo_stats.get("git_commit_count",0)
 
 
     ## This try commit counts
@@ -950,8 +950,8 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     # Same logic as commit counts
 
     # Get the number of commits which were already in the local git repo before the job started
-    current_git_dir_size                = current_job_stats_local_git_repo_stats.get("git_dir_size")
-    git_dir_size_begin                  = job_stats_local.get("git_dir_size_begin")
+    current_git_dir_size                = current_job_stats_local_git_repo_stats.get("git_dir_size",0)
+    git_dir_size_begin                  = job_stats_local.get("git_dir_size_begin",0)
     git_dir_size_after_previous_try     = job_stats_local.get("git_dir_size_added_whole_job", 0) + git_dir_size_begin
 
     git_dir_size_added_this_try         = current_git_dir_size - git_dir_size_after_previous_try
