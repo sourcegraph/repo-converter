@@ -239,8 +239,12 @@ class ConcurrencyManager:
         # Fill in servers fields
         # Get the lock on per_server_semaphores_lock,
         # to ensure that the values are not changing as this is reading them
-        with self.per_server_semaphores_lock:
+        # with timeout, to prevent risk of deadlock
+        if not self.per_server_semaphores_lock.acquire(timeout=1.0):
+            log(ctx, "Could not acquire per_server_semaphores_lock in get_status(), skipping server status", "warning")
+            return status
 
+        try:
             # This indicates that the per_server_semaphores dict's items should be
             # tuples of server hostnames, and their respective semaphores
             for server_name, per_server_semaphore in self.per_server_semaphores.items():
@@ -258,11 +262,14 @@ class ConcurrencyManager:
                 # to ensure that the values are not changing as this is reading them
                 # Not sure why to get and release the same lock for each server,
                 # to ensure this function doesn't hold the lock for too long?
-                with self.active_jobs_lock:
+                # with timeout, to prevent risk of deadlock
+                if not self.active_jobs_lock.acquire(timeout=1.0):
+                    log(ctx, f"Could not acquire active_jobs_lock in get_status() for server {server_name}, skipping server status", "warning")
+                    continue
 
+                try:
                     # The active jobs dict, seems to have the server hostname as keys
                     # Copy the dict, to free up the lock ASAP
-
                     active_jobs_list = self.active_jobs[server_name]
 
                     if len(active_jobs_list) > 0:
@@ -285,10 +292,24 @@ class ConcurrencyManager:
 
                         status["active_jobs"][server_name] = status_active_jobs_list
 
+                except Exception as e:
+                    log(ctx, f"Error processing active jobs for {server_name}: {e}", "warning")
+                finally:
+                    self.active_jobs_lock.release()
+
+        except Exception as e:
+            log(ctx, f"Error in get_status() processing servers: {e}", "warning")
+        finally:
+            self.per_server_semaphores_lock.release()
+
         status["active_jobs_count"] = active_jobs_count
 
-        # Fill in details for queued jobs
-        with self.queued_jobs_lock:
+        # Fill in details for queued jobs, with timeout to prevent deadlock
+        if not self.queued_jobs_lock.acquire(timeout=1.0):
+            log(ctx, "Could not acquire queued_jobs_lock in get_status(), skipping queued jobs", "warning")
+            return status
+
+        try:
 
             for server_name in self.queued_jobs:
 
@@ -316,6 +337,11 @@ class ConcurrencyManager:
                         )
 
                     status["queued_jobs"][server_name] = status_queued_jobs_list
+
+        except Exception as e:
+            log(ctx, f"Error in get_status() processing queued jobs: {e}", "warning")
+        finally:
+            self.queued_jobs_lock.release()
 
         status["queued_jobs_count"] = queued_jobs_count
 
