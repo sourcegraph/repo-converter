@@ -914,20 +914,20 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     job_stats_local                         = ctx.job.get("stats",{}).get("local",{})
 
     # Get the number of commits which were already in the local git repo before the job started
-    git_commit_count_begin                  = job_stats_local.get("git_commit_count_begin",0)
+    git_commit_count_begin                  = int(job_stats_local.get("git_commit_count_begin",0))
 
     # Get the current number of commits in the local git repo after this fetch attempt (includes all retries)
-    current_git_commit_count                = current_job_stats_local_git_repo_stats.get("git_commit_count",0)
+    current_git_commit_count                = int(current_job_stats_local_git_repo_stats.get("git_commit_count",0))
 
 
     ## This try commit counts
     # Order is important, must be before ## Whole job commit counts,
     # because this tries to use the git_commit_count_added_whole_job from the previous retry
     # Get the count of commits from the end of the previous try
-    git_commit_count_after_previous_try     = job_stats_local.get("git_commit_count_added_whole_job", 0) + git_commit_count_begin
+    git_commit_count_after_previous_try     = int(job_stats_local.get("git_commit_count_added_whole_job", 0)) + int(git_commit_count_begin)
 
     # Calculate the number of commits added since the previous try
-    git_commit_count_added_this_try         = current_git_commit_count - git_commit_count_after_previous_try
+    git_commit_count_added_this_try         = int(current_git_commit_count) - int(git_commit_count_after_previous_try)
     # Store the number of commits from this try
     ctx.job["stats"]["local"].update({f"git_commit_count_added_try_{tries_attempted}": git_commit_count_added_this_try})
     # If no commits were added on this try, add this to the list of errors
@@ -938,7 +938,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     ## Whole job commit counts
     # Order is important, must be after ## This try commit counts
     # Calculate the number of commits added since the beginning of the job (includes all retries)
-    git_commit_count_added_whole_job    = current_git_commit_count - git_commit_count_begin
+    git_commit_count_added_whole_job    = int(current_git_commit_count) - int(git_commit_count_begin)
     # Update the number of commits added since the beginning of the job (includes all retries)
     ctx.job["stats"]["local"].update({"git_commit_count_added_whole_job": git_commit_count_added_whole_job})
     # If no commits have been added the whole job, add this to the list of errors
@@ -951,13 +951,13 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
 
     # Get the number of commits which were already in the local git repo before the job started
     current_git_dir_size                = current_job_stats_local_git_repo_stats.get("git_dir_size",0)
-    git_dir_size_begin                  = job_stats_local.get("git_dir_size_begin",0)
-    git_dir_size_after_previous_try     = job_stats_local.get("git_dir_size_added_whole_job", 0) + git_dir_size_begin
+    git_dir_size_begin                  = int(job_stats_local.get("git_dir_size_begin",0))
+    git_dir_size_after_previous_try     = int(job_stats_local.get("git_dir_size_added_whole_job", 0)) + int(git_dir_size_begin)
 
-    git_dir_size_added_this_try         = current_git_dir_size - git_dir_size_after_previous_try
+    git_dir_size_added_this_try         = int(current_git_dir_size) - int(git_dir_size_after_previous_try)
     ctx.job["stats"]["local"].update({f"git_dir_size_added_try_{tries_attempted}": git_dir_size_added_this_try})
 
-    git_dir_size_added_whole_job        = current_git_dir_size - git_dir_size_begin
+    git_dir_size_added_whole_job        = int(current_git_dir_size) - int(git_dir_size_begin)
     ctx.job["stats"]["local"].update({"git_dir_size_added_whole_job": git_dir_size_added_whole_job})
 
 
