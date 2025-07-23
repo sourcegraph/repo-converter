@@ -185,6 +185,10 @@ def _build_cli_commands(ctx: Context) -> dict:
 
     # Common git command args
     arg_git                                 = ["git", "-C", local_repo_path]
+
+    if job_config.get("disable_tls_verification"):
+        arg_git   += ["-c", "http.sslVerify=false"]
+
     arg_git_svn                             = arg_git + ["svn"]
 
     # git commands
@@ -195,8 +199,6 @@ def _build_cli_commands(ctx: Context) -> dict:
 
     # Skip TLS verification, if needed
     if job_config.get("disable_tls_verification"):
-        cmd_git_svn_fetch   += ["-c", "http.sslVerify=false"]
-        cmd_git_svn_init    += ["-c", "http.sslVerify=false"]
         cmd_svn_info        += ["--trust-server-cert"]
         cmd_svn_log         += ["--trust-server-cert"]
 
