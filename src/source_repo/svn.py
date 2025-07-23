@@ -106,6 +106,7 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
         "branches"                 : repo_config.get("branches",                 None),
         "code_host_name"           : repo_config.get("code-host-name",           None),
         "destination_git_repo_name": repo_config.get("destination-git-repo-name",None),
+        "disable_tls_verification" : repo_config.get("disable-tls-verification", False),
         # "fetch_batch_size"         : repo_config.get("fetch-batch-size",         100),
         # "fetch_job_timeout"        : repo_config.get("fetch-job-timeout",        600),
         "git_default_branch"       : repo_config.get("git-default-branch",       "trunk"),
@@ -181,6 +182,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     cmd_svn_info    = ["svn", "info"] + arg_svn_non_interactive + arg_svn_remote_repo_code_root_url
     cmd_svn_log     = ["svn", "log", "--xml", "--with-no-revprops"] + arg_svn_non_interactive + arg_svn_remote_repo_code_root_url
 
+
     # Common git command args
     arg_git                                 = ["git", "-C", local_repo_path]
     arg_git_svn                             = arg_git + ["svn"]
@@ -190,6 +192,13 @@ def _build_cli_commands(ctx: Context) -> dict:
     cmd_git_garbage_collection              = arg_git     + ["gc"]
     cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--quiet"]
     cmd_git_svn_init                        = arg_git_svn + ["init"] + arg_svn_remote_repo_code_root_url
+
+    # Skip TLS verification, if needed
+    if job_config.get("disable-tls-verification"):
+        cmd_git_svn_fetch   += ["-c", "http.sslVerify=false"]
+        cmd_git_svn_init    += ["-c", "http.sslVerify=false"]
+        cmd_svn_info        += ["--trust-server-cert"]
+        cmd_svn_log         += ["--trust-server-cert"]
 
      # Add authentication, if provided
     if username:

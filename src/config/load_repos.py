@@ -101,10 +101,12 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
 
 
     # TODO: Test these
+
     repos_to_convert_fields[ "authors-file-path"             ] = (str,           )
     repos_to_convert_fields[ "authors-prog-path"             ] = (str,           )
     repos_to_convert_fields[ "bare-clone"                    ] = (bool,          )
     repos_to_convert_fields[ "branches"                      ] = (str, list      )
+    repos_to_convert_fields[ "disable-tls-verification"      ] = (bool, str      )
     repos_to_convert_fields[ "git-ignore-file-path"          ] = (str,           )
     repos_to_convert_fields[ "log-window-size"               ] = (int,           )
     repos_to_convert_fields[ "repo-url"                      ] = (str,           ) # Required: Either repo-parent-url or repo-url
