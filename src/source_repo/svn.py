@@ -194,7 +194,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     cmd_git_svn_init                        = arg_git_svn + ["init"] + arg_svn_remote_repo_code_root_url
 
     # Skip TLS verification, if needed
-    if job_config.get("disable-tls-verification"):
+    if job_config.get("disable_tls_verification"):
         cmd_git_svn_fetch   += ["-c", "http.sslVerify=false"]
         cmd_git_svn_init    += ["-c", "http.sslVerify=false"]
         cmd_svn_info        += ["--trust-server-cert"]
