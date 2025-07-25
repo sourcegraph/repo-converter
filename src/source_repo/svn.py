@@ -172,7 +172,11 @@ def _build_cli_commands(ctx: Context) -> dict:
 
     # Skip TLS verification, if needed
     if job_config.get("disable_tls_verification"):
-        cmd_svn_info                    += ["--trust-server-cert"]
+        # cmd_svn_info                    += ["--trust-server-cert"]
+        disable_tls_verification_args   = ["--trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other"]
+        cmd_svn_info                    += disable_tls_verification_args
+        cmd_git_svn_fetch               += disable_tls_verification_args
+        cmd_git_svn_init                += disable_tls_verification_args
 
      # Add authentication, if provided
     if username:
@@ -542,7 +546,7 @@ def _configure_git_repo(ctx: Context, commands: dict) -> None:
     cmd.run_subprocess(ctx, commands["cmd_git_default_branch"], quiet=True, name="cmd_git_default_branch")
 
     if disable_tls_verification:
-        git.set_config(ctx, "http.sslVerify", "false")  
+        git.set_config(ctx, "http.sslVerify", "false")
 
 
     # Set repo configs, as a list of tuples [(git config key, git config value),]
