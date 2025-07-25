@@ -173,7 +173,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     # Skip TLS verification, if needed
     if job_config.get("disable_tls_verification"):
         # cmd_svn_info                    += ["--trust-server-cert"]
-        disable_tls_verification_args   = ["--trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other"]
+        disable_tls_verification_args   = ["--trust-server-cert-failures", "unknown-ca"]
         cmd_svn_info                    += disable_tls_verification_args
         cmd_git_svn_fetch               += disable_tls_verification_args
         cmd_git_svn_init                += disable_tls_verification_args
