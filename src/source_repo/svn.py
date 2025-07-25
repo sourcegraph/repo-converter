@@ -535,10 +535,15 @@ def _configure_git_repo(ctx: Context, commands: dict) -> None:
     git_ignore_file_path    = job_config.get("git_ignore_file_path")
     local_repo_path         = job_config.get("local_repo_path")
     repo_key                = job_config.get("repo_key")
+    disable_tls_verification = job_config.get("disable_tls_verification")
 
     # Set the default branch local to this repo, after init
     # TODO: Move to git module
     cmd.run_subprocess(ctx, commands["cmd_git_default_branch"], quiet=True, name="cmd_git_default_branch")
+
+    if disable_tls_verification:
+        git.set_config(ctx, "http.sslVerify", "false")  
+
 
     # Set repo configs, as a list of tuples [(git config key, git config value),]
     git_config_paths = [

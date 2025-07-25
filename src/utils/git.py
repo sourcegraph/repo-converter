@@ -199,6 +199,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     # Reset the default branch
     cmd.run_subprocess(ctx, cmd_git_repo_set_default_branch, quiet=True, name="cmd_git_repo_set_default_branch")
 
+
 def get_count_of_commits_in_repo(ctx: Context) -> int:
     """
     Count and return the total number of commits in the git repo, across all branches
@@ -377,6 +378,7 @@ def get_latest_commit_metadata(ctx: Context, commit_metadata_field_list: list[st
         pass
 
     return commit_metadata_return_list
+
 
 def git_global_config(ctx: Context) -> None:
     """
