@@ -20,6 +20,7 @@ services:
       - ../../../src-serve-root/:/sg/src-serve-root
       - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
       - ../../dev/toprc:/home/sourcegraph/.config/procps/toprc
+      - /etc/ssl/certs:/etc/ssl/certs:ro
 
   src-serve-git:
     container_name: src-serve-git-ubuntu.local
