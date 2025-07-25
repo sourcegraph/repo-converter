@@ -2,14 +2,6 @@
 
 ## Observability
 
-- Copy the `repo_key` attribute up, between `message` and `log_level`
-    - Then remove `f"{repo_key};` from log event calls
-
-- Only print code / container / process / etc. sections of the log events if `log_level==DEBUG`
-
-- Add PID and PPID to all debug log events
-    - Does the log function run from the same PID as the caller?
-
 - Implement canonical log events
     - Designate specific events as canonical
         - Job finish
@@ -72,7 +64,7 @@
 
 - `git svn fetch --log-window-size [100] --revision [BASE:HEAD]`
     - log-window-size
-        - For each HTTP request to the Subversion server, the number of revs to query for
+        - For each network request to the Subversion server, the number of revs to query for
     - Absolutely intolerant of invalid revs in the `--revisions` range
         - ex. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, and no changes
     - BASE
@@ -119,7 +111,7 @@
         - Description
         - Default values
         - Valid data types
-        - Required? (ex. either repo-url or repo-parent-url)
+        - Required? (ex. either url or repo-url)
         - Valid parents (global / server / repo), so child keys can be validated that they're under a valid parent key
         - Usage
         - Examples
@@ -140,6 +132,27 @@
         - Can change without restarting the container
 
 ## Process Management
+
+- Some repo sync job processes seem to get stuck / not get cleaned up
+    - This seems to hang the main loop, stopping further cycles
+    - STATUS_MONITOR_INTERVAL=60 is defined, but even the status monitor doesn't seem to be firing
+    - These events were consecutive in the logs
+    - Amp suggests its a deadlock from the status_monitor log event calling the get_status() command, added a timeout to the acquire semaphore
+    - Note the huge gaps in time
+        ```
+        {"date": "2025-07-21", "time": "10:26:34.621418", "cycle": 346, "message": "Starting main loop run", "level": "debug", "env_vars": {"BUILD_BRANCH": "marc-fix-svn-fetch-error-processing", "BUILD_COMMIT": "e98ecd4", "BUILD_COMMIT_MESSAGE": "Add git_dir_size math", "BUILD_DATE": "2025-07-21T04:33:07Z", "BUILD_TAG_OR_COMMIT_FOR_LOGS": "e98ecd4", "LOG_LEVEL": "DEBUG", "MAX_CONCURRENT_CONVERSIONS_GLOBAL": 10, "MAX_CONCURRENT_CONVERSIONS_PER_SERVER": 10, "MAX_CYCLES": 0, "MAX_RETRIES": 3, "REPOS_TO_CONVERT": "/sg/repos-to-convert.yaml", "REPO_CONVERTER_INTERVAL_SECONDS": 60, "SRC_SERVE_ROOT": "/sg/src-serve-root", "STATUS_MONITOR_INTERVAL": 60, "TRUNCATED_OUTPUT_MAX_LINES": 20, "TRUNCATED_OUTPUT_MAX_LINE_LENGTH": 200}, "code": {"caller": {"module": "__main__", "function": "main", "file": "/sg/repo-converter/src/main.py", "line": 57}}, "container": {"id": "af4e65adb143", "start_datetime": "2025-07-21 04:40:00", "uptime": "5h 46m 33s"}, "image": {"build_date": "2025-07-21T04:33:07Z", "build_tag": "e98ecd4"}, "timestamp": "1753093594.6214"}
+        {"date": "2025-07-21", "time": "10:26:34.624270", "cycle": 346, "message": "Adding secret password to set of secrets to redact", "level": "debug", "code": {"caller": {"module": "config.load_repos", "function": "check_types_recursive", "file": "/sg/repo-converter/src/config/load_repos.py", "line": 201}, "parent_1": {"module": "config.load_repos", "function": "check_types_recursive", "file": "/sg/repo-converter/src/config/load_repos.py", "line": 140}, "parent_2": {"module": "config.load_repos", "function": "check_types_recursive", "file": "/sg/repo-converter/src/config/load_repos.py", "line": 140}}, "container": {"id": "af4e65adb143", "start_datetime": "2025-07-21 04:40:00", "uptime": "5h 46m 33s"}, "image": {"build_date": "2025-07-21T04:33:07Z", "build_tag": "e98ecd4"}, "timestamp": "1753093594.6243"}
+        {"date": "2025-07-21", "time": "10:26:34.624820", "cycle": 346, "message": "Repos to convert", "level": "debug", "repos": {...
+        {"date": "2025-07-21", "time": "10:26:34.663753", "cycle": 346, "message": "repo; Starting repo conversion job", "level": "debug", "job": {"config": {"repo_key":...
+        {"date": "2025-07-22", "time": "11:13:29.010333", "cycle": 1, "message": "SIGCHLD handler reaped child PID 377 with exit code 1", "level": "debug", "job": {"config": {"bare_clone": true, "code_host_name":...
+        {"date": "2025-07-22", "time": "11:13:29.179983", "cycle": 1, "message": "Process finished", "level": "debug", "process": {"args": "git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-22", "time": "11:14:32.350086", "cycle": 1, "message": "before len(git_svn_fetch_output): 267287", "level": "debug", "job": {"config": {"bare_clone": true, "code_host_name":...
+        {"date": "2025-07-22", "time": "11:14:32.844138", "cycle": 1, "message": "repo; git svn fetch failed with errors", "level": "error", "process": {"args": "git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-22", "time": "11:14:32.864019", "cycle": 1, "message": "repo; retrying 2 of max 3 times, with a semi-random delay of 6 seconds", "level": "debug", "job": {"config": {"bare_clone": true, "code_host_name":...
+        {"date": "2025-07-22", "time": "11:14:38.883261", "cycle": 1, "message": "repo; fetching with git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-22", "time": "11:14:38.892069", "cycle": 1, "message": "Process started ", "level": "debug", "process": {"args": "git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-23", "time": "00:01:02.655521", "cycle": 345, "message": "Received signal SIGTERM (15), initiating graceful shutdown", "level": "info", "job": {"config": {"bare_clone": true, "code_host_name":...
+        ```
 
 - Make child process reap events more usable
     - Find all the data we can get from a child process reap event
@@ -207,7 +220,7 @@
     - Stack Trace During Shutdown occur because:
         - Signal handler called during JSON logging: The signal handler interrupts the logging process while it's serializing JSON data (line 51-52 in traceback)
         - Recursive signal handling: The handler tries to log while already handling a signal, creating a nested call
-        - Multiprocessing cleanup fails: The FileNotFoundError at line 100 indicates the multiprocessing manager's socket connection was already closed when trying to access self.active_jobs[server_name]
+        - Multiprocessing cleanup fails: The FileNotFoundError at line 100 indicates the multiprocessing manager's socket connection was already closed when trying to access `self.active_jobs[server_name]`
     - Root Causes
         - Non-reentrant signal handling: The signal handler isn't designed to handle recursive calls safely
         - Race condition: The multiprocessing manager shuts down before all processes finish cleanup
@@ -215,8 +228,6 @@
     - The application does eventually shut down gracefully, but the multiple signal receptions and stack traces indicate the shutdown process could be more robust.
 
 - Multiprocessing / state / zombie cleanup
-    - Implement better multiprocessing status and state tracking
-        - Multiprocessing pools?
     - Integrate subprocess methods together
         - State tracking, in ctx.child_procs = {}
         - Cleanup of zombie processes, and richer process status updates, in cmd.status_update_and_cleanup_zombie_processes()?
@@ -291,7 +302,33 @@
             - git remote add -f -t master -m master origin git://example.com/git.git/
             - git merge origin
 
+## Podman Issues
+
+- Install Podman Desktop from https://podman.io/
+    - Need command line tab completions
+
+- "too many files open in system" error message when running with podman
+    - Create a new /etc/security/limits.d/30-nofile.conf file in the Podman VM, as per instructions in https://github.com/containers/podman/issues/5526#issuecomment-1440363593
+
+- Executing external compose provider "/usr/local/bin/docker-compose". Please see podman-compose(1) for how to disable this message. <<<<
+    - Configure compose_warning_logs=true, as per https://github.com/containers/common/blob/main/docs/containers.conf.5.md
+    - Edit / create the file at `~/.config/containers/containers.conf`, and add
+        ```toml
+        [engine]
+        compose_warning_logs=false
+        ```
+
 ## Notes
+
+- Subversion seems to have two different meanings for the word "repo"
+    - Server side:
+        - Repository Root and Repository UUID
+    - User side:
+        - trunk / branches / tags directories
+    - We don't actually care about the server-side meaning of a repo
+    - All we care about is:
+        - A "base" URL where to start the paths from
+        - A list of paths from that base URL
 
 - Authors file
     - java -jar /sg/svn-migration-scripts.jar authors https://svn.apache.org/repos/asf/eagle > authors.txt

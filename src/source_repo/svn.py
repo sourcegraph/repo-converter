@@ -7,7 +7,6 @@ from utils.log import log, set_job_result
 from utils import cmd, git, lockfiles
 
 # Import Python standard modules
-from pathlib import Path
 import os
 import random
 import re
@@ -99,58 +98,35 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
 
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
     # TODO: Move this to a centralized config spec file, including setting defaults
-    processed_config = {
-        "authors_file_path"        : repo_config.get("authors-file-path",        None),
-        "authors_prog_path"        : repo_config.get("authors-prog-path",        None),
-        "bare_clone"               : repo_config.get("bare-clone",               True),
-        "branches"                 : repo_config.get("branches",                 None),
-        "code_host_name"           : repo_config.get("code-host-name",           None),
-        "destination_git_repo_name": repo_config.get("destination-git-repo-name",None),
-        "disable_tls_verification" : repo_config.get("disable-tls-verification", False),
-        # "fetch_batch_size"         : repo_config.get("fetch-batch-size",         100),
-        # "fetch_job_timeout"        : repo_config.get("fetch-job-timeout",        600),
-        "git_default_branch"       : repo_config.get("git-default-branch",       "trunk"),
-        "git_ignore_file_path"     : repo_config.get("git-ignore-file-path",     None),
-        "git_org_name"             : repo_config.get("git-org-name",             None),
-        "layout"                   : repo_config.get("svn-layout",               None),
-        "log-window-size"          : repo_config.get("log-window-size",          100 ),
-        "password"                 : repo_config.get("password",                 None),
-        "repo_url"                 : repo_config.get("repo-url",                 None),
-        "repo_parent_url"          : repo_config.get("repo-parent-url",          None),
-        "source_repo_name"         : repo_config.get("source-repo-name",         None),
-        "svn_repo_code_root"       : repo_config.get("svn-repo-code-root",       None),
-        "tags"                     : repo_config.get("tags",                     None),
-        "trunk"                    : repo_config.get("trunk",                    None),
-        "username"                 : repo_config.get("username",                 None)
+    config = {
+
+        # Source repo location
+        "repo_key"                  : repo_config.get("repo_key",                   None),
+        "repo_url"                  : repo_config.get("repo_url",                   None),
+
+        # Source repo config
+        "username"                  : repo_config.get("username",                   None),
+        "password"                  : repo_config.get("password",                   None),
+        "layout"                    : repo_config.get("layout",                     None),
+        "trunk"                     : repo_config.get("trunk",                      None),
+        "branches"                  : repo_config.get("branches",                   None),
+        "tags"                      : repo_config.get("tags",                       None),
+        "log_window_size"           : repo_config.get("log_window_size",            100 ),
+        "max_retries"               : repo_config.get("max_retries",                3   ),
+        "authors_file_path"         : repo_config.get("authors_file_path",          None),
+        "authors_prog_path"         : repo_config.get("authors_prog_path",          None),
+        "disable_tls_verification"  : repo_config.get("disable_tls_verification",   False),
+        "git_ignore_file_path"      : repo_config.get("git_ignore_file_path",       None),
+
+        # Git destination config
+        "local_repo_path"           : repo_config.get("local_repo_path",            None),
+        "bare_clone"                : repo_config.get("bare_clone",                 True),
+        "git_default_branch"        : repo_config.get("git_default_branch",         "trunk"),
     }
 
-    # Assemble the full URL to the repo code root path on the remote SVN server
-    svn_remote_repo_code_root_url = ""
-
-    if processed_config["repo_url"]:
-        svn_remote_repo_code_root_url = f'{processed_config["repo_url"]}'
-    elif processed_config["repo_parent_url"]:
-        svn_remote_repo_code_root_url = f'{processed_config["repo_parent_url"]}/{processed_config["source_repo_name"]}'
-
-    if processed_config["svn_repo_code_root"]:
-        svn_remote_repo_code_root_url += f'/{processed_config["svn_repo_code_root"]}'
-
-    processed_config["svn_remote_repo_code_root_url"] = svn_remote_repo_code_root_url
-
-    # Set local_repo_path
-    src_serve_root = ctx.env_vars["SRC_SERVE_ROOT"]
-    local_repo_path = f'{src_serve_root}/{processed_config["code_host_name"]}/{processed_config["git_org_name"]}/{processed_config["destination_git_repo_name"]}'
-    processed_config["local_repo_path"] = local_repo_path
-
-    # Read env vars into job config
-    # processed_config["log_recent_commits"]  = ctx.env_vars["LOG_RECENT_COMMITS"]
-    # processed_config["log_remaining_revs"]  = ctx.env_vars["LOG_REMAINING_REVS"]
-    processed_config["max_retries"]         = ctx.env_vars["MAX_RETRIES"]
-
-    # Get last run from local repo
-
     # Update the repo_config in the context with processed values
-    ctx.job["config"].update(processed_config)
+    config_output = {k: v for k, v in config.items() if v is not None}
+    ctx.job["config"].update(config_output)
     # log(ctx, f"Repo config", "debug")
 
 
@@ -167,8 +143,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     layout                              = job_config.get("layout")
     local_repo_path                     = job_config.get("local_repo_path")
     password                            = job_config.get("password")
-    repo_key                            = job_config.get("repo_key")
-    svn_remote_repo_code_root_url       = job_config.get("svn_remote_repo_code_root_url")
+    repo_url                            = job_config.get("repo_url")
     tags                                = job_config.get("tags")
     trunk                               = job_config.get("trunk")
     username                            = job_config.get("username")
@@ -176,70 +151,65 @@ def _build_cli_commands(ctx: Context) -> dict:
     # Common svn command args
     # Also used to convert strings to lists, to concatenate lists
     arg_svn_non_interactive             = ["--non-interactive"]
-    arg_svn_remote_repo_code_root_url   = [svn_remote_repo_code_root_url]
+    arg_repo_url                        = [repo_url]
 
     # svn commands
-    cmd_svn_info    = ["svn", "info"] + arg_svn_non_interactive + arg_svn_remote_repo_code_root_url
-    cmd_svn_log     = ["svn", "log", "--xml", "--with-no-revprops"] + arg_svn_non_interactive + arg_svn_remote_repo_code_root_url
-
+    cmd_svn_info                        = ["svn", "info"] + arg_svn_non_interactive + arg_repo_url
 
     # Common git command args
-    arg_git                                 = ["git", "-C", local_repo_path]
+    arg_git                             = ["git", "-C", local_repo_path]
 
     if job_config.get("disable_tls_verification"):
-        arg_git   += ["-c", "http.sslVerify=false"]
+        arg_git                         += ["-c", "http.sslVerify=false"]
 
-    arg_git_svn                             = arg_git + ["svn"]
+    arg_git_svn                         = arg_git + ["svn"]
 
     # git commands
-    cmd_git_default_branch                  = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
-    cmd_git_garbage_collection              = arg_git     + ["gc"]
-    cmd_git_svn_fetch                       = arg_git_svn + ["fetch", "--quiet"]
-    cmd_git_svn_init                        = arg_git_svn + ["init"] + arg_svn_remote_repo_code_root_url
+    cmd_git_default_branch              = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
+    cmd_git_garbage_collection          = arg_git     + ["gc"]
+    cmd_git_svn_fetch                   = arg_git_svn + ["fetch", "--quiet"]
+    cmd_git_svn_init                    = arg_git_svn + ["init"] + arg_repo_url
 
     # Skip TLS verification, if needed
     if job_config.get("disable_tls_verification"):
-        cmd_svn_info        += ["--trust-server-cert"]
-        cmd_svn_log         += ["--trust-server-cert"]
+        cmd_svn_info                    += ["--trust-server-cert"]
 
      # Add authentication, if provided
     if username:
-        arg_username        = ["--username", username]
-        cmd_svn_info        += arg_username
-        cmd_svn_log         += arg_username
-        cmd_git_svn_init    += arg_username
-        cmd_git_svn_fetch   += arg_username
+        arg_username                    = ["--username", username]
+        cmd_svn_info                    += arg_username
+        cmd_git_svn_init                += arg_username
+        cmd_git_svn_fetch               += arg_username
 
     if password:
-        arg_password        = ["--password", password]
-        cmd_svn_info        += arg_password
-        cmd_svn_log         += arg_password
+        arg_password                    = ["--password", password]
+        cmd_svn_info                    += arg_password
 
     # git svn commands
     if layout:
-        cmd_git_svn_init += ["--stdlayout"]
+        cmd_git_svn_init                += ["--stdlayout"]
         # Warn the user if they provided an invalid value for the layout
         if layout not in ("standard", "std"):
             log(ctx, f"Layout shortcut provided with incorrect value {layout}, only standard is supported for the shortcut, continuing assuming standard, otherwise provide --trunk, --tags, and --branches", "warning")
 
     # There can only be one trunk
     if trunk:
-        cmd_git_svn_init += ["--trunk", trunk]
+        cmd_git_svn_init                += ["--trunk", trunk]
 
     # Tags and branches can either be single strings or lists of strings
     if tags:
         if isinstance(tags, str):
-            cmd_git_svn_init += ["--tags", tags]
+            cmd_git_svn_init            += ["--tags", tags]
         if isinstance(tags, list):
             for tag in tags:
-                cmd_git_svn_init += ["--tags", tag]
+                cmd_git_svn_init        += ["--tags", tag]
 
     if branches:
         if isinstance(branches, str):
-            cmd_git_svn_init += ["--branches", branches]
+            cmd_git_svn_init            += ["--branches", branches]
         if isinstance(branches, list):
             for branch in branches:
-                cmd_git_svn_init += ["--branches", branch]
+                cmd_git_svn_init        += ["--branches", branch]
 
     return {
         'cmd_git_default_branch':           cmd_git_default_branch,
@@ -247,7 +217,6 @@ def _build_cli_commands(ctx: Context) -> dict:
         'cmd_git_svn_fetch':                cmd_git_svn_fetch,
         'cmd_git_svn_init':                 cmd_git_svn_init,
         'cmd_svn_info':                     cmd_svn_info,
-        'cmd_svn_log':                      cmd_svn_log,
     }
 
 
@@ -285,14 +254,12 @@ def _check_if_conversion_is_already_running_in_another_process(
             # Define the list of strings we're looking for in the running processes' commands
             cmd_git_svn_fetch_string            = " ".join(commands["cmd_git_svn_fetch"])
             cmd_git_garbage_collection_string   = " ".join(commands["cmd_git_garbage_collection"])
-            cmd_svn_log_string                  = " ".join(commands["cmd_svn_log"])
             process_name                        = f"convert_{repo_type}_{repo_key}"
 
             # In priority order
             concurrency_error_strings_and_messages = [
                 (cmd_git_svn_fetch_string, "Previous fetching process still"),
                 (cmd_git_garbage_collection_string, "Git garbage collection process still"),
-                (cmd_svn_log_string, "Previous svn log process still"),
                 (process_name, "Previous process still"),
                 # Potential problem: if one repo's name is a substring of another repo's name
                 (local_repo_path, "Local repo path in process"),
@@ -466,7 +433,7 @@ def _check_if_repo_exists_locally(ctx: Context, event: str = "") -> bool:
     # Get config values
     job_config          = ctx.job.get("config",{})
     job_result_action   = ctx.job.get("result",{}).get("action",{})
-    remote_url          = job_config.get("svn_remote_repo_code_root_url")
+    remote_url          = job_config.get("repo_url")
     repo_key            = job_config.get("repo_key")
 
     # Check if the svn-remote.svn.url matches the expected SVN remote repo code root URL
@@ -754,8 +721,6 @@ def _cleanup(ctx: Context, commands: dict) -> None:
     # Get dir size of converted git repo
     _get_local_git_repo_stats(ctx, "end")
 
-    # _log_recent_commits(ctx, commands)
-
     # Run git garbage collection and cleanup branches, even if repo is already up to date
     # Order is important, garbage_collection must run before cleanup_branches_and_tags
     git.garbage_collection(ctx)
@@ -776,7 +741,7 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         # Get config values
         cmd_git_svn_fetch       = commands["cmd_git_svn_fetch"]
         job_config              = ctx.job.get("config", {})
-        log_window_size         = job_config.get("log-window-size", 100)
+        log_window_size         = job_config.get("log_window_size", 100)
         max_retries             = job_config.get("max_retries")
         password                = job_config.get("password")
 
@@ -827,7 +792,7 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
             # Divide the log window size in half for the next try
             ctx.job["config"].update(
                 {
-                    "log-window-size": int(log_window_size) // 2
+                    "log_window_size": int(log_window_size) // 2
                 }
             )
 

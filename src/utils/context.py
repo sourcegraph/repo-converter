@@ -43,9 +43,6 @@ class Context:
     # Shutdown flag for graceful termination
     shutdown_flag = False
 
-    # Namespace for our metadata in git repo config files
-    git_config_namespace = "repo-converter"
-
     # Attributes we'd like to log for each process
     psutils_process_attributes_to_fetch = [
         'cmdline',
@@ -77,12 +74,11 @@ class Context:
     # Set of secrets to redact in logs
     secrets = set()
 
-    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
+    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for server_name
     # TODO: Add more field names for more repo types as needed in repos-to-convert.yaml
     url_fields = [
-        "repo-url",
-        "repo-parent-url",
-        "svn-repo-code-root",
+        "url",
+        "repo_url",
     ]
 
 

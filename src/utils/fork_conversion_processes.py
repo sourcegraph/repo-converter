@@ -35,7 +35,7 @@ def start(ctx: Context) -> None:
 
         # Get repo's configuration dict
         repo_config = ctx.repos[repo_key]
-        server_name = repo_config["max-concurrent-conversions-server-name"]
+        server_name = repo_config["server_name"]
         repo_type   = repo_config.get("type", "").lower()
 
         # Generate a job ID, to link all events for each repo conversion job together in the logs
@@ -73,7 +73,7 @@ def start(ctx: Context) -> None:
             try:
 
                 # TODO: Add other repo types as they are implemented
-                if repo_type in ("svn", "subversion"):
+                if repo_type in ("svn"):
 
                     # Start the conversion process
                     svn.convert(ctx)

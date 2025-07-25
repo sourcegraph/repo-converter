@@ -9,7 +9,6 @@ from utils.log import log
 # Import Python standard modules
 from sys import exit
 from urllib.parse import urlparse
-import json
 
 # Import third party modules
 import yaml # https://pyyaml.org/wiki/PyYAMLDocumentation
@@ -88,45 +87,32 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
 
 
     # TODO: Implement these
-    repos_to_convert_fields[ "max-concurrent-conversions"    ] = (int,           )
-    repos_to_convert_fields[ "fetch-interval"                ] = (int,           )
-    repos_to_convert_fields[ "commits-to-skip"               ] = (str, list      )
+    # repos_to_convert_fields[ "max_concurrent_conversions"   ] = (int,           )
+    # repos_to_convert_fields[ "fetch_interval"               ] = (int,           )
+    # repos_to_convert_fields[ "commits_to_skip"              ] = (str, list      )
+    # repos_to_convert_fields[ "default_branch_only"          ] = (bool,          )
+    # repos_to_convert_fields[ "git_clone_command_args"       ] = (str,           )
+    # repos_to_convert_fields[ "git_ssh_command_args"         ] = (str,           )
+    # repos_to_convert_fields[ "tfvc_collection"              ] = (str,           )
+    # repos_to_convert_fields[ "token"                        ] = (str, "secret"  )
+    # repos_to_convert_fields[ "global"                       ] = (dict,          ) # Would like to validate dicts as well
 
-    repos_to_convert_fields[ "default-branch-only"           ] = (bool,          )
-    repos_to_convert_fields[ "git-clone-command-args"        ] = (str,           )
-    repos_to_convert_fields[ "git-ssh-command-args"          ] = (str,           )
-    repos_to_convert_fields[ "tfvc-collection"               ] = (str,           )
-    repos_to_convert_fields[ "token"                         ] = (str, "secret"  )
-    # repos_to_convert_fields[ "global"                        ] = (dict,          ) # Would like to validate dicts as well
-
-
-    # TODO: Test these
-
-    repos_to_convert_fields[ "authors-file-path"             ] = (str,           )
-    repos_to_convert_fields[ "authors-prog-path"             ] = (str,           )
-    repos_to_convert_fields[ "bare-clone"                    ] = (bool,          )
-    repos_to_convert_fields[ "branches"                      ] = (str, list      )
-    repos_to_convert_fields[ "disable-tls-verification"      ] = (bool, str      )
-    repos_to_convert_fields[ "git-ignore-file-path"          ] = (str,           )
-    repos_to_convert_fields[ "log-window-size"               ] = (int,           )
-    repos_to_convert_fields[ "repo-url"                      ] = (str,           ) # Required: Either repo-parent-url or repo-url
-    repos_to_convert_fields[ "source-repo-name"              ] = (str,           )
-    repos_to_convert_fields[ "svn-layout"                    ] = (str, list      )
-    repos_to_convert_fields[ "tags"                          ] = (str, list      )
-    repos_to_convert_fields[ "trunk"                         ] = (str,           )
-
-    # Implemented and tested
-    repos_to_convert_fields[ "code-host-name"                ] = (str,           ) # Recommended but not strictly required
-    repos_to_convert_fields[ "fetch-batch-size"              ] = (int,           )
-    repos_to_convert_fields[ "git-default-branch"            ] = (str,           )
-    repos_to_convert_fields[ "git-org-name"                  ] = (str,           ) # Recommended but not strictly required
-    repos_to_convert_fields[ "destination-git-repo-name"     ] = (str,           ) # Recommended but not strictly required
-    repos_to_convert_fields[ "password"                      ] = (str, "secret"  )
-    repos_to_convert_fields[ "repo-parent-url"               ] = (str,           ) # Required: Either repo-parent-url or repo-url
-    repos_to_convert_fields[ "repos"                         ] = (str, list      )
-    repos_to_convert_fields[ "svn-repo-code-root"            ] = (str,           )
-    repos_to_convert_fields[ "type"                          ] = (str,           )
-    repos_to_convert_fields[ "username"                      ] = (str,           )
+    repos_to_convert_fields[ "type"                         ] = (str,           )
+    repos_to_convert_fields[ "url"                          ] = (str,           ) # Required: Either source-base-url or source_repo_full_url
+    repos_to_convert_fields[ "repos"                        ] = (str, list      )
+    repos_to_convert_fields[ "username"                     ] = (str,           )
+    repos_to_convert_fields[ "password"                     ] = (str, "secret"  )
+    repos_to_convert_fields[ "layout"                       ] = (str, list      )
+    repos_to_convert_fields[ "trunk"                        ] = (str,           )
+    repos_to_convert_fields[ "branches"                     ] = (str, list      )
+    repos_to_convert_fields[ "tags"                         ] = (str, list      )
+    repos_to_convert_fields[ "log_window_size"              ] = (int,           )
+    repos_to_convert_fields[ "authors_file_path"            ] = (str,           )
+    repos_to_convert_fields[ "authors_prog_path"            ] = (str,           )
+    repos_to_convert_fields[ "disable_tls_verification"     ] = (bool, str      )
+    repos_to_convert_fields[ "git_ignore_file_path"         ] = (str,           )
+    repos_to_convert_fields[ "bare_clone"                   ] = (bool,          )
+    repos_to_convert_fields[ "git_default_branch"           ] = (str,           )
 
 
     if isinstance(input_value, dict):
@@ -234,9 +220,9 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
     # env_credentials = ctx.env_vars["CREDENTIALS"]
 
     source_repo_types = (
-        "git",
+        # "git",
         "svn",
-        "tfvc",
+        # "tfvc",
     )
     repos_output = {}
     repos_global_config = {}
@@ -257,20 +243,30 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
             log(ctx, f"Server {server_key} in {repos_to_convert_file_path} is not a dict, skipping", "error")
             continue
 
-        # If the type key is missing, error, and skip the server
-        if (
-            "type" not in server_config_dict.keys() or
-            len(server_config_dict["type"]) == 0
-        ):
+
+        # If the type key is missing, try to read it from globals
+        # If it's still missing, then error, and skip the server
+        if "type" in server_config_dict.keys() and len(server_config_dict["type"]) > 0:
+            repo_type = server_config_dict["type"]
+
+        elif "type" in repos_global_config.keys() and len(repos_global_config["type"]) > 0:
+            repo_type = repos_global_config["type"]
+
+        else:
             log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has no type field, skipping", "error")
             continue
 
-        repo_type = server_config_dict["type"]
 
         # If the type key isn't a supported type, error, and skip the server
         if repo_type.lower() not in source_repo_types:
             log(ctx, f"Server {server_key} in {repos_to_convert_file_path} has type: {repo_type}, which is not in the set of supported repo types: {source_repo_types}, skipping", "error")
             continue
+
+
+        # If the servers's settings didn't specify a url, then assume it from server_key
+        if "url" not in server_config_dict.keys():
+            server_config_dict["url"] = server_key
+
 
         # If the repos key is missing, or has no values, error, and skip the server
         if (
@@ -352,16 +348,33 @@ def reformat_repos_dict(ctx: Context, repos_input: dict) -> dict:
                 # log(ctx, f"Repo is a dict, and has some config of its own: {repo[repo_key]}", "debug")
 
 
-            # If the repo's settings didn't specify a destination-git-repo-name, then assume it from repo_key
-            if "destination-git-repo-name" not in repo_dict.keys():
-                repo_dict["destination-git-repo-name"] = repo_key
+            # If the repo's settings didn't specify a source-path, then assume it from repo_key
+            if "repo" not in repo_dict.keys():
+                repo_dict["repo"] = repo_key
 
-            # If the repo's settings didn't specify a source-repo-name, then assume it from repo_key
-            if "source-repo-name" not in repo_dict.keys():
-                repo_dict["source-repo-name"] = repo_key
+            ## Assemble other repo configs
+
+            # Assemble the source URL to the repo on the SVN server
+            url                     = repo_dict.pop("url").strip('/')
+            repo                    = repo_dict.pop("repo").strip('/')
+            repo_url                = f"{url}/{repo}"
+            repo_dict["repo_url"]   = repo_url
+
+            # Set repo_key
+            repo_url_parsed         = urlparse(repo_url)
+            repo_key                = f"{repo_url_parsed.hostname}{repo_url_parsed.path}"
+            repo_dict["repo_key"]   = repo_key
+
+            # Set local_repo_path
+            src_serve_root          = ctx.env_vars["SRC_SERVE_ROOT"]
+            local_repo_path         = f"{src_serve_root}/{repo_key}"
+            repo_dict["local_repo_path"]    = local_repo_path
+
+            # Read env vars into repo config
+            repo_dict["max_retries"]        = ctx.env_vars["MAX_RETRIES"]
 
             # Save the repo to the return dict
-            repos_output[repo_key] = repo_dict
+            repos_output[repo_key]  = repo_dict
 
 
     # Sort the repos in the dict, and the keys within each repo
@@ -377,21 +390,21 @@ def sanitize_inputs(ctx: Context, repos_input: dict) -> dict:
     TODO: Sanitize inputs here
     """
 
-    # Trim trailing '/' from URLs
-    url_fields = ctx.url_fields
+    # # Trim trailing '/' from URLs
+    # url_fields = ctx.url_fields
 
-    for repo in repos_input:
+    # for repo in repos_input:
 
-        # Loop through the list
-        for url_field in url_fields:
+    #     # Loop through the list
+    #     for url_field in url_fields:
 
-            repo_url = str(repos_input[repo].get(url_field, ""))
+    #         source_repo_full_url = str(repos_input[repo].get(url_field, ""))
 
-            # If this key has a value
-            if repo_url:
+    #         # If this key has a value
+    #         if source_repo_full_url:
 
-                # Strip starting and trailing '/'
-                repos_input[repo][url_field] = repo_url.strip('/')
+    #             # Strip starting and trailing '/'
+    #             repos_input[repo][url_field] = source_repo_full_url.strip('/')
 
     return repos_input
 
@@ -405,43 +418,41 @@ def validate_inputs(ctx: Context, repos_input: dict) -> dict:
     integers >= 0
     """
 
-    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for max_concurrent_conversions_server_name
+    # List of fields, in priority order, which may have a URL, to try and extract a hostname from for server_name
     url_fields = ctx.url_fields
 
     for repo in repos_input:
 
-        ## Ensure each repo has a "max_concurrent_conversions_server_name" attribute, for the purposes of enforcing MAX_CONCURRENT_CONVERSIONS_PER_SERVER; does not need to be a valid address for network connections
-        max_concurrent_conversions_server_name = ""
+        ## Ensure each repo has a "server_name" attribute, for the purposes of enforcing MAX_CONCURRENT_CONVERSIONS_PER_SERVER; does not need to be a valid address for network connections
+        server_name = ""
 
         # Loop through the list
         for url_field in url_fields:
 
-            repo_url = repos_input[repo].get(url_field, "")
+            url = repos_input[repo].get(url_field, "")
 
-            if repo_url:
+            if url:
 
                 try:
-                    parsed = urlparse(repo_url)
-                    if parsed.hostname:
-                        max_concurrent_conversions_server_name = parsed.hostname
+                    hostname = urlparse(url).hostname
+                    if hostname:
+                        server_name = hostname
                         break
 
                 except Exception as e:
-                    log(ctx, f"urlparse failed to parse URL {repo_url}: {e}", "warning")
+                    log(ctx, f"urlparse failed to parse URL {url}: {e}", "warning")
 
         # Fallback to code-host-name if provided
-        if not max_concurrent_conversions_server_name:
-            max_concurrent_conversions_server_name = repos_input[repo].get("code-host-name", "")
+        if not server_name:
+            server_name = repos_input[repo].get("code_host", "")
 
         # Last resort: use "unknown"
-        if not max_concurrent_conversions_server_name:
-            max_concurrent_conversions_server_name = "unknown"
+        if not server_name:
+            server_name = "unknown"
             log(ctx, f"Could not determine server host for repo config: {repo}", "warning")
 
         # Set the value
-        repos_input[repo]["max-concurrent-conversions-server-name"] = max_concurrent_conversions_server_name
-
-
+        repos_input[repo]["server_name"] = server_name
 
     return repos_input
 
