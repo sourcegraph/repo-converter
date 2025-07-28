@@ -48,9 +48,9 @@ def get_pid_uptime(pid: int = 1) -> Optional[timedelta]:
     return pid_uptime
 
 
-def get_psutil_metrics(ctx: Context, process: psutil.Process) -> Dict:
+def _get_process_metadata(ctx: Context, process: psutil.Process) -> Dict:
     """
-    Reformat data returned by psutils.as_dict()
+    Read and reformat the data returned by psutils.as_dict()
     """
 
     psutils_metrics_dict = {}
@@ -219,12 +219,13 @@ def log_process_status(
 
 
 def run_subprocess(
-        ctx: Context,
-        args: Union[str, List[str]],
-        password: Optional[str] = None,
-        quiet: Optional[bool] = False,
-        name: Optional[str] = None,
-        ignore_stderr: bool = False,
+        ctx:        Context,
+        args:       Union[str, List[str]],
+        password:   Optional[str]           = "",
+        quiet:      Optional[bool]          = False,
+        name:       Optional[str]           = "",
+        stderr:     Optional[str]           = "stdout",
+        expect:     Union[tuple[str,str], List[tuple[str,str]], None] = "",
     ) -> Dict[str, Any]:
     """
     Middleware function to
@@ -237,10 +238,15 @@ def run_subprocess(
     Args:
         ctx: Context object
         args: Command arguments as string or list
-        password: Optional password for stdin
-        echo_password: Whether to echo password
+        password: Password to be prefilled into stdin stream buffer
         quiet: Suppress non-error logging
-        Name: Optional command name to make logging events easier to find
+        name: Optional command name to make logging events easier to find
+        stderr:
+            "stdout" (default), stderr stream is redirected to stdout stream
+            "ignore", stderr stream is redirected to /dev/null
+            "stderr", stderr stream is stored at return_dict["stderr"]
+        expect:
+            (prompt:str, response:str), if prompt is found in the stdout stream, then insert response into stdin stream
 
     Notes:
         Use log_process_status() in this function, to format and print process stats
@@ -271,11 +277,22 @@ def run_subprocess(
     subprocess_span = str(uuid.uuid4())[:8]
     subprocess_dict["span"] = subprocess_span
 
-    # Redirect stderr to stdout for simplicity
-    stderr = subprocess.STDOUT
-    # Unless we want to ignore it
-    if ignore_stderr:
-        stderr=subprocess.DEVNULL
+    ## Handle stderr
+    if stderr is "ignore":
+        stderr = subprocess.DEVNULL
+    # If we want to separate it out into its own output
+    elif stderr is "stderr":
+        stderr = subprocess.PIPE
+    else:
+        # Redirect stderr to stdout for simplicity
+        stderr = subprocess.STDOUT
+
+    ## Handle text vs byte mode
+    # Byte mode is needed for stdout / stdin interaction
+    # TODO: Handle all stdout as byte mode?
+    text = True
+    if expect:
+        text = None
 
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet
@@ -291,12 +308,14 @@ def run_subprocess(
     try:
 
         # Create the process object and start it
+        # Do not raise an exception on process failure
+        # TODO: Disable text = True, and handle stdin / out / err pipes as byte streams, so that stdout can be checked without waiting for a newline
         sub_process = psutil.Popen(
-            args            = args,
-            stderr          = stderr,
-            stdin           = subprocess.PIPE,
-            stdout          = subprocess.PIPE,
-            text            = True,
+            args    = args,
+            stderr  = stderr,
+            stdin   = subprocess.PIPE,
+            stdout  = subprocess.PIPE,
+            text    = text,
         )
 
         subprocess_dict["status_message"] = "started"
@@ -315,7 +334,7 @@ def run_subprocess(
             # I really wish psutils had a way around this, to gather the data as it's created in .Popen
             with sub_process.oneshot():
 
-                subprocess_psutils_dict = get_psutil_metrics(ctx, sub_process)
+                subprocess_psutils_dict = _get_process_metadata(ctx, sub_process)
 
             # psutil doesn't have a process group ID attribute, need to get it from the OS
             subprocess_dict["pgid"] = os.getpgid(subprocess_dict["pid"])
@@ -335,23 +354,44 @@ def run_subprocess(
         if not quiet:
             log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
-        # If password is provided to this function,
-        # feed the password string into the subprocess' stdin pipe;
-        # password could be an empty or arbitrary string as a workaround if a process needed it
-        # communicate() also waits for the process to finish
-        output = sub_process.communicate(password)
+        output = []
+
+        if expect:
+
+            # TODO: Use read1() to read the stdout byte stream, to check its contents for the svn prompt to trust the cert
+            # early_output = sub_process.stdout.read1().decode('utf-8')
+
+
+            pass
+
+        elif password:
+
+            # If password is provided to this function,
+            # feed the password string into the subprocess' stdin pipe;
+            # password could be an empty or arbitrary string as a workaround if a process needed it
+            # communicate() also waits for the process to finish
+            output = sub_process.communicate(password)
+
+        else:
+            output = sub_process.communicate()
+
 
         # Get the process' stdout and/or stderr
         # Have to do this inside the try / except block, in case the output isn't valid
         subprocess_dict["output"] = output[0].splitlines()
         subprocess_dict["output_line_count"] = len(subprocess_dict["output"])
-
         # Truncate the output for logging
         subprocess_dict["truncated_output"] = truncate_output(ctx, subprocess_dict["output"])
+
+        if stderr is "stderr":
+            subprocess_dict["stderr"] = output[1].splitlines()
+            subprocess_dict["stderr_line_count"] = len(subprocess_dict["stderr"])
+            subprocess_dict["truncated_stderr"] = truncate_output(ctx, subprocess_dict["stderr"])
 
         # If the process exited successfully, set the status_message now
         # Have to do this inside the try / except block, in case the sub_process object doesn't have a .returncode attribute
         subprocess_dict["return_code"] = sub_process.returncode
+
         if subprocess_dict["return_code"] == 0:
 
             subprocess_dict["status_message"] = "finished"
@@ -478,7 +518,7 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             process_to_wait_for = psutil.Process(process_pid_to_wait_for)
             with process_to_wait_for.oneshot():
 
-                subprocess_psutils_dict = get_psutil_metrics(ctx, process_to_wait_for)
+                subprocess_psutils_dict = _get_process_metadata(ctx, process_to_wait_for)
 
                 # This rarely fires, ex. if cleaning up processes at the beginning of a script execution and the process finished during the interval
                 if process_to_wait_for.status() == psutil.STATUS_ZOMBIE:
@@ -507,8 +547,12 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
                 # command
                 # url
                 # process.id
+                # latest line of stdout / stderr
 
             subprocess_dict["status_message"] = "still running"
+
+            # Get latest output
+            subprocess_dict["status_message_reason"] = f""
 
         except Exception as exception:
             subprocess_dict["status_message"] = "raised an exception while waiting"

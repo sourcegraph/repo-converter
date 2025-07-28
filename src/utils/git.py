@@ -210,7 +210,7 @@ def get_count_of_commits_in_repo(ctx: Context) -> int:
         return
 
     cmd_git_count_commits = ["git", "-C", local_repo_path, "rev-list", "--all", "--count"]
-    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits", ignore_stderr=True)
+    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits", stderr="ignore")
 
     if cmd_git_count_commits_result["return_code"] == 0:
         count_commits = ''.join(cmd_git_count_commits_result["output"]) if isinstance(cmd_git_count_commits_result["output"], list) else cmd_git_count_commits_result["output"]

@@ -336,11 +336,25 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     repo_key            = job_config.get("repo_key")
     cmd_svn_info        = commands["cmd_svn_info"]
     tries_attempted     = 1
+    disable_tls_verification = job_config.get("disable_tls_verification")
+    expect              = []
+
+    if disable_tls_verification:
+        expect.append(
+            ("(R)eject, accept (t)emporarily or accept (p)ermanently?", "p")
+        )
 
     while True:
 
         # Run the command, capture the output
-        svn_info = cmd.run_subprocess(ctx, cmd_svn_info, password, quiet=True, name=f"svn_info_{tries_attempted}")
+        svn_info = cmd.run_subprocess(
+            ctx,
+            cmd_svn_info,
+            password,
+            quiet=True,
+            name=f"svn_info_{tries_attempted}",
+            expect=expect
+        )
 
         # If the command exited successfully, save the process output dict to the job context
         if svn_info["return_code"] == 0:
@@ -616,7 +630,7 @@ def _get_local_git_repo_stats(ctx: Context, event: str = "") -> dict:
 
     # du approach
     cmd_du_repo_size                = ["du", "-s", local_repo_path]
-    cmd_du_repo_size_result         = cmd.run_subprocess(ctx, cmd_du_repo_size, quiet=True, name="cmd_du_repo_size", ignore_stderr=True)
+    cmd_du_repo_size_result         = cmd.run_subprocess(ctx, cmd_du_repo_size, quiet=True, name="cmd_du_repo_size", stderr="ignore")
     cmd_du_repo_size_return_code    = cmd_du_repo_size_result.get("return_code")
     cmd_du_repo_size_output         = cmd_du_repo_size_result.get("output")
     len_cmd_du_repo_size_output     = len(cmd_du_repo_size_output)
