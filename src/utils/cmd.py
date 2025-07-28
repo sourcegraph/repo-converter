@@ -278,10 +278,10 @@ def run_subprocess(
     subprocess_dict["span"] = subprocess_span
 
     ## Handle stderr
-    if stderr is "ignore":
+    if "ignore" in stderr:
         stderr = subprocess.DEVNULL
     # If we want to separate it out into its own output
-    elif stderr is "stderr":
+    elif "stderr" in stderr:
         stderr = subprocess.PIPE
     else:
         # Redirect stderr to stdout for simplicity
@@ -291,8 +291,8 @@ def run_subprocess(
     # Byte mode is needed for stdout / stdin interaction
     # TODO: Handle all stdout as byte mode?
     text = True
-    if expect:
-        text = None
+    # if expect:
+    #     text = True  # Keep text mode for SVN prompts
 
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet
@@ -356,24 +356,38 @@ def run_subprocess(
 
         output = []
 
-        if expect:
+        # if expect:
 
-            # TODO: Use read1() to read the stdout byte stream, to check its contents for the svn prompt to trust the cert
-            # early_output = sub_process.stdout.read1().decode('utf-8')
+        #     test_process = subprocess.Popen()
+        #     test_process.poll()
 
 
-            pass
+        #     while not sub_process.poll():
 
-        elif password:
+        #         early_output = sub_process.stdout.readline()
+
+        #         if early_output:
+
+        #             output += early_output
+
+        #             for prompt, response in expect:
+
+        #                 if prompt in early_output:
+
+        #                     sub_process.stdin.write(f"{response}\n")
+        #                     sub_process.stdin.flush()
+        #                     break
+
+        if password:
 
             # If password is provided to this function,
             # feed the password string into the subprocess' stdin pipe;
             # password could be an empty or arbitrary string as a workaround if a process needed it
             # communicate() also waits for the process to finish
-            output = sub_process.communicate(password)
+            output += sub_process.communicate(password)
 
         else:
-            output = sub_process.communicate()
+            output += sub_process.communicate()
 
 
         # Get the process' stdout and/or stderr
@@ -383,7 +397,7 @@ def run_subprocess(
         # Truncate the output for logging
         subprocess_dict["truncated_output"] = truncate_output(ctx, subprocess_dict["output"])
 
-        if stderr is "stderr":
+        if "stderr" in stderr:
             subprocess_dict["stderr"] = output[1].splitlines()
             subprocess_dict["stderr_line_count"] = len(subprocess_dict["stderr"])
             subprocess_dict["truncated_stderr"] = truncate_output(ctx, subprocess_dict["stderr"])

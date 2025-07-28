@@ -175,8 +175,8 @@ def _build_cli_commands(ctx: Context) -> dict:
         # disable_tls_verification_args   = ["--trust-server-cert-failures", "unknown-ca"]
         disable_tls_verification_args   = ["--trust-server-cert"]
         cmd_svn_info                    += disable_tls_verification_args
-        cmd_git_svn_fetch               += disable_tls_verification_args
-        cmd_git_svn_init                += disable_tls_verification_args
+        # cmd_git_svn_fetch               += disable_tls_verification_args
+        # cmd_git_svn_init                += disable_tls_verification_args
 
      # Add authentication, if provided
     if username:
@@ -339,10 +339,15 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     disable_tls_verification = job_config.get("disable_tls_verification")
     expect              = []
 
-    if disable_tls_verification:
-        expect.append(
-            ("(R)eject, accept (t)emporarily or accept (p)ermanently?", "p")
-        )
+    # This prompt only be required very rarely, ex. once per:
+        # Deployment of the repo-converter container, ex. the ~/.subversion/auth/svn.ssl.server directory inside the container is empty, as the root volume is not retained
+        # New Subversion server
+        # New TLS cert on a server
+    # However, it needs to be checked for on every job
+    # if disable_tls_verification:
+    #     expect.append(
+    #         ("(R)eject, accept (t)emporarily or accept (p)ermanently?", "p")
+    #     )
 
     while True:
 
@@ -351,9 +356,9 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
             ctx,
             cmd_svn_info,
             password,
-            quiet=True,
-            name=f"svn_info_{tries_attempted}",
-            expect=expect
+            quiet           = True,
+            name            = f"svn_info_{tries_attempted}",
+            # expect          = expect
         )
 
         # If the command exited successfully, save the process output dict to the job context
