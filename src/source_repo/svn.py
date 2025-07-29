@@ -375,8 +375,13 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
             expect          = expect
         )
 
+        svn_output                  = svn_info["output"]
+        errors                      = _find_errors_in_svn_output(ctx, svn_output)
+        return_code                 = svn_info["return_code"]
+        ctx.job["result"]["errors"] = errors
+
         # If the command exited successfully, save the process output dict to the job context
-        if svn_info["return_code"] == 0:
+        if return_code == 0 and not errors:
 
             if tries_attempted > 1:
                 log(ctx, f"Successfully connected to repo remote after {tries_attempted} tries", "warning")
@@ -912,7 +917,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     git_svn_fetch_output = _remove_non_errors_from_git_svn_fetch_output(ctx, git_svn_fetch_output)
 
     # Search the remaining lines of the process output for known errors
-    errors_from_output = _find_errors_in_git_svn_fetch_output(ctx, git_svn_fetch_output)
+    errors_from_output = _find_errors_in_svn_output(ctx, git_svn_fetch_output)
     if errors_from_output:
         errors += errors_from_output
 
@@ -1116,13 +1121,13 @@ def _remove_non_errors_from_git_svn_fetch_output(ctx: Context, git_svn_fetch_out
     return git_svn_fetch_output
 
 
-def _find_errors_in_git_svn_fetch_output(ctx: Context, git_svn_fetch_output: list = []) -> list:
+def _find_errors_in_svn_output(ctx: Context, svn_output: list = []) -> list:
     """
     Check for expected error messages
-    Keep this list tidy, as execution time is len(error_messages) x len(git_svn_fetch_result_output)
+    Keep this list tidy, as execution time is len(error_messages) x len(svn_output)
     """
 
-    if not git_svn_fetch_output:
+    if not svn_output:
         return []
 
     errors = []
@@ -1134,12 +1139,16 @@ def _find_errors_in_git_svn_fetch_output(ctx: Context, git_svn_fetch_output: lis
         "Timeout": [
             "Connection timed out",
         ],
-        "Connectivity issue": [
+        "SSL/TLS": [
+            "SSL handshake failed",
+            "Server SSL certificate verification failed",
+        ],
+        "Connectivity": [
             "Connection refused",
             "Can't create session",
+            "Unable to connect to a repository",
             "SVN connection failed somewhere",
             "Invalid repository URL",
-            "SSL handshake failed",
             "Repository not found",
         ],
         "auth": [
@@ -1199,7 +1208,7 @@ def _find_errors_in_git_svn_fetch_output(ctx: Context, git_svn_fetch_output: lis
 
     # Single pass through output lines - O(lines x patterns)
     matched_lines = set()  # Track matched lines to avoid duplicates
-    for line in git_svn_fetch_output:
+    for line in svn_output:
         if line in matched_lines:
             continue
 
@@ -1210,7 +1219,7 @@ def _find_errors_in_git_svn_fetch_output(ctx: Context, git_svn_fetch_output: lis
                 break  # Stop checking other patterns for this line
 
     # Remove the matched lines from the output
-    remaining_output = [line for line in git_svn_fetch_output if line not in matched_lines]
+    remaining_output = [line for line in svn_output if line not in matched_lines]
 
     if remaining_output:
         ctx.job["result"]["remaining_output"] = remaining_output
