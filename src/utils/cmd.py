@@ -279,13 +279,13 @@ def run_subprocess(
 
     ## Handle stderr
     if "ignore" in stderr:
-        stderr = subprocess.DEVNULL
+        stderr_int = subprocess.DEVNULL
     # If we want to separate it out into its own output
     elif "stderr" in stderr:
-        stderr = subprocess.PIPE
+        stderr_int = subprocess.PIPE
     else:
         # Redirect stderr to stdout for simplicity
-        stderr = subprocess.STDOUT
+        stderr_int = subprocess.STDOUT
 
     ## Handle text vs byte mode
     # Byte mode is needed for stdout / stdin interaction
@@ -312,7 +312,7 @@ def run_subprocess(
         # TODO: Disable text = True, and handle stdin / out / err pipes as byte streams, so that stdout can be checked without waiting for a newline
         sub_process = psutil.Popen(
             args    = args,
-            stderr  = stderr,
+            stderr  = stderr_int,
             stdin   = subprocess.PIPE,
             stdout  = subprocess.PIPE,
             text    = text,
