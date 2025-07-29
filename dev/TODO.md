@@ -1,5 +1,9 @@
 # TODO
 
+## Usability
+
+- Update examples
+
 ## Observability
 
 - Implement canonical log events
@@ -133,6 +137,11 @@
 
 ## Process Management
 
+- Look into children = sub_process.children(recursive=True) to help track child procs / grand child / great grand child, etc.
+
+- Change all commands to strings, and use shlex.split(args_string) to split them for cmd.run_subprocess()?
+    - https://realpython.com/python-subprocess/#processes-and-subprocesses:~:text=use%20the%20shlex-,module,-to%20help%20you
+
 - Some repo sync job processes seem to get stuck / not get cleaned up
     - This seems to hang the main loop, stopping further cycles
     - STATUS_MONITOR_INTERVAL=60 is defined, but even the status monitor doesn't seem to be firing
@@ -166,6 +175,7 @@
     - If no, then don't implement a long-running process timeout
     - If yes, then find a way to determine if long-running processes are actively working
         - If the `/usr/bin/perl /usr/lib/git-core/git-svn fetch` command has been sitting flat at 0% CPU for an hour, then it may be safe to kill
+    - https://realpython.com/python-subprocess/#timeoutexpired-for-processes-that-take-too-long
 
 - SVN commands hanging
     - Add a timeout in run_subprocess() for hanging svn info ~~and svn log~~ commands, if data isn't transferring

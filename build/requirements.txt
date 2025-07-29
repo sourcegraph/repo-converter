@@ -1,6 +1,5 @@
 GitPython
 PyYAML
-pexpect
 psutil
 python-dotenv
 structlog

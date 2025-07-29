@@ -8,7 +8,6 @@ from utils.context import Context
 from utils.log import log
 
 # Import Python standard modules
-import json
 import sysconfig
 import time
 
@@ -55,12 +54,6 @@ def main():
 
     # Print Python config, including compiler options
     sysconfig_get_config_vars = sysconfig.get_config_vars()
-    # sysconfig_get_config_vars = json.dumps(
-    #     sysconfig_get_config_vars,
-    #     default     = str,
-    #     sort_keys   = True,
-    # )
-
     log(ctx, f"Python sysconfig.get_config_vars", "debug", {"sysconfig_get_config_vars": sysconfig_get_config_vars})
 
 
