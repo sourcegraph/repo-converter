@@ -260,7 +260,7 @@ def run_pexpect(
         # child.logfile_read  = sys.stdout.buffer
 
         match               = child.expect_exact(
-                                            pattern = [expect],
+                                            pattern_list = [expect],
                                             timeout = timeout
                                             )
 
