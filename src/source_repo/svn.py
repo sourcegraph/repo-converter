@@ -216,13 +216,13 @@ def _build_cli_commands(ctx: Context) -> dict:
      # Add authentication, if provided
     if username:
         arg_username                    = ["--username", username]
-        cmd_svn_info                    += arg_username
+        # cmd_svn_info                    += arg_username
         cmd_git_svn_init                += arg_username
         cmd_git_svn_fetch               += arg_username
 
     if password:
         arg_password                    = ["--password", password]
-        cmd_svn_info                    += arg_password
+        # cmd_svn_info                    += arg_password
 
 
     ## git svn commands
