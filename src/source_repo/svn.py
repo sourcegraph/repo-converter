@@ -7,6 +7,7 @@ from utils.log import log, set_job_result
 from utils import cmd, git, lockfiles
 
 # Import Python standard modules
+from datetime import datetime
 import os
 import random
 import re
@@ -14,6 +15,12 @@ import shutil
 import time
 
 # Import third party modules
+
+# Install pysvn from https://pysvn.sourceforge.io
+    # apt-get install python3-svn
+    # Not from pip; pip has an entirely unrelated package
+    # PITA to install on macOS https://sourceforge.net/p/pysvn/tickets/21/
+    # but runs fine inside of Podman as it uses an Ubuntu VM
 import pysvn
 
 # dicts for:
@@ -29,52 +36,6 @@ import pysvn
     # Fewest svn remote commands
     # Easiest reading / maintenance
     # Fewest local commands
-
-
-def _initialize_pysvn(ctx):
-    """
-    Create and return the pysvn.client
-    """
-
-    job_config                  = ctx.job.get("config",{})
-    disable_tls_verification    = job_config.get("disable_tls_verification")
-    username                    = job_config.get("username")
-    password                    = job_config.get("password")
-
-    pysvn_client = pysvn.Client()
-
-    if disable_tls_verification:
-
-        def pysvn_callback_ssl_server_trust_prompt(trust_dict):
-            """
-            Callback function, for pysvn module to call, when the svn server prompts if we want to trust the cert
-            https://pysvn.sourceforge.io/Docs/pysvn_prog_ref.html#pysvn_client
-            """
-
-            print(f"pysvn_ssl_server_trust_prompt trust_dict: {trust_dict}")
-
-            return_code         = True
-            accepted_failures   = trust_dict["failures"]
-            save_server_cert    = True
-
-            return return_code, accepted_failures, save_server_cert
-
-
-        pysvn_client.callback_ssl_server_trust_prompt = pysvn_callback_ssl_server_trust_prompt
-
-
-    def pysvn_callback_get_login(realm, callback_username, may_save):
-
-        return_username     = username
-        return_password     = password
-        return_code         = True if return_username and return_password else False
-        save_credentials    = True
-
-        return return_code, return_username, return_password, save_credentials
-
-    pysvn_client.callback_get_login = pysvn_callback_get_login
-
-    return pysvn_client
 
 
 def convert(ctx: Context) -> None:
@@ -203,37 +164,37 @@ def _build_cli_commands(ctx: Context) -> dict:
 
     # Common svn command args
     # Also used to convert strings to lists, to concatenate lists
-    arg_svn_non_interactive             = ["--non-interactive"]
-    arg_svn_force_interactive           = ["--force-interactive"]
+    # arg_svn_non_interactive             = ["--non-interactive"]
+    # arg_svn_force_interactive           = ["--force-interactive"]
     arg_repo_url                        = [repo_url]
 
-    # svn commands
-    cmd_svn_info                        = ["svn", "info"] + arg_repo_url
+    # # svn commands
+    # cmd_svn_info                        = ["svn", "info"] + arg_repo_url
 
 
-    # Skip TLS verification, if needed
-    if disable_tls_verification:
+    # # Skip TLS verification, if needed
+    # if disable_tls_verification:
 
-        # This prompt only be required very rarely, ex. once per:
-            # Deployment of the repo-converter container, ex. the ~/.subversion/auth/svn.ssl.server directory inside the container is empty, as the root volume is not retained
-            # New Subversion server
-            # New TLS cert on a server
-        # However, it needs to be checked for on every job)
-        ctx.job["config"].update(
-            {
-                "expect": {
-                    "prompt": "accept (p)ermanently",
-                    "response": "p",
-                }
-            }
-        )
+    #     # This prompt only be required very rarely, ex. once per:
+    #         # Deployment of the repo-converter container, ex. the ~/.subversion/auth/svn.ssl.server directory inside the container is empty, as the root volume is not retained
+    #         # New Subversion server
+    #         # New TLS cert on a server
+    #     # However, it needs to be checked for on every job)
+    #     ctx.job["config"].update(
+    #         {
+    #             "expect": {
+    #                 "prompt": "accept (p)ermanently",
+    #                 "response": "p",
+    #             }
+    #         }
+    #     )
 
-        # Trusting the TLS cert requires interactive mode
-        cmd_svn_info += arg_svn_force_interactive
-    else:
+    #     # Trusting the TLS cert requires interactive mode
+    #     cmd_svn_info += arg_svn_force_interactive
+    # else:
 
-        # If not needing to trust the TLS cert, then use non-interactive mode
-        cmd_svn_info += arg_svn_non_interactive
+    #     # If not needing to trust the TLS cert, then use non-interactive mode
+    #     cmd_svn_info += arg_svn_non_interactive
 
 
     # Common git command args
@@ -296,7 +257,7 @@ def _build_cli_commands(ctx: Context) -> dict:
         'cmd_git_garbage_collection':       cmd_git_garbage_collection,
         'cmd_git_svn_fetch':                cmd_git_svn_fetch,
         'cmd_git_svn_init':                 cmd_git_svn_init,
-        'cmd_svn_info':                     cmd_svn_info,
+        # 'cmd_svn_info':                     cmd_svn_info,
     }
 
 
@@ -394,6 +355,68 @@ def _check_if_conversion_is_already_running_in_another_process(
     return False
 
 
+def _initialize_pysvn(ctx: Context) -> pysvn.Client:
+    """
+    Create and return the pysvn.client
+    Define and register callback handler functions
+    """
+
+    job_config                  = ctx.job.get("config",{})
+    disable_tls_verification    = job_config.get("disable_tls_verification")
+    username                    = job_config.get("username")
+    password                    = job_config.get("password")
+    pysvn_client                = pysvn.Client()
+
+
+    # Handle the untrusted TLS certificate prompt
+    if disable_tls_verification:
+
+        def pysvn_callback_ssl_server_trust_prompt(trust_dict):
+            """
+            Callback function, for pysvn module to call, when the svn server prompts if we want to trust the cert
+            https://pysvn.sourceforge.io/Docs/pysvn_prog_ref.html#pysvn_client
+            """
+
+            log(ctx, "Trusting Subversion server's untrusted TLS certificate", "warning", {"trust_dict": trust_dict})
+
+            return_code         = True
+            accepted_failures   = trust_dict["failures"]
+            save_server_cert    = True
+
+            return return_code, accepted_failures, save_server_cert
+
+
+        # Register the handler
+        pysvn_client.callback_ssl_server_trust_prompt = pysvn_callback_ssl_server_trust_prompt
+
+
+    # Handle login prompts
+    def pysvn_callback_get_login(realm, callback_username, may_save):
+
+        return_username     = username
+        return_password     = password
+        return_code         = True if return_username and return_password else False
+        save_credentials    = True
+
+        log_dict = {
+            "subversion_server": {
+                "realm": realm,
+                "username": return_username,
+                "return_code": return_code,
+                "save_credentials": save_credentials,
+            }
+        }
+
+        log(ctx, "Logging into Subversion server", "debug", log_dict)
+
+        return return_code, return_username, return_password, save_credentials
+
+    # Register the handler
+    pysvn_client.callback_get_login = pysvn_callback_get_login
+
+    return pysvn_client
+
+
 def _test_connection_and_credentials(
         ctx: Context,
         commands: dict,
@@ -403,67 +426,99 @@ def _test_connection_and_credentials(
     Run the svn info command to test:
     - Network connectivity to the SVN server
     - Authentication credentials, if provided
-
-    - If
+    - If disable_tls_verification is set, then this will trust the server cert
 
     Capture the output, so we can later extract the current remote rev from it
 
-    The svn info command should be quite lightweight, and return very quickly
+    When called from the svn cli, the svn info command is quite lightweight, and returns very quickly
+    When called from the pysvn module, it will return a tuple for every file in the repo, unless depth = empty
     """
 
     # Get config values
     job_config          = ctx.job.get("config", {})
     max_retries         = job_config.get("max_retries")
-    password            = job_config.get("password")
     repo_url            = job_config.get("repo_url")
-    # expect              = job_config.get("expect", {}).get("prompt","")
-    # response            = job_config.get("expect", {}).get("response","")
-    cmd_svn_info        = commands["cmd_svn_info"]
     tries_attempted     = 1
     svn_info            = {}
     svn_info_success    = False
 
     while True:
 
-        log(ctx, "while True:")
+        svn_info = {}
 
-        svn_info_list_of_tuples = pysvn_client.info2(
-            repo_url,
-            # depth               = depth,
-            # fetch_actual_only   = True,
-            # fetch_excluded      = False,
-            # peg_revision        = pysvn.Revision( opt_revision_kind.unspecified ),
-            # recurse             = True,
-            # revision            = pysvn.Revision( opt_revision_kind.unspecified ),
-        )
+        try:
 
-        log(ctx, "svn_info_list_of_tuples:", "debug", {"svn_info_list_of_tuples": svn_info_list_of_tuples})
+            # log(ctx, "while True:")
 
-        svn_info_path = ""
-        svn_info_dict = {}
+            svn_info_list_of_tuples = pysvn_client.info2(
+                repo_url,
+                revision            = pysvn.Revision(pysvn.opt_revision_kind.head),
+                depth               = pysvn.depth.empty,
+            )
 
-        # Grab the first tuple from the list
-        if (
-            isinstance(svn_info_list_of_tuples, list)       and
-            len(svn_info_list_of_tuples) > 0                and
-            isinstance(svn_info_list_of_tuples[0], tuple)
-        ):
-            log(ctx, f"if: True")
-            svn_info_path, svn_info_dict = svn_info_list_of_tuples[0]
+            # log(ctx, "svn_info_list_of_tuples:", "debug", {"svn_info_list_of_tuples": svn_info_list_of_tuples})
 
-            svn_info_url = svn_info_dict.get("URL","")
-            if repo_url in svn_info_url:
-                log(ctx, f"repo_url in svn_info_url: {repo_url} in {svn_info_url}")
+            # Grab the first tuple from the list
+            if (
+                isinstance(svn_info_list_of_tuples, list)       and
+                len(svn_info_list_of_tuples) > 0                and
+                isinstance(svn_info_list_of_tuples[0], tuple)
+            ):
+                # log(ctx, f"if: True")
+                svn_info_path, svn_info_PysvnInfo = svn_info_list_of_tuples[0]
+
+                # log(ctx, f"svn_info_PysvnInfo: {svn_info_PysvnInfo}", "debug")
+
+                # Expose the .data attribute from the PysvnInfo type
+                # This is probably overkill, but is the only thing I've found to work so far
+                svn_info_tmp = {
+                    attribute: getattr(svn_info_PysvnInfo, attribute)
+                        for attribute in dir(svn_info_PysvnInfo)
+                        if not attribute.startswith('_')
+                        and not callable(getattr(svn_info_PysvnInfo, attribute))
+                }
+
+                # Use the .data attribute, now that it's available
+                data                = svn_info_tmp.get("data", {})
+                remote_url          = data.get("URL",               "")
+
+                # Get attributes and convert types
+                remote_head_rev       = data.get("rev",               -1) # <Revision kind=number 2141>
+                if remote_head_rev    != -1:
+                    remote_head_rev   = int(remote_head_rev.number)
+
+                remote_last_changed_rev    = data.get("last_changed_rev",  -1) # <Revision kind=number 2141>
+                if remote_last_changed_rev    != -1:
+                    remote_last_changed_rev   = int(remote_last_changed_rev.number)
+
+                remote_last_changed_date   = data.get("last_changed_date", -1) # 1753437840.73516
+                if remote_last_changed_date != -1 and isinstance(remote_last_changed_date, float):
+                    remote_last_changed_date   = datetime.fromtimestamp(remote_last_changed_date).isoformat(sep=' ', timespec='seconds')
+
+                svn_info.update(
+                    {
+                        "remote_url": remote_url,
+                        "remote_head_rev": remote_head_rev,
+                        "remote_last_changed_rev": remote_last_changed_rev,
+                        "remote_last_changed_date": remote_last_changed_date,
+                    }
+                )
+
+                log(ctx, f"svn_info: {svn_info}", "debug")
+
+                if remote_url and repo_url in remote_url:
+                    log(ctx, f"repo_url in remote_url: {repo_url} in {remote_url}", "debug", {"svn_info": svn_info})
+                    svn_info_success = True
+                else:
+                    log(ctx, f"repo_url NOT in remote_url: {repo_url} NOT in {remote_url}", "debug", {"svn_info": svn_info})
+                    svn_info_success = False
+
             else:
-                log(ctx, f"repo_url NOT in svn_info_url: {repo_url} NOT in {svn_info_url}")
+                log(ctx, f"if: False")
 
-            svn_info = svn_info_dict
-
-
-            svn_info_success = True
-
-        else:
-            log(ctx, f"if: False")
+        except:
+            log(ctx, f"pysvn exception", "error", {"svn_info": svn_info})
+            raise
 
         # # Attempt to use pexpect
         # test = cmd.run_pexpect(
@@ -497,7 +552,7 @@ def _test_connection_and_credentials(
             if tries_attempted > 1:
                 log(ctx, f"Successfully connected to repo remote after {tries_attempted} tries", "warning")
 
-            ctx.job["svn_info"] = svn_info.get("output",[])
+            ctx.job["svn_info"] = svn_info
             return True
 
         # If we've hit the max_retries limit, return here
@@ -524,7 +579,7 @@ def _test_connection_and_credentials(
 
 def _extract_svn_remote_state_from_svn_info_output(ctx: Context) -> bool:
     """
-    Extract revision information from svn info command output
+    Extract revision information from output of svn info cli command
     """
 
     repo_key = ctx.job.get("config",{}).get("repo_key")
@@ -692,8 +747,8 @@ def _configure_git_repo(ctx: Context, commands: dict) -> None:
     # TODO: Move to git module
     cmd.run_subprocess(ctx, commands["cmd_git_default_branch"], quiet=True, name="cmd_git_default_branch")
 
-    if disable_tls_verification:
-        git.set_config(ctx, "http.sslVerify", "false")
+    # if disable_tls_verification:
+    #     git.set_config(ctx, "http.sslVerify", "false")
 
 
     # Set repo configs, as a list of tuples [(git config key, git config value),]
