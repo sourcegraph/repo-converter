@@ -168,7 +168,8 @@ def _build_cli_commands(ctx: Context) -> dict:
             # New Subversion server
             # New TLS cert on a server
         # However, it needs to be checked for on every job)
-        ctx.job["config"]["expect"] = tuple("accept (p)ermanently", "p")
+        ctx.job["config"]["expect"]["prompt"] = "accept (p)ermanently"
+        ctx.job["config"]["expect"]["response"] = "p"
 
         # Trusting the TLS cert requires interactive mode
         cmd_svn_info += arg_svn_force_interactive
@@ -353,7 +354,8 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     job_config          = ctx.job.get("config",{})
     max_retries         = job_config.get("max_retries")
     password            = job_config.get("password")
-    expect_tuple        = job_config.get("expect")
+    expect              = job_config.get("expect", {}).get("prompt","")
+    response            = job_config.get("expect", {}).get("response","")
     cmd_svn_info        = commands["cmd_svn_info"]
     tries_attempted     = 1
 
@@ -362,8 +364,8 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
         test = cmd.run_pexpect(
             ctx,
             args        = cmd_svn_info,
-            expect      = expect_tuple[0],
-            response    = expect_tuple[1]
+            expect      = expect,
+            response    = response
         )
 
         log(ctx, "test:", "debug", {"test": test})
