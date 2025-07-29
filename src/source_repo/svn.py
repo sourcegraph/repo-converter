@@ -170,7 +170,7 @@ def _build_cli_commands(ctx: Context) -> dict:
         # However, it needs to be checked for on every job
         expect = []
         expect.append(
-            ("(R)eject, accept (t)emporarily or accept (p)ermanently?", "p"),
+            ("accept (p)ermanently", "p"),
         )
         ctx.job["config"].update(
             {
