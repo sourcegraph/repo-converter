@@ -11,12 +11,14 @@ from datetime import datetime, timedelta
 from typing import Union, Optional, Dict, Any, List
 import os
 import subprocess
+import sys
+import time
 import textwrap
 import uuid
 
 # Import third party modules
+import pexpect # https://pexpect.readthedocs.io/en/stable/install.html
 import psutil # Check for breaking changes https://github.com/giampaolo/psutil/blob/master/HISTORY.rst
-
 
 def get_pid_uptime(pid: int = 1) -> Optional[timedelta]:
     """
@@ -220,6 +222,71 @@ def log_process_status(
 
     # Log the event
     log(ctx, status_message, log_level, structured_log_dict)
+
+
+def run_pexpect(
+        ctx:        Context,
+        args:       Union[str, List[str]],
+        expect:     Union[str, List[str]],
+        response:   str
+    ) -> Dict:
+    """
+    Run a command through the pexpect module
+    Wait for expect to come from the command
+    Then send the response into the command
+    """
+
+    return_dict = {}
+
+    # Convert args to a string
+    if isinstance(args, List):
+        args = " ".join(args)
+
+
+    try:
+
+        child               = pexpect.spawn(
+                                            command     = args,
+                                            encoding    = 'utf-8',
+                                            echo        = False
+                                            )
+
+        return_dict["pid"]  = child.pid
+
+        log(ctx, f"child.pid: {child.pid}")
+
+        child.logfile_read  = sys.stdout.buffer
+
+        match               = child.expect_exact(
+                                            pattern = expect,
+                                            timeout = 120
+                                            )
+
+        if match == 0:
+            child.sendline(response)
+            log(ctx, "match, sending response")
+        else:
+            log(ctx, "no match")
+
+
+        time.sleep(1)
+
+        child.close(force=False)
+
+        return_dict["output"]           = child.before + child.after
+        return_dict["return_code"]      = child.exitstatus
+        return_dict["signal_status"]    = child.signalstatus
+
+    except pexpect.EOF:
+        log(ctx, f"pexpect child exited: {str(child)}")
+
+    except pexpect.TIMEOUT:
+        log(ctx, f"pexpect hit a timeout: {str(child)}", "error")
+
+    except:
+        log(ctx, f"pexpect child threw an exception: {str(child)}", "error")
+
+    return return_dict
 
 
 def run_subprocess(
