@@ -156,32 +156,8 @@ def _build_cli_commands(ctx: Context) -> dict:
     arg_repo_url                        = [repo_url]
 
     # svn commands
-    cmd_svn_info                        = ["svn", "info"] + arg_svn_non_interactive + arg_repo_url
+    cmd_svn_info                        = ["svn", "info"] + arg_repo_url
 
-    # Common git command args
-    arg_git                             = ["git", "-C", local_repo_path]
-
-    if disable_tls_verification:
-        arg_git                         += ["-c", "http.sslVerify=false"]
-
-    arg_git_svn                         = arg_git + ["svn"]
-
-    # git commands
-    cmd_git_default_branch              = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
-    cmd_git_garbage_collection          = arg_git     + ["gc"]
-    cmd_git_svn_fetch                   = arg_git_svn + ["fetch", "--quiet"]
-    cmd_git_svn_init                    = arg_git_svn + ["init"] + arg_repo_url
-
-     # Add authentication, if provided
-    if username:
-        arg_username                    = ["--username", username]
-        cmd_svn_info                    += arg_username
-        cmd_git_svn_init                += arg_username
-        cmd_git_svn_fetch               += arg_username
-
-    if password:
-        arg_password                    = ["--password", password]
-        cmd_svn_info                    += arg_password
 
     # Skip TLS verification, if needed
     if disable_tls_verification:
@@ -201,7 +177,42 @@ def _build_cli_commands(ctx: Context) -> dict:
             }
         )
 
-    # git svn commands
+        # Trusting the TLS cert requires interactive mode
+    else:
+
+        # If not needing to trust the TLS cert, then use non-interactive mode
+        cmd_svn_info += arg_svn_non_interactive
+
+
+    # Common git command args
+    arg_git                             = ["git", "-C", local_repo_path]
+
+    if disable_tls_verification:
+        arg_git                         += ["-c", "http.sslVerify=false"]
+
+    arg_git_svn                         = arg_git + ["svn"]
+
+
+    # git commands
+    cmd_git_default_branch              = arg_git     + ["symbolic-ref", "HEAD", f"refs/heads/{git_default_branch}"]
+    cmd_git_garbage_collection          = arg_git     + ["gc"]
+    cmd_git_svn_fetch                   = arg_git_svn + ["fetch", "--quiet"]
+    cmd_git_svn_init                    = arg_git_svn + ["init"] + arg_repo_url
+
+
+     # Add authentication, if provided
+    if username:
+        arg_username                    = ["--username", username]
+        cmd_svn_info                    += arg_username
+        cmd_git_svn_init                += arg_username
+        cmd_git_svn_fetch               += arg_username
+
+    if password:
+        arg_password                    = ["--password", password]
+        cmd_svn_info                    += arg_password
+
+
+    ## git svn commands
     if layout:
         cmd_git_svn_init                += ["--stdlayout"]
         # Warn the user if they provided an invalid value for the layout
@@ -226,6 +237,7 @@ def _build_cli_commands(ctx: Context) -> dict:
         if isinstance(branches, list):
             for branch in branches:
                 cmd_git_svn_init        += ["--branches", branch]
+
 
     return {
         'cmd_git_default_branch':           cmd_git_default_branch,
@@ -518,10 +530,9 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
 
     # Get config values
     job_config          = ctx.job.get("config",{})
-    local_repo_path     = job_config.get("local_repo_path")
     bare_clone          = job_config.get("bare_clone")
+    local_repo_path     = job_config.get("local_repo_path")
     password            = job_config.get("password")
-    repo_key            = job_config.get("repo_key")
     cmd_git_svn_init    = commands["cmd_git_svn_init"]
 
     # If the directory does exist, then it failed the validation check, and needs to be destroyed and recreated
