@@ -249,7 +249,7 @@ def run_pexpect(
         child               = pexpect.spawn(
                                             command     = args,
                                             encoding    = 'utf-8',
-                                            echo        = False,
+                                            echo        = True,
                                             timeout     = timeout
                                             )
 
@@ -285,8 +285,8 @@ def run_pexpect(
     except pexpect.exceptions.TIMEOUT:
         log(ctx, f"pexpect hit a timeout: {str(child)}", "error")
 
-    except:
-        log(ctx, f"pexpect child threw an exception: {str(child)}", "error")
+    except Exception as e:
+        log(ctx, f"pexpect child threw an exception: {str(child)}; e: {e}", "error")
 
     return return_dict
 
