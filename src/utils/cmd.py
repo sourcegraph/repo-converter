@@ -298,9 +298,9 @@ def run_subprocess(
     shell   = False
 
     if expect:
-        args    = " ".join(args)
+        # args    = " ".join(args)
         bufsize = 1
-        shell   = True
+        # shell   = True
 
 
     # Which log level to emit log events at,
@@ -397,7 +397,7 @@ def run_subprocess(
                         # If the first part of the tuple is found in the output line
                         if prompt in std_out_line:
 
-                            log(ctx, f"prompt {prompt} in std_out_line {std_out_line}")
+                            log(ctx, f"prompt {prompt} is in std_out_line {std_out_line}")
 
                             # Send the second part into stdin
                             sub_process.stdin.write(f"{response}\n")
@@ -405,6 +405,8 @@ def run_subprocess(
                             # And flush the buffer
                             sub_process.stdin.flush()
 
+                        else:
+                            log(ctx, f"prompt {prompt} is NOT in std_out_line {std_out_line}")
 
                 if sub_process.stderr:
 
