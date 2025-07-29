@@ -374,7 +374,8 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
             password,
             quiet           = False,
             name            = f"svn_info_{tries_attempted}",
-            expect          = expect
+            expect          = expect,
+            stderr          = "stderr",
         )
 
         svn_output                  = svn_info["output"]
