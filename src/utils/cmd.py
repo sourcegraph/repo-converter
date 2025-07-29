@@ -258,13 +258,13 @@ def run_pexpect(
         # child.logfile_read  = sys.stdout.buffer
 
         match               = child.expect_exact(
-                                            pattern = expect,
+                                            pattern = [expect],
                                             timeout = 120
                                             )
 
         if match == 0:
-            child.sendline(response)
             log(ctx, "match, sending response")
+            child.sendline(response)
         else:
             log(ctx, "no match")
 
