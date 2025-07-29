@@ -168,8 +168,14 @@ def _build_cli_commands(ctx: Context) -> dict:
             # New Subversion server
             # New TLS cert on a server
         # However, it needs to be checked for on every job)
-        ctx.job["config"]["expect"]["prompt"] = "accept (p)ermanently"
-        ctx.job["config"]["expect"]["response"] = "p"
+        ctx.job["config"].update(
+            {
+                "expect": {
+                    "prompt": "accept (p)ermanently",
+                    "response": "p",
+                }
+            }
+        )
 
         # Trusting the TLS cert requires interactive mode
         cmd_svn_info += arg_svn_force_interactive
