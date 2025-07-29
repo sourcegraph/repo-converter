@@ -237,6 +237,7 @@ def run_pexpect(
     """
 
     return_dict = {}
+    timeout = 120
 
     # Convert args to a string
     if isinstance(args, List):
@@ -248,7 +249,8 @@ def run_pexpect(
         child               = pexpect.spawn(
                                             command     = args,
                                             encoding    = 'utf-8',
-                                            echo        = False
+                                            echo        = False,
+                                            timeout     = timeout
                                             )
 
         return_dict["pid"]  = child.pid
@@ -259,7 +261,7 @@ def run_pexpect(
 
         match               = child.expect_exact(
                                             pattern = [expect],
-                                            timeout = 120
+                                            timeout = timeout
                                             )
 
         if match == 0:
@@ -269,7 +271,7 @@ def run_pexpect(
             log(ctx, "no match")
 
 
-        time.sleep(1)
+        time.sleep(30)
 
         child.close(force=False)
 

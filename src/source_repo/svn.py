@@ -171,7 +171,7 @@ def _build_cli_commands(ctx: Context) -> dict:
         ctx.job["config"].update(
             {
                 "expect": {
-                    "prompt": "accept (p)ermanently",
+                    "prompt": "ermanently",
                     "response": "p",
                 }
             }
