@@ -67,13 +67,12 @@ def _initialize_pysvn(ctx):
 
         return_username     = username
         return_password     = password
-        return_code         = return_username and return_password
+        return_code         = True if return_username and return_password else False
         save_credentials    = True
 
         return return_code, return_username, return_password, save_credentials
 
     pysvn_client.callback_get_login = pysvn_callback_get_login
-
 
     return pysvn_client
 
