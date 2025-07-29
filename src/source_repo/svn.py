@@ -189,11 +189,6 @@ def _build_cli_commands(ctx: Context) -> dict:
 
 
     ## git svn commands
-    if layout:
-        cmd_git_svn_init                += ["--stdlayout"]
-        # Warn the user if they provided an invalid value for the layout
-        if layout not in ("standard", "std"):
-            log(ctx, f"Layout shortcut provided with incorrect value {layout}, only standard is supported for the shortcut, continuing assuming standard, otherwise provide --trunk, --tags, and --branches", "warning")
 
     # There can only be one trunk
     if trunk:
@@ -213,6 +208,16 @@ def _build_cli_commands(ctx: Context) -> dict:
         if isinstance(branches, list):
             for branch in branches:
                 cmd_git_svn_init        += ["--branches", branch]
+
+    # Default to the standard layout
+    if (
+        layout or
+        not any([trunk, tags, branches])
+    ):
+        cmd_git_svn_init                += ["--stdlayout"]
+        # Warn the user if they provided an invalid value for the layout
+        if layout and layout not in ("standard", "std"):
+            log(ctx, f"Layout shortcut provided with incorrect value {layout}, only standard is supported for the shortcut, continuing assuming standard, otherwise provide --trunk, --tags, and --branches", "warning")
 
 
     return {
