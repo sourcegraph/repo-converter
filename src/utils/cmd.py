@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import textwrap
+import time
 import uuid
 
 # Import third party modules
@@ -359,11 +360,32 @@ def run_subprocess(
         if expect:
 
             # Run as long as the process is running, and the expect list still has values
-            while not sub_process.poll() and len(expect) > 0:
+            while True:
+
+                if sub_process.poll():
+                    log(ctx, f"sub_process.poll(): {sub_process.poll()}", "debug")
+                    break
+
+                if sub_process.returncode:
+                    log(ctx, f"sub_process.returncode: {sub_process.returncode}", "debug")
+                    break
+
+                if len(expect) <= 0:
+                    log(ctx, f"len(expect) <= 0: {len(expect)}", "debug")
+                    break
+
+                # The child process was reaped with exit code 1, but it seems like this loop keeps going forever?
+
+                log(ctx, "here", "debug")
+                log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
                 # Try to read a line of output
-                # Potential problem: this waits for a \n
+                # Potential problems:
+                    # This waits for a \n
+                    # This may cause a deadlock
                 early_output = sub_process.stdout.readline()
+
+                log(ctx, f"early_output: {early_output}", "debug")
 
                 # If there is output
                 if early_output:
@@ -388,6 +410,9 @@ def run_subprocess(
 
                             # Skip any of the prompts / responses remaining in the list, for this line of output
                             break
+
+                # Sleep a second, just to stop an infinite loop from consuming infinite CPU
+                time.sleep(1)
 
 
         if password:
