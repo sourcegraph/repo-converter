@@ -153,6 +153,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     # Common svn command args
     # Also used to convert strings to lists, to concatenate lists
     arg_svn_non_interactive             = ["--non-interactive"]
+    arg_svn_force_interactive           = ["--force-interactive"]
     arg_repo_url                        = [repo_url]
 
     # svn commands
@@ -178,6 +179,7 @@ def _build_cli_commands(ctx: Context) -> dict:
         )
 
         # Trusting the TLS cert requires interactive mode
+        cmd_svn_info += arg_svn_force_interactive
     else:
 
         # If not needing to trust the TLS cert, then use non-interactive mode
