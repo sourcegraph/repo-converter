@@ -139,6 +139,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     # Get config values
     job_config                          = ctx.job.get("config",{})
     branches                            = job_config.get("branches")
+    disable_tls_verification            = job_config.get("disable_tls_verification")
     git_default_branch                  = job_config.get("git_default_branch")
     layout                              = job_config.get("layout")
     local_repo_path                     = job_config.get("local_repo_path")
@@ -147,6 +148,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     tags                                = job_config.get("tags")
     trunk                               = job_config.get("trunk")
     username                            = job_config.get("username")
+
 
     # Common svn command args
     # Also used to convert strings to lists, to concatenate lists
@@ -159,7 +161,7 @@ def _build_cli_commands(ctx: Context) -> dict:
     # Common git command args
     arg_git                             = ["git", "-C", local_repo_path]
 
-    if job_config.get("disable_tls_verification"):
+    if disable_tls_verification:
         arg_git                         += ["-c", "http.sslVerify=false"]
 
     arg_git_svn                         = arg_git + ["svn"]
@@ -169,14 +171,6 @@ def _build_cli_commands(ctx: Context) -> dict:
     cmd_git_garbage_collection          = arg_git     + ["gc"]
     cmd_git_svn_fetch                   = arg_git_svn + ["fetch", "--quiet"]
     cmd_git_svn_init                    = arg_git_svn + ["init"] + arg_repo_url
-
-    # Skip TLS verification, if needed
-    if job_config.get("disable_tls_verification"):
-        # disable_tls_verification_args   = ["--trust-server-cert-failures", "unknown-ca"]
-        disable_tls_verification_args   = ["--trust-server-cert"]
-        cmd_svn_info                    += disable_tls_verification_args
-        # cmd_git_svn_fetch               += disable_tls_verification_args
-        # cmd_git_svn_init                += disable_tls_verification_args
 
      # Add authentication, if provided
     if username:
@@ -188,6 +182,24 @@ def _build_cli_commands(ctx: Context) -> dict:
     if password:
         arg_password                    = ["--password", password]
         cmd_svn_info                    += arg_password
+
+    # Skip TLS verification, if needed
+    if disable_tls_verification:
+
+        # This prompt only be required very rarely, ex. once per:
+            # Deployment of the repo-converter container, ex. the ~/.subversion/auth/svn.ssl.server directory inside the container is empty, as the root volume is not retained
+            # New Subversion server
+            # New TLS cert on a server
+        # However, it needs to be checked for on every job
+        expect = []
+        expect.append(
+            ("(R)eject, accept (t)emporarily or accept (p)ermanently?", "p"),
+        )
+        ctx.job["config"].update(
+            {
+                "expect": expect
+            }
+        )
 
     # git svn commands
     if layout:
@@ -324,6 +336,8 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     - Network connectivity to the SVN server
     - Authentication credentials, if provided
 
+    - If
+
     Capture the output, so we can later extract the current remote rev from it
 
     The svn info command should be quite lightweight, and return very quickly
@@ -333,21 +347,9 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     job_config          = ctx.job.get("config",{})
     max_retries         = job_config.get("max_retries")
     password            = job_config.get("password")
-    repo_key            = job_config.get("repo_key")
+    expect              = job_config.get("expect")
     cmd_svn_info        = commands["cmd_svn_info"]
     tries_attempted     = 1
-    disable_tls_verification = job_config.get("disable_tls_verification")
-    expect              = []
-
-    # This prompt only be required very rarely, ex. once per:
-        # Deployment of the repo-converter container, ex. the ~/.subversion/auth/svn.ssl.server directory inside the container is empty, as the root volume is not retained
-        # New Subversion server
-        # New TLS cert on a server
-    # However, it needs to be checked for on every job
-    # if disable_tls_verification:
-    #     expect.append(
-    #         ("(R)eject, accept (t)emporarily or accept (p)ermanently?", "p")
-    #     )
 
     while True:
 
@@ -356,9 +358,9 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
             ctx,
             cmd_svn_info,
             password,
-            quiet           = True,
+            quiet           = False,
             name            = f"svn_info_{tries_attempted}",
-            # expect          = expect
+            expect          = expect
         )
 
         # If the command exited successfully, save the process output dict to the job context
@@ -789,13 +791,13 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         git.deduplicate_git_config_file(ctx)
 
         # Try setting the log window size to see if it helps with network timeout stability
-        cmd_git_svn_fetch_with_window = cmd_git_svn_fetch + ["--log-window-size", str(log_window_size)]
+        cmd_git_svn_fetch += ["--log-window-size", str(log_window_size)]
 
         # Start the fetch
-        log(ctx, f"fetching with {' '.join(cmd_git_svn_fetch_with_window)}", "debug")
+        log(ctx, f"fetching with {' '.join(cmd_git_svn_fetch)}", "debug")
 
         # Run the fetch command, capture the output
-        git_svn_fetch_result = cmd.run_subprocess(ctx, cmd_git_svn_fetch_with_window, password, name=f"cmd_git_svn_fetch_{tries_attempted}")
+        git_svn_fetch_result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name=f"cmd_git_svn_fetch_{tries_attempted}")
         git_svn_fetch_result.update({"tries_attempted": tries_attempted})
 
         # Run gc + fix branches, after each try, to:

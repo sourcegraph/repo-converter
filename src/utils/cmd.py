@@ -356,27 +356,39 @@ def run_subprocess(
 
         output = []
 
-        # if expect:
+        if expect:
 
-        #     test_process = subprocess.Popen()
-        #     test_process.poll()
+            # Run as long as the process is running, and the expect list still has values
+            while not sub_process.poll() and len(expect) > 0:
 
+                # Try to read a line of output
+                # Potential problem: this waits for a \n
+                early_output = sub_process.stdout.readline()
 
-        #     while not sub_process.poll():
+                # If there is output
+                if early_output:
 
-        #         early_output = sub_process.stdout.readline()
+                    # Add the output to the output list of lines
+                    output += early_output
 
-        #         if early_output:
+                    # Loop through the list of tuples passed in to the expect parameter
+                    for prompt, response in expect:
 
-        #             output += early_output
+                        # If the first part of the tuple is found in the output line
+                        if prompt in early_output:
 
-        #             for prompt, response in expect:
+                            # Send the second part into stdin
+                            sub_process.stdin.write(f"{response}\n")
 
-        #                 if prompt in early_output:
+                            # And flush the buffer
+                            sub_process.stdin.flush()
 
-        #                     sub_process.stdin.write(f"{response}\n")
-        #                     sub_process.stdin.flush()
-        #                     break
+                            # Remove this prompt and response from the list
+                            expect.pop((prompt, response))
+
+                            # Skip any of the prompts / responses remaining in the list, for this line of output
+                            break
+
 
         if password:
 
@@ -387,6 +399,8 @@ def run_subprocess(
             output += sub_process.communicate(password)
 
         else:
+
+            # communicate() waits for the process to finish
             output += sub_process.communicate()
 
 
