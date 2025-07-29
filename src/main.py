@@ -8,7 +8,7 @@ from utils.context import Context
 from utils.log import log
 
 # Import Python standard modules
-import sysconfig
+# import sysconfig
 import time
 
 def main():
@@ -52,9 +52,9 @@ def main():
     interval = ctx.env_vars["REPO_CONVERTER_INTERVAL_SECONDS"]
     max_cycles = ctx.env_vars["MAX_CYCLES"]
 
-    # Print Python config, including compiler options
-    sysconfig_get_config_vars = sysconfig.get_config_vars()
-    log(ctx, f"Python sysconfig.get_config_vars", "debug", {"sysconfig_get_config_vars": sysconfig_get_config_vars})
+    # # Print Python config, including compiler options
+    # sysconfig_get_config_vars = sysconfig.get_config_vars()
+    # log(ctx, f"Python sysconfig.get_config_vars", "debug", {"sysconfig_get_config_vars": sysconfig_get_config_vars})
 
 
     ### Application main loop

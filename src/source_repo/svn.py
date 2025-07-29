@@ -582,7 +582,7 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
         # shutil.rmtree(local_repo_path)
 
         cmd_rm_rf = ["rm", "-rf", local_repo_path]
-        cmd.run_subprocess(ctx, cmd_rm_rf, name=f"cmd_rm_rf")
+        cmd.run_subprocess(ctx, cmd_rm_rf, name=f"cmd_rm_rf", quiet=True)
 
     else:
         log(ctx, f"Repo not found on disk, initializing new repo", "info")
@@ -813,9 +813,15 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         password            = job_config.get("password")
 
         # Reset result values
-        ctx.job["result"] = {
-            "action": "git svn fetch",
-        }
+        ctx.job["result"].update({
+            "action":   "git svn fetch",
+            "try":      tries_attempted,
+
+        })
+        ctx.job["result"].pop("errors")
+        ctx.job["result"].pop("reason")
+        ctx.job["result"].pop("success")
+        ctx.job["result"].pop("warnings")
 
         # Remove duplicate lines from the git config file, before the fetch
         git.deduplicate_git_config_file(ctx)

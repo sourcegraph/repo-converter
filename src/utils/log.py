@@ -85,18 +85,19 @@ def _build_structured_payload(
 
     # Get stack
     code_location = _capture_code_location()
-    ignore_ctx_job = False
+
+    # Ignore job context for some functions
     functions_to_ignore_ctx_job = [
         "status_monitor",
     ]
+    ignore_ctx_job = False
+
     for function_to_ignore_ctx_job in functions_to_ignore_ctx_job:
-
-
         for caller in code_location:
             for value in code_location.get(caller).values():
                 try:
                     if function_to_ignore_ctx_job in value:
-                        # ignore_ctx_job = True
+                        ignore_ctx_job = True
                         break
                 except TypeError:
                     pass
