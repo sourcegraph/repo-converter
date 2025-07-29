@@ -353,19 +353,17 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     job_config          = ctx.job.get("config",{})
     max_retries         = job_config.get("max_retries")
     password            = job_config.get("password")
-    expect_tuple        = tuple(job_config.get("expect"))
+    expect_tuple        = job_config.get("expect")
     cmd_svn_info        = commands["cmd_svn_info"]
     tries_attempted     = 1
 
     while True:
 
-        expect, response = expect_tuple
-
         test = cmd.run_pexpect(
             ctx,
             args        = cmd_svn_info,
-            expect      = expect,
-            response    = response
+            expect      = expect_tuple[0],
+            response    = expect_tuple[1]
         )
 
         log(ctx, "test:", "debug", {"test": test})
