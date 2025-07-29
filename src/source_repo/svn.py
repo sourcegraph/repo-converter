@@ -818,10 +818,18 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
             "try":      tries_attempted,
 
         })
-        ctx.job["result"].pop("errors")
-        ctx.job["result"].pop("reason")
-        ctx.job["result"].pop("success")
-        ctx.job["result"].pop("warnings")
+
+        pop_keys = [
+            "errors",
+            "reason",
+            "success",
+            "warnings"
+        ]
+        for key in pop_keys:
+            try:
+                ctx.job["result"].pop(key)
+            except KeyError:
+                pass
 
         # Remove duplicate lines from the git config file, before the fetch
         git.deduplicate_git_config_file(ctx)
