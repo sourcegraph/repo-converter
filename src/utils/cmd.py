@@ -255,7 +255,7 @@ def run_pexpect(
 
         log(ctx, f"child.pid: {child.pid}")
 
-        child.logfile_read  = sys.stdout.buffer
+        # child.logfile_read  = sys.stdout.buffer
 
         match               = child.expect_exact(
                                             pattern = expect,
@@ -277,10 +277,10 @@ def run_pexpect(
         return_dict["return_code"]      = child.exitstatus
         return_dict["signal_status"]    = child.signalstatus
 
-    except pexpect.EOF:
+    except pexpect.exceptions.EOF:
         log(ctx, f"pexpect child exited: {str(child)}")
 
-    except pexpect.TIMEOUT:
+    except pexpect.exceptions.TIMEOUT:
         log(ctx, f"pexpect hit a timeout: {str(child)}", "error")
 
     except:
