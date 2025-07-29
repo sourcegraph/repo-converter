@@ -167,16 +167,8 @@ def _build_cli_commands(ctx: Context) -> dict:
             # Deployment of the repo-converter container, ex. the ~/.subversion/auth/svn.ssl.server directory inside the container is empty, as the root volume is not retained
             # New Subversion server
             # New TLS cert on a server
-        # However, it needs to be checked for on every job
-        expect = []
-        expect.append(
-            ("accept (p)ermanently", "p"),
-        )
-        ctx.job["config"].update(
-            {
-                "expect": expect
-            }
-        )
+        # However, it needs to be checked for on every job)
+        ctx.job["config"]["expect"] = tuple("accept (p)ermanently", "p")
 
         # Trusting the TLS cert requires interactive mode
         cmd_svn_info += arg_svn_force_interactive
@@ -361,7 +353,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     job_config          = ctx.job.get("config",{})
     max_retries         = job_config.get("max_retries")
     password            = job_config.get("password")
-    expect_tuple        = job_config.get("expect")
+    expect_tuple        = tuple(job_config.get("expect"))
     cmd_svn_info        = commands["cmd_svn_info"]
     tries_attempted     = 1
 

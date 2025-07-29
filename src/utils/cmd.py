@@ -438,78 +438,78 @@ def run_subprocess(
         std_out_string = ""
 
         if expect:
+            pass
+            # # On exit of this with block, standard file descriptors are closed, and the process is waited / returncode attribute set.
+            # with sub_process:
 
-            # On exit of this with block, standard file descriptors are closed, and the process is waited / returncode attribute set.
-            with sub_process:
+            #     log(ctx, "with sub_process")
 
-                log(ctx, "with sub_process")
+            #     if sub_process.stderr:
 
-                if sub_process.stderr:
+            #         log(ctx, "if sub_process.stderr")
 
-                    log(ctx, "if sub_process.stderr")
+            #         for std_err_line in sub_process.stderr:
 
-                    for std_err_line in sub_process.stderr:
+            #             log(ctx, f"for std_err_line {std_err_line} in sub_process.stderr {sub_process.stderr}")
 
-                        log(ctx, f"for std_err_line {std_err_line} in sub_process.stderr {sub_process.stderr}")
+            #             # Remove whitespaces, and skip empty lines
+            #             std_err_line = std_err_line.strip()
+            #             if not std_err_line:
+            #                 continue
 
-                        # Remove whitespaces, and skip empty lines
-                        std_err_line = std_err_line.strip()
-                        if not std_err_line:
-                            continue
+            #             std_err_list.append(std_err_line)
+            #             log(ctx, f"std_err_list {std_err_list}.append(std_err_line {std_err_line})")
 
-                        std_err_list.append(std_err_line)
-                        log(ctx, f"std_err_list {std_err_list}.append(std_err_line {std_err_line})")
+            #             # Loop through the list of tuples passed in to the expect parameter
+            #             for prompt, response in expect:
 
-                        # Loop through the list of tuples passed in to the expect parameter
-                        for prompt, response in expect:
+            #                 log(ctx, f"for prompt {prompt}, response {response} in expect {expect}")
 
-                            log(ctx, f"for prompt {prompt}, response {response} in expect {expect}")
+            #                 # If the first part of the tuple is found in the output line
+            #                 if prompt in std_err_line:
 
-                            # If the first part of the tuple is found in the output line
-                            if prompt in std_err_line:
+            #                     log(ctx, f"prompt {prompt} is in std_err_line {std_err_line}")
 
-                                log(ctx, f"prompt {prompt} is in std_err_line {std_err_line}")
+            #                     # Send the second part into stdin
+            #                     sub_process.stdin.write(f"{response}\n")
 
-                                # Send the second part into stdin
-                                sub_process.stdin.write(f"{response}\n")
+            #                     # And flush the buffer
+            #                     sub_process.stdin.flush()
 
-                                # And flush the buffer
-                                sub_process.stdin.flush()
-
-                            else:
-                                log(ctx, f"prompt {prompt} is NOT in std_err_line {std_err_line}")
+            #                 else:
+            #                     log(ctx, f"prompt {prompt} is NOT in std_err_line {std_err_line}")
 
 
-                for std_out_line in sub_process.stdout:
+            #     for std_out_line in sub_process.stdout:
 
-                    log(ctx, f"std_out_line: {std_out_line}")
+            #         log(ctx, f"std_out_line: {std_out_line}")
 
-                    # Remove whitespaces, and skip empty lines
-                    std_out_line = std_out_line.strip()
-                    if not std_out_line:
-                        continue
+            #         # Remove whitespaces, and skip empty lines
+            #         std_out_line = std_out_line.strip()
+            #         if not std_out_line:
+            #             continue
 
-                    std_out_list.append(std_out_line)
-                    log(ctx, f"std_out_list: {std_out_list}")
+            #         std_out_list.append(std_out_line)
+            #         log(ctx, f"std_out_list: {std_out_list}")
 
-                    # Loop through the list of tuples passed in to the expect parameter
-                    for prompt, response in expect:
+            #         # Loop through the list of tuples passed in to the expect parameter
+            #         for prompt, response in expect:
 
-                        log(ctx, f"for prompt {prompt}, response {response} in expect {expect}")
+            #             log(ctx, f"for prompt {prompt}, response {response} in expect {expect}")
 
-                        # If the first part of the tuple is found in the output line
-                        if prompt in std_out_line:
+            #             # If the first part of the tuple is found in the output line
+            #             if prompt in std_out_line:
 
-                            log(ctx, f"prompt {prompt} is in std_out_line {std_out_line}")
+            #                 log(ctx, f"prompt {prompt} is in std_out_line {std_out_line}")
 
-                            # Send the second part into stdin
-                            sub_process.stdin.write(f"{response}\n")
+            #                 # Send the second part into stdin
+            #                 sub_process.stdin.write(f"{response}\n")
 
-                            # And flush the buffer
-                            sub_process.stdin.flush()
+            #                 # And flush the buffer
+            #                 sub_process.stdin.flush()
 
-                        else:
-                            log(ctx, f"prompt {prompt} is NOT in std_out_line {std_out_line}")
+            #             else:
+            #                 log(ctx, f"prompt {prompt} is NOT in std_out_line {std_out_line}")
 
 
         elif password:
