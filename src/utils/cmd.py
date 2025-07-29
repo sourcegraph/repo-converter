@@ -9,11 +9,9 @@ from utils import lockfiles
 # Import Python standard modules
 from datetime import datetime, timedelta
 from typing import Union, Optional, Dict, Any, List
-import json
 import os
 import subprocess
 import textwrap
-import time
 import uuid
 
 # Import third party modules
@@ -119,7 +117,12 @@ def log_process_status(
         Logs process status information via the logging system
     """
 
-    # log(ctx, f"log_process_status: subprocess_dict: {json.dumps(subprocess_dict, indent = 4, sort_keys=True, default=str)}; subprocess_psutils_dict: {json.dumps(subprocess_psutils_dict, indent = 4, sort_keys=True, default=str)}", "debug")
+    log_process_status_dict = {
+        "subprocess_dict": subprocess_dict,
+        "subprocess_psutils_dict": subprocess_psutils_dict,
+    }
+
+    # log(ctx, "log_process_status", "debug", log_process_status_dict)
 
     # Take shallow copies of the dicts, so we can modify top level keys here to reduce duplicates in log output, without affecting the dict in the calling function; if we need to modify nested objects, then we'll need to switch to deep copies
     subprocess_dict_input = subprocess_dict.copy()
@@ -355,49 +358,30 @@ def run_subprocess(
         if not quiet:
             log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
 
-        output = []
+        std_err_list = []
+        std_err_string = ""
+        std_out_list = []
+        std_out_string = ""
 
         if expect:
 
-            # Run as long as the process is running, and the expect list still has values
-            while True:
+            # On exit of this with block, standard file descriptors are closed, and the process is waited / returncode attribute set.
+            with sub_process:
 
-                if sub_process.poll():
-                    log(ctx, f"sub_process.poll(): {sub_process.poll()}", "debug")
-                    break
+                for std_out_line in sub_process.stdout:
 
-                if sub_process.returncode:
-                    log(ctx, f"sub_process.returncode: {sub_process.returncode}", "debug")
-                    break
+                    # Remove whitespaces, and skip empty lines
+                    std_out_line = std_out_line.strip()
+                    if not std_out_line:
+                        continue
 
-                if len(expect) <= 0:
-                    log(ctx, f"len(expect) <= 0: {len(expect)}", "debug")
-                    break
-
-                # The child process was reaped with exit code 1, but it seems like this loop keeps going forever?
-
-                log(ctx, "here", "debug")
-                log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
-
-                # Try to read a line of output
-                # Potential problems:
-                    # This waits for a \n
-                    # This may cause a deadlock
-                early_output = sub_process.stdout.readline()
-
-                log(ctx, f"early_output: {early_output}", "debug")
-
-                # If there is output
-                if early_output:
-
-                    # Add the output to the output list of lines
-                    output += early_output
+                    std_out_list.append(std_out_line)
 
                     # Loop through the list of tuples passed in to the expect parameter
                     for prompt, response in expect:
 
                         # If the first part of the tuple is found in the output line
-                        if prompt in early_output:
+                        if prompt in std_out_line:
 
                             # Send the second part into stdin
                             sub_process.stdin.write(f"{response}\n")
@@ -405,41 +389,45 @@ def run_subprocess(
                             # And flush the buffer
                             sub_process.stdin.flush()
 
-                            # Remove this prompt and response from the list
-                            expect.pop((prompt, response))
 
-                            # Skip any of the prompts / responses remaining in the list, for this line of output
-                            break
+                if sub_process.stderr:
+                    for std_err_line in sub_process.stderr:
 
-                # Sleep a second, just to stop an infinite loop from consuming infinite CPU
-                time.sleep(1)
+                        # Remove whitespaces, and skip empty lines
+                        std_err_line = std_err_line.strip()
+                        if not std_err_line:
+                            continue
+
+                        std_err_list.append(std_err_line)
 
 
-        if password:
+        elif password:
 
             # If password is provided to this function,
             # feed the password string into the subprocess' stdin pipe;
             # password could be an empty or arbitrary string as a workaround if a process needed it
             # communicate() also waits for the process to finish
-            output += sub_process.communicate(password)
+            std_out_string, std_err_string = sub_process.communicate(password)
 
         else:
 
             # communicate() waits for the process to finish
-            output += sub_process.communicate()
+            std_out_string, std_err_string = sub_process.communicate()
 
 
         # Get the process' stdout and/or stderr
         # Have to do this inside the try / except block, in case the output isn't valid
-        subprocess_dict["output"] = output[0].splitlines()
-        subprocess_dict["output_line_count"] = len(subprocess_dict["output"])
+        std_out_list                            += std_out_string.splitlines()
+        subprocess_dict["output"]               = std_out_list
+        subprocess_dict["output_line_count"]    = len(std_out_list)
         # Truncate the output for logging
-        subprocess_dict["truncated_output"] = truncate_output(ctx, subprocess_dict["output"])
+        subprocess_dict["truncated_output"]     = truncate_output(ctx, std_out_list)
 
         if "stderr" in stderr:
-            subprocess_dict["stderr"] = output[1].splitlines()
-            subprocess_dict["stderr_line_count"] = len(subprocess_dict["stderr"])
-            subprocess_dict["truncated_stderr"] = truncate_output(ctx, subprocess_dict["stderr"])
+            std_err_list                            += std_err_string.splitlines()
+            subprocess_dict["stderr"]               = std_err_list
+            subprocess_dict["stderr_line_count"]    = len(std_err_list)
+            subprocess_dict["truncated_stderr"]     = truncate_output(ctx, std_err_list)
 
         # If the process exited successfully, set the status_message now
         # Have to do this inside the try / except block, in case the sub_process object doesn't have a .returncode attribute
