@@ -8,8 +8,9 @@ from utils.context import Context
 from utils.log import log
 
 # Import Python standard modules
+import json
+import sysconfig
 import time
-
 
 def main():
     """Main entry point for the repo-converter container"""
@@ -51,6 +52,17 @@ def main():
     # These values are only used in the main function
     interval = ctx.env_vars["REPO_CONVERTER_INTERVAL_SECONDS"]
     max_cycles = ctx.env_vars["MAX_CYCLES"]
+
+    # Print Python config, including compiler options
+    sysconfig_get_config_vars = sysconfig.get_config_vars()
+    # sysconfig_get_config_vars = json.dumps(
+    #     sysconfig_get_config_vars,
+    #     default     = str,
+    #     sort_keys   = True,
+    # )
+
+    log(ctx, f"Python sysconfig.get_config_vars", "debug", {"sysconfig_get_config_vars": sysconfig_get_config_vars})
+
 
     ### Application main loop
     while True:
