@@ -375,7 +375,11 @@ def run_subprocess(
             # On exit of this with block, standard file descriptors are closed, and the process is waited / returncode attribute set.
             with sub_process:
 
+                log(ctx, "with sub_process")
+
                 for std_out_line in sub_process.stdout:
+
+                    log(ctx, f"std_out_line: {std_out_line}")
 
                     # Remove whitespaces, and skip empty lines
                     std_out_line = std_out_line.strip()
@@ -383,12 +387,17 @@ def run_subprocess(
                         continue
 
                     std_out_list.append(std_out_line)
+                    log(ctx, f"std_out_list: {std_out_list}")
 
                     # Loop through the list of tuples passed in to the expect parameter
                     for prompt, response in expect:
 
+                        log(ctx, f"for prompt {prompt}, response {response} in expect {expect}")
+
                         # If the first part of the tuple is found in the output line
                         if prompt in std_out_line:
+
+                            log(ctx, f"prompt {prompt} in std_out_line {std_out_line}")
 
                             # Send the second part into stdin
                             sub_process.stdin.write(f"{response}\n")
@@ -398,7 +407,12 @@ def run_subprocess(
 
 
                 if sub_process.stderr:
+
+                    log(ctx, "if sub_process.stderr")
+
                     for std_err_line in sub_process.stderr:
+
+                        log(ctx, f"for std_err_line {std_err_line} in sub_process.stderr {sub_process.stderr}")
 
                         # Remove whitespaces, and skip empty lines
                         std_err_line = std_err_line.strip()
@@ -406,6 +420,7 @@ def run_subprocess(
                             continue
 
                         std_err_list.append(std_err_line)
+                        log(ctx, f"std_err_list {std_err_list}.append(std_err_line {std_err_line})")
 
 
         elif password:
