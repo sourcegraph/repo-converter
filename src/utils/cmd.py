@@ -291,12 +291,17 @@ def run_subprocess(
         # Redirect stderr to stdout for simplicity
         stderr_int = subprocess.STDOUT
 
-    ## Handle text vs byte mode
-    # Byte mode is needed for stdout / stdin interaction
-    # TODO: Handle all stdout as byte mode?
-    text = True
-    # if expect:
-    #     text = True  # Keep text mode for SVN prompts
+
+
+    # Set the needed Popen args, which are different if expect is provided
+    bufsize = -1
+    shell   = False
+
+    if expect:
+        args    = " ".join(args)
+        bufsize = 1
+        shell   = True
+
 
     # Which log level to emit log events at,
     # so we can increase the log_level depending on process success / fail / quiet
@@ -316,10 +321,12 @@ def run_subprocess(
         # TODO: Disable text = True, and handle stdin / out / err pipes as byte streams, so that stdout can be checked without waiting for a newline
         sub_process = psutil.Popen(
             args    = args,
+            bufsize = bufsize,
+            shell   = shell,
             stderr  = stderr_int,
             stdin   = subprocess.PIPE,
             stdout  = subprocess.PIPE,
-            text    = text,
+            text    = True,
         )
 
         subprocess_dict["status_message"] = "started"
