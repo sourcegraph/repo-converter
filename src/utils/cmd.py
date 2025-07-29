@@ -249,15 +249,13 @@ def run_pexpect(
         child               = pexpect.spawn(
                                             command     = args,
                                             encoding    = 'utf-8',
-                                            echo        = True,
+                                            echo        = False,
                                             timeout     = timeout
                                             )
 
         return_dict["pid"]  = child.pid
 
-        log(ctx, f"child.pid: {child.pid}")
-
-        # child.logfile_read  = sys.stdout.buffer
+        # log(ctx, f"child.pid: {child.pid}")
 
         match               = child.expect_exact(
                                             pattern_list = [expect],

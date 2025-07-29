@@ -13,6 +13,9 @@ import re
 import shutil
 import time
 
+# Import third party modules
+import pysvn
+
 # dicts for:
     # ctx, including job subdict, for both configs and logging
     # commands, separate from ctx, as they do not need to be shared / logged
@@ -26,6 +29,53 @@ import time
     # Fewest svn remote commands
     # Easiest reading / maintenance
     # Fewest local commands
+
+
+def _initialize_pysvn(ctx):
+    """
+    Create and return the pysvn.client
+    """
+
+    job_config                  = ctx.job.get("config",{})
+    disable_tls_verification    = job_config.get("disable_tls_verification")
+    username                    = job_config.get("username")
+    password                    = job_config.get("password")
+
+    pysvn_client = pysvn.Client()
+
+    if disable_tls_verification:
+
+        def pysvn_callback_ssl_server_trust_prompt(trust_dict):
+            """
+            Callback function, for pysvn module to call, when the svn server prompts if we want to trust the cert
+            https://pysvn.sourceforge.io/Docs/pysvn_prog_ref.html#pysvn_client
+            """
+
+            print(f"pysvn_ssl_server_trust_prompt trust_dict: {trust_dict}")
+
+            return_code         = True
+            accepted_failures   = trust_dict["failures"]
+            save_server_cert    = True
+
+            return return_code, accepted_failures, save_server_cert
+
+
+        pysvn_client.callback_ssl_server_trust_prompt = pysvn_callback_ssl_server_trust_prompt
+
+
+    def pysvn_callback_get_login(realm, callback_username, may_save):
+
+        return_username     = username
+        return_password     = password
+        return_code         = return_username and return_password
+        save_credentials    = True
+
+        return return_code, return_username, return_password, save_credentials
+
+    pysvn_client.callback_get_login = pysvn_callback_get_login
+
+
+    return pysvn_client
 
 
 def convert(ctx: Context) -> None:
@@ -44,9 +94,11 @@ def convert(ctx: Context) -> None:
     if _check_if_conversion_is_already_running_in_another_process(ctx, commands):
         return
 
+    pysvn_client = _initialize_pysvn(ctx)
+
     # Test connection to the SVN server
     ### EXTERNAL COMMAND: svn info ###
-    if not _test_connection_and_credentials(ctx, commands):
+    if not _test_connection_and_credentials(ctx, commands, pysvn_client):
         return
 
     # Get revision information from the svn_info output
@@ -171,7 +223,7 @@ def _build_cli_commands(ctx: Context) -> dict:
         ctx.job["config"].update(
             {
                 "expect": {
-                    "prompt": "ermanently",
+                    "prompt": "accept (p)ermanently",
                     "response": "p",
                 }
             }
@@ -343,7 +395,11 @@ def _check_if_conversion_is_already_running_in_another_process(
     return False
 
 
-def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
+def _test_connection_and_credentials(
+        ctx: Context,
+        commands: dict,
+        pysvn_client: pysvn.Client
+    ) -> bool:
     """
     Run the svn info command to test:
     - Network connectivity to the SVN server
@@ -357,43 +413,87 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
     """
 
     # Get config values
-    job_config          = ctx.job.get("config",{})
+    job_config          = ctx.job.get("config", {})
     max_retries         = job_config.get("max_retries")
     password            = job_config.get("password")
-    expect              = job_config.get("expect", {}).get("prompt","")
-    response            = job_config.get("expect", {}).get("response","")
+    repo_url            = job_config.get("repo_url")
+    # expect              = job_config.get("expect", {}).get("prompt","")
+    # response            = job_config.get("expect", {}).get("response","")
     cmd_svn_info        = commands["cmd_svn_info"]
     tries_attempted     = 1
+    svn_info            = {}
+    svn_info_success    = False
 
     while True:
 
-        test = cmd.run_pexpect(
-            ctx,
-            args        = cmd_svn_info,
-            expect      = expect,
-            response    = response
+        log(ctx, "while True:")
+
+        svn_info_list_of_tuples = pysvn_client.info2(
+            repo_url,
+            # depth               = depth,
+            # fetch_actual_only   = True,
+            # fetch_excluded      = False,
+            # peg_revision        = pysvn.Revision( opt_revision_kind.unspecified ),
+            # recurse             = True,
+            # revision            = pysvn.Revision( opt_revision_kind.unspecified ),
         )
 
-        log(ctx, "test:", "debug", {"test": test})
+        log(ctx, "svn_info_list_of_tuples:", "debug", {"svn_info_list_of_tuples": svn_info_list_of_tuples})
 
+        svn_info_path = ""
+        svn_info_dict = {}
+
+        # Grab the first tuple from the list
+        if (
+            isinstance(svn_info_list_of_tuples, list)       and
+            len(svn_info_list_of_tuples) > 0                and
+            isinstance(svn_info_list_of_tuples[0], tuple)
+        ):
+            log(ctx, f"if: True")
+            svn_info_path, svn_info_dict = svn_info_list_of_tuples[0]
+
+            svn_info_url = svn_info_dict.get("URL","")
+            if repo_url in svn_info_url:
+                log(ctx, f"repo_url in svn_info_url: {repo_url} in {svn_info_url}")
+            else:
+                log(ctx, f"repo_url NOT in svn_info_url: {repo_url} NOT in {svn_info_url}")
+
+            svn_info = svn_info_dict
+
+
+            svn_info_success = True
+
+        else:
+            log(ctx, f"if: False")
+
+        # # Attempt to use pexpect
+        # test = cmd.run_pexpect(
+        #     ctx,
+        #     args        = cmd_svn_info,
+        #     expect      = expect,
+        #     response    = response
+        # )
+
+        # # Original
         # Run the command, capture the output
-        svn_info = cmd.run_subprocess(
-            ctx,
-            cmd_svn_info,
-            password,
-            quiet           = False,
-            name            = f"svn_info_{tries_attempted}",
-            expect          = expect,
-            stderr          = "stderr",
-        )
+        # svn_info = cmd.run_subprocess(
+        #     ctx,
+        #     cmd_svn_info,
+        #     password,
+        #     quiet           = False,
+        #     name            = f"svn_info_{tries_attempted}",
+        #     # expect          = expect,
+        #     stderr          = "stderr",
+        # )
 
-        svn_output                  = svn_info["output"]
-        errors                      = _find_errors_in_svn_output(ctx, svn_output)
-        return_code                 = svn_info["return_code"]
-        ctx.job["result"]["errors"] = errors
+        # svn_output                  = svn_info["output"]
+        # errors                      = _find_errors_in_svn_output(ctx, svn_output)
+        # return_code                 = svn_info["return_code"]
+        # ctx.job["result"]["errors"] = errors
 
         # If the command exited successfully, save the process output dict to the job context
-        if return_code == 0 and not errors:
+        # if return_code == 0 and not errors:
+        if svn_info_success:
 
             if tries_attempted > 1:
                 log(ctx, f"Successfully connected to repo remote after {tries_attempted} tries", "warning")
@@ -406,7 +506,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
 
             log_failure_message = f"svn info failed to connect to repo remote, reached max retries {max_retries}"
             set_job_result(ctx, "skipped", log_failure_message, False)
-            log(ctx, f"{log_failure_message}", "error", {"process": svn_info})
+            log(ctx, f"{log_failure_message}", "error", {"svn_info": svn_info})
 
             return False
 
@@ -417,7 +517,7 @@ def _test_connection_and_credentials(ctx: Context, commands: dict) -> bool:
 
             # Log the failure
             retry_delay_seconds = random.randrange(1, 5)
-            log(ctx, f"svn info failed to connect to repo remote, retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug", {"process": svn_info})
+            log(ctx, f"svn info failed to connect to repo remote, retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug", {"svn_info": svn_info})
             time.sleep(retry_delay_seconds)
 
         # Repeat the loop
@@ -443,7 +543,7 @@ def _extract_svn_remote_state_from_svn_info_output(ctx: Context) -> bool:
 
         line_split = line.split(': ')
 
-        if len(line_split) > 1:
+        if len(line_split) >= 2:
 
             key     = line_split[0]
             value   = line_split[1]
@@ -587,7 +687,6 @@ def _configure_git_repo(ctx: Context, commands: dict) -> None:
     authors_prog_path       = job_config.get("authors_prog_path")
     git_ignore_file_path    = job_config.get("git_ignore_file_path")
     local_repo_path         = job_config.get("local_repo_path")
-    repo_key                = job_config.get("repo_key")
     disable_tls_verification = job_config.get("disable_tls_verification")
 
     # Set the default branch local to this repo, after init
