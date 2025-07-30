@@ -87,9 +87,6 @@ ENV_FILE=".env"
 echo "Environment variables:"
 cat "$ENV_FILE"
 
-# Run the build
-echo "Running podman build"
-
 # If an m is passed in the args
 if [[ "$1" == *"m"* ]]
 then
@@ -100,11 +97,18 @@ then
     podman machine stop
     # Start it as a background process
     # and disown it, so it continues to run after this script ends
-    podman machine start & disown
+    # The disown doesn't seem to be working
+    # podman machine start & disown
+    nohup podman machine start >/dev/null 2>&1 &
     # But give it 10 seconds to start up
-    sleep 20
+    sleep_time=20
+    echo "Giving podman VM $sleep_time seconds to start up"
+    sleep $sleep_time
 
 fi
+
+# Run the build
+echo "Running podman build"
 
 podman build \
     --file          ./Dockerfile \
@@ -123,6 +127,7 @@ then
     # because podman-compose can't figure this out on its own
     echo "Stopping old containers"
     podman-compose down
+    podman network rm build_default -f
 
     # Pull the latest tags of the other images
     if [[ "$1" == *"p"* ]]

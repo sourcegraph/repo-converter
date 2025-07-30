@@ -1,14 +1,10 @@
 # TODO
 
+## Usability
+
+- Update examples
+
 ## Observability
-
-- Copy the `repo_key` attribute up, between `message` and `log_level`
-    - Then remove `f"{repo_key};` from log event calls
-
-- Only print code / container / process / etc. sections of the log events if `log_level==DEBUG`
-
-- Add PID and PPID to all debug log events
-    - Does the log function run from the same PID as the caller?
 
 - Implement canonical log events
     - Designate specific events as canonical
@@ -28,6 +24,9 @@
         - svn info Last Changed Rev and Last Changed Date
         - "svn-remote.svn.branches-maxRev"
         - retries_attempted
+
+- A running list, as these values change
+    - Date, Time, repo_key, Dir Size (B), Dir Size Change (B), Latest Converted Commit SVN Rev, Latest Converted Commit Date, SVN Repo Remote Last Changed Rev, branches-maxRev, SVN Repo Remote Current Revision (current index of entire repo)
 
 - Implement OpenTelemetry
 
@@ -69,7 +68,7 @@
 
 - `git svn fetch --log-window-size [100] --revision [BASE:HEAD]`
     - log-window-size
-        - For each HTTP request to the Subversion server, the number of revs to query for
+        - For each network request to the Subversion server, the number of revs to query for
     - Absolutely intolerant of invalid revs in the `--revisions` range
         - ex. if the start of the range is prior in the local repo's history, it'll just exit 0 with no output, and no changes
     - BASE
@@ -116,7 +115,7 @@
         - Description
         - Default values
         - Valid data types
-        - Required? (ex. either repo-url or repo-parent-url)
+        - Required? (ex. either url or repo-url)
         - Valid parents (global / server / repo), so child keys can be validated that they're under a valid parent key
         - Usage
         - Examples
@@ -138,6 +137,32 @@
 
 ## Process Management
 
+- Look into children = sub_process.children(recursive=True) to help track child procs / grand child / great grand child, etc.
+
+- Change all commands to strings, and use shlex.split(args_string) to split them for cmd.run_subprocess()?
+    - https://realpython.com/python-subprocess/#processes-and-subprocesses:~:text=use%20the%20shlex-,module,-to%20help%20you
+
+- Some repo sync job processes seem to get stuck / not get cleaned up
+    - This seems to hang the main loop, stopping further cycles
+    - STATUS_MONITOR_INTERVAL=60 is defined, but even the status monitor doesn't seem to be firing
+    - These events were consecutive in the logs
+    - Amp suggests its a deadlock from the status_monitor log event calling the get_status() command, added a timeout to the acquire semaphore
+    - Note the huge gaps in time
+        ```
+        {"date": "2025-07-21", "time": "10:26:34.621418", "cycle": 346, "message": "Starting main loop run", "level": "debug", "env_vars": {"BUILD_BRANCH": "marc-fix-svn-fetch-error-processing", "BUILD_COMMIT": "e98ecd4", "BUILD_COMMIT_MESSAGE": "Add git_dir_size math", "BUILD_DATE": "2025-07-21T04:33:07Z", "BUILD_TAG_OR_COMMIT_FOR_LOGS": "e98ecd4", "LOG_LEVEL": "DEBUG", "MAX_CONCURRENT_CONVERSIONS_GLOBAL": 10, "MAX_CONCURRENT_CONVERSIONS_PER_SERVER": 10, "MAX_CYCLES": 0, "MAX_RETRIES": 3, "REPOS_TO_CONVERT": "/sg/repos-to-convert.yaml", "REPO_CONVERTER_INTERVAL_SECONDS": 60, "SRC_SERVE_ROOT": "/sg/src-serve-root", "STATUS_MONITOR_INTERVAL": 60, "TRUNCATED_OUTPUT_MAX_LINES": 20, "TRUNCATED_OUTPUT_MAX_LINE_LENGTH": 200}, "code": {"caller": {"module": "__main__", "function": "main", "file": "/sg/repo-converter/src/main.py", "line": 57}}, "container": {"id": "af4e65adb143", "start_datetime": "2025-07-21 04:40:00", "uptime": "5h 46m 33s"}, "image": {"build_date": "2025-07-21T04:33:07Z", "build_tag": "e98ecd4"}, "timestamp": "1753093594.6214"}
+        {"date": "2025-07-21", "time": "10:26:34.624270", "cycle": 346, "message": "Adding secret password to set of secrets to redact", "level": "debug", "code": {"caller": {"module": "config.load_repos", "function": "check_types_recursive", "file": "/sg/repo-converter/src/config/load_repos.py", "line": 201}, "parent_1": {"module": "config.load_repos", "function": "check_types_recursive", "file": "/sg/repo-converter/src/config/load_repos.py", "line": 140}, "parent_2": {"module": "config.load_repos", "function": "check_types_recursive", "file": "/sg/repo-converter/src/config/load_repos.py", "line": 140}}, "container": {"id": "af4e65adb143", "start_datetime": "2025-07-21 04:40:00", "uptime": "5h 46m 33s"}, "image": {"build_date": "2025-07-21T04:33:07Z", "build_tag": "e98ecd4"}, "timestamp": "1753093594.6243"}
+        {"date": "2025-07-21", "time": "10:26:34.624820", "cycle": 346, "message": "Repos to convert", "level": "debug", "repos": {...
+        {"date": "2025-07-21", "time": "10:26:34.663753", "cycle": 346, "message": "repo; Starting repo conversion job", "level": "debug", "job": {"config": {"repo_key":...
+        {"date": "2025-07-22", "time": "11:13:29.010333", "cycle": 1, "message": "SIGCHLD handler reaped child PID 377 with exit code 1", "level": "debug", "job": {"config": {"bare_clone": true, "code_host_name":...
+        {"date": "2025-07-22", "time": "11:13:29.179983", "cycle": 1, "message": "Process finished", "level": "debug", "process": {"args": "git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-22", "time": "11:14:32.350086", "cycle": 1, "message": "before len(git_svn_fetch_output): 267287", "level": "debug", "job": {"config": {"bare_clone": true, "code_host_name":...
+        {"date": "2025-07-22", "time": "11:14:32.844138", "cycle": 1, "message": "repo; git svn fetch failed with errors", "level": "error", "process": {"args": "git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-22", "time": "11:14:32.864019", "cycle": 1, "message": "repo; retrying 2 of max 3 times, with a semi-random delay of 6 seconds", "level": "debug", "job": {"config": {"bare_clone": true, "code_host_name":...
+        {"date": "2025-07-22", "time": "11:14:38.883261", "cycle": 1, "message": "repo; fetching with git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-22", "time": "11:14:38.892069", "cycle": 1, "message": "Process started ", "level": "debug", "process": {"args": "git -C /sg/src-serve-root/repo svn fetch...
+        {"date": "2025-07-23", "time": "00:01:02.655521", "cycle": 345, "message": "Received signal SIGTERM (15), initiating graceful shutdown", "level": "info", "job": {"config": {"bare_clone": true, "code_host_name":...
+        ```
+
 - Make child process reap events more usable
     - Find all the data we can get from a child process reap event
         - If not enough data
@@ -150,6 +175,7 @@
     - If no, then don't implement a long-running process timeout
     - If yes, then find a way to determine if long-running processes are actively working
         - If the `/usr/bin/perl /usr/lib/git-core/git-svn fetch` command has been sitting flat at 0% CPU for an hour, then it may be safe to kill
+    - https://realpython.com/python-subprocess/#timeoutexpired-for-processes-that-take-too-long
 
 - SVN commands hanging
     - Add a timeout in run_subprocess() for hanging svn info ~~and svn log~~ commands, if data isn't transferring
@@ -204,7 +230,7 @@
     - Stack Trace During Shutdown occur because:
         - Signal handler called during JSON logging: The signal handler interrupts the logging process while it's serializing JSON data (line 51-52 in traceback)
         - Recursive signal handling: The handler tries to log while already handling a signal, creating a nested call
-        - Multiprocessing cleanup fails: The FileNotFoundError at line 100 indicates the multiprocessing manager's socket connection was already closed when trying to access self.active_jobs[server_name]
+        - Multiprocessing cleanup fails: The FileNotFoundError at line 100 indicates the multiprocessing manager's socket connection was already closed when trying to access `self.active_jobs[server_name]`
     - Root Causes
         - Non-reentrant signal handling: The signal handler isn't designed to handle recursive calls safely
         - Race condition: The multiprocessing manager shuts down before all processes finish cleanup
@@ -212,8 +238,6 @@
     - The application does eventually shut down gracefully, but the multiple signal receptions and stack traces indicate the shutdown process could be more robust.
 
 - Multiprocessing / state / zombie cleanup
-    - Implement better multiprocessing status and state tracking
-        - Multiprocessing pools?
     - Integrate subprocess methods together
         - State tracking, in ctx.child_procs = {}
         - Cleanup of zombie processes, and richer process status updates, in cmd.status_update_and_cleanup_zombie_processes()?
@@ -267,6 +291,11 @@
 
 - Switch most git commands in the git module from git cli to GitPython
 
+- Count lines of code
+    ```shell
+    cloc --exclude-lang=JSON,CSV,Text --exclude-dir=.venv,notes,examples,logs --quiet --by-file-by-lang .
+    ```
+
 ## Expansion
 
 - Implement TODOs strewn around the code
@@ -288,7 +317,33 @@
             - git remote add -f -t master -m master origin git://example.com/git.git/
             - git merge origin
 
+## Podman Issues
+
+- Install Podman Desktop from https://podman.io/
+    - Need command line tab completions
+
+- "too many files open in system" error message when running with podman
+    - Create a new /etc/security/limits.d/30-nofile.conf file in the Podman VM, as per instructions in https://github.com/containers/podman/issues/5526#issuecomment-1440363593
+
+- Executing external compose provider "/usr/local/bin/docker-compose". Please see podman-compose(1) for how to disable this message. <<<<
+    - Configure compose_warning_logs=true, as per https://github.com/containers/common/blob/main/docs/containers.conf.5.md
+    - Edit / create the file at `~/.config/containers/containers.conf`, and add
+        ```toml
+        [engine]
+        compose_warning_logs=false
+        ```
+
 ## Notes
+
+- Subversion seems to have two different meanings for the word "repo"
+    - Server side:
+        - Repository Root and Repository UUID
+    - User side:
+        - trunk / branches / tags directories
+    - We don't actually care about the server-side meaning of a repo
+    - All we care about is:
+        - A "base" URL where to start the paths from
+        - A list of paths from that base URL
 
 - Authors file
     - java -jar /sg/svn-migration-scripts.jar authors https://svn.apache.org/repos/asf/eagle > authors.txt
@@ -327,3 +382,77 @@
             ```shell
             svnsync --non-interactive --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" sync svn://localhost:3690
             ```
+
+
+## Old Doc
+
+```yaml
+xmlbeans:
+# Usage: This key is used as the converted Git repo's name
+# Required: Yes
+# Format: String of YAML / git / filepath / URL-safe characters [A-Za-z0-9_-.]
+# Default if unspecified: Invalid
+
+  type:                 SVN
+  # Usage: The type of repo to be converted, which determines the code path, binaries, and options used
+  # Required: Yes
+  # Format: String
+  # Options: SVN, TFVC
+  # Default if unspecified: Invalid
+
+  url:   https://svn.apache.org/repos/asf/xmlbeans
+  # Usage: The root of the Subversion repo to be converted to a Git repo, thus the root of the Git repo
+  # Required: Yes
+  # Format: URL
+  # Default if unspecified: Invalid
+
+  code-host-name:       svn.apache.org
+  git-org-name:         asf
+  # Usage: The Sourcegraph UI shows users the repo path as code-host-name/git-org-name/repo-name for ease of navigation, and the repos are stored on disk in the same tree structure
+  # Required: Yes; this hasn't been tested without it, but it's highly encouraged for easier user navigation
+  # Format: String of filepath / URL-safe characters [A-Za-z0-9_-.]
+  # Default if unspecified: Empty
+
+  username:             super_secret_username
+  password:             super_secret_password
+  # Usage: Username and password to authenticate to the code host
+  # Required: If code host requires authentication
+  # Format: String
+  # Default if unspecified: Empty
+
+  git-default-branch:   main
+  # Usage: Sets the name of the default branch in the resulting git repo; this is the branch that Sourcegraph users will see first, and will be indexed by default
+  # Required: No
+  # Format: String, git branch name
+  # Default if unspecified: main
+
+  layout:               standard
+  trunk:                trunk
+  branches:             branches
+  tags:                 tags
+  # Usage: Match these to your Subversion repo's directory layout.
+  # Use `layout: standard` by default when trunk, branches, and tags are all top level directories in the repo root
+  # Or, specify the relative paths to these directories from the repo root
+  # These values are just passed to the subversion CLI as command args
+  # Required: Either layout or trunk, branches, tags
+  # Formats:
+    # trunk: String
+    # branches: String, or list of strings
+    # tags: String, or list of strings
+  # Default if unspecified: layout:standard
+
+  git-ignore-file-path: /path/mounted/inside/container/to/.gitignore
+  authors-file-path:    /path/mounted/inside/container/to/authors-file-path
+  authors-prog-path:    /path/mounted/inside/container/to/authors-prog-path
+  # Usage: If you need to use .gitignore, an author's file, or an author's program in the repo conversion, then mount them as a volume to the container, and provide the in-container paths here
+  # Required: No
+  # Format: String, file path
+  # Default if unspecified: empty
+
+  bare-clone:           true
+  # Usage: If you need to keep a checked out working copy of the latest commit on disk for debugging purposes, set this to false
+  # Required: No
+  # Format: String
+  # Options: true, false
+  # Default if unspecified: true
+```

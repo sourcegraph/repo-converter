@@ -8,6 +8,7 @@ from utils.context import Context
 # Import Python standard modules
 from datetime import datetime
 import inspect
+import os
 import time
 
 # Import third party modules
@@ -17,7 +18,7 @@ import structlog
 def log(
         ctx: Context,
         message: str,
-        level_name: str = "DEBUG",
+        event_log_level_name: str = "DEBUG",
         structured_data: dict = None,
         correlation_id: str = "",
         log_env_vars: bool = False,
@@ -35,9 +36,9 @@ def log(
     """
 
     # Normalize level name
-    level_name = str(level_name).upper()
-    if level_name not in ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]:
-        level_name = "DEBUG"
+    event_log_level_name = str(event_log_level_name).upper()
+    if event_log_level_name not in ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]:
+        event_log_level_name = "DEBUG"
 
     # Get structlog logger
     logger = structlog.get_logger()
@@ -49,13 +50,13 @@ def log(
         correlation_id,
         log_env_vars,
         log_concurrency_status,
-        )
+    )
 
     # Apply redaction to the entire payload
     redacted_payload = secret.redact(ctx, structured_payload)
 
     # Log using structlog's logging commands, where the command is the log level's name
-    getattr(logger, level_name.lower())(message, **redacted_payload)
+    getattr(logger, event_log_level_name.lower())(message, **redacted_payload)
 
 
 def _build_structured_payload(
@@ -64,15 +65,12 @@ def _build_structured_payload(
         correlation_id: str = "",
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
-        ) -> dict:
+    ) -> dict:
     """Build the complete structured data payload for logging"""
 
 
     current_timestamp = time.time()
     now = datetime.fromtimestamp(current_timestamp)
-
-    # Capture code location info
-    code_location = _capture_code_location()
 
     # Base payload with grouped structure
     payload = {
@@ -83,42 +81,59 @@ def _build_structured_payload(
         "time": now.time().isoformat(),
         "timestamp": "%.4f" % current_timestamp, # Round to 4 digits, keeping trailing 0s, if any
 
-        # Code/build-related fields grouped
-        "code": code_location,
-
-        # Container-related fields grouped
-        "container": {
-            "uptime": _format_uptime(current_timestamp - ctx.start_timestamp),
-            "start_datetime": ctx.start_datetime,
-            "id": ctx.container_id
-        },
-
-        "image": {
-            "build_tag": ctx.env_vars.get("BUILD_TAG_OR_COMMIT_FOR_LOGS", "unknown"),
-            "build_date": ctx.env_vars.get("BUILD_DATE", "unknown")
-        }
-
     }
 
-    # If a correlation_id is passed to the log() function, then use it as a top-level key
-    # Other correlation_ids can be logged under other subdicts, ex. job, process
-    if correlation_id:
-        payload["correlation_id"] = correlation_id
+    # Get stack
+    code_location = _capture_code_location()
 
-    # Add environment variables if instructed
-    if log_env_vars:
-        payload["env_vars"] = ctx.env_vars
+    # Ignore job context for some functions
+    functions_to_ignore_ctx_job = [
+        "status_monitor",
+    ]
+    ignore_ctx_job = False
 
-    # Add concurrency status if instructed
-    if log_concurrency_status:
-        payload["concurrency"] = ctx.concurrency_manager.get_status(ctx)
+    for function_to_ignore_ctx_job in functions_to_ignore_ctx_job:
+        for caller in code_location:
+            for value in code_location.get(caller).values():
+                try:
+                    if function_to_ignore_ctx_job in value:
+                        ignore_ctx_job = True
+                        break
+                except TypeError:
+                    pass
 
-    # Merge any additional structured data passed in as parameters
-    if structured_data:
-        payload.update(structured_data)
+    if ctx.env_vars.get("LOG_LEVEL") == "DEBUG":
+
+        pid = os.getpid()
+
+        payload.update(
+            {
+                "pids" : {
+                    "pid": pid,
+                    "psid": os.getsid(pid),
+                    "pgrp": os.getpgrp(),
+                    "ppid": os.getppid(),
+                },
+                "code": code_location,
+                "container": {
+                    "uptime": _format_uptime(current_timestamp - ctx.start_timestamp),
+                    "start_datetime": ctx.start_datetime,
+                    "id": ctx.container_id
+                },
+                "image": {
+                    "build_tag": ctx.env_vars.get("BUILD_TAG_OR_COMMIT_FOR_LOGS", "unknown"),
+                    "build_date": ctx.env_vars.get("BUILD_DATE", "unknown")
+                }
+            }
+        )
 
     # Merge any job data from the context
-    if ctx.job:
+    if ctx.job and not ignore_ctx_job:
+
+        ctx_job_config  = ctx.job.get("config",{})
+        repo_key        = ctx_job_config.get("repo_key", "")
+        if repo_key:
+            payload.update({"repo_key": repo_key})
 
         ctx_job_result  = ctx.job.get("result",{})
         start_timestamp = ctx_job_result.get("start_timestamp")
@@ -132,6 +147,34 @@ def _build_structured_payload(
             ctx.job["result"]["running_time_seconds"] = int(time.time() - start_timestamp)
 
         payload.update({"job": dict(ctx.job)})
+
+    # Merge any additional structured data passed in as parameters
+    if structured_data:
+        payload.update(structured_data)
+
+        # If job data was passed in via structured_data, then use it
+        # Note: this could get confusing if overlapping
+        structured_data_job = structured_data.get("job",{})
+        if structured_data_job:
+            payload.update({"job": dict(structured_data_job)})
+
+            structured_data_job_repo_key = structured_data_job.get("config",{}).get("repo_key")
+            if structured_data_job_repo_key:
+                payload.update({"repo_key": structured_data_job_repo_key})
+
+
+    # If a correlation_id is passed to the log() function, then use it as a top-level key
+    # Other correlation_ids can be logged under other subdicts, ex. job, process
+    if correlation_id:
+        payload["correlation_id"] = correlation_id
+
+    # Add environment variables if instructed
+    if log_env_vars:
+        payload["env_vars"] = ctx.env_vars
+
+    # Add concurrency status if instructed
+    if log_concurrency_status:
+        payload["concurrency"] = ctx.concurrency_manager.get_status(ctx)
 
     # Remove any null values
     payload = _remove_null_values(payload)

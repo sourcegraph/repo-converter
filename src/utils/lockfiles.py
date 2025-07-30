@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Try to clear the various lock files left behind by different processes
+# TODO: Move to git module
 
 # Import repo-converter modules
 from utils import cmd
@@ -19,44 +20,70 @@ def clear_lock_files(ctx: Context) -> bool:
     # Get the local repo path
     local_repo_path = ctx.job.get("config", {}).get("local_repo_path","")
     repo_key        = ctx.job.get("config", {}).get("repo_key","")
+
     if not local_repo_path:
-        log(ctx, f"{repo_key}; No local_repo_path", "error")
+        log(ctx, f"No local_repo_path", "error")
 
-    return_value    = False
+    # Use a set for found_lock_files, for deduplication in case the find command finds an existing lock file
+    found_lock_files    = set()
+    local_repo_path     += "/.git"
+    lock_file_deleted   = False
+    command             = "git svn fetch"
 
+    # Check if known frequent lock files
     list_of_command_and_lock_file_path_tuples = [
-        ("git garbage collection"       , ".git/gc.pid"                                     ), # fatal: gc is already running on machine '75c377aedbaf' pid 3700 (use --force if not)
-        ("git svn fetch git-svn"        , ".git/svn/refs/remotes/git-svn/index.lock"        ), # fatal: Unable to create '/sg/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/git-svn/index.lock': File exists.
-        ("git svn fetch origin trunk"   , ".git/svn/refs/remotes/origin/trunk/index.lock"   ), # fatal: Unable to create '/sg/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/origin/trunk/index.lock': File exists
-        ("svn config"                   , ".git/svn/.metadata.lock"                         ), # error: could not lock config file .git/svn/.metadata: File exists config svn-remote.svn.branches-maxRev 125551: command returned error: 255
+        ("git garbage collection"       , "gc.pid"                                     ), # fatal: gc is already running on machine '75c377aedbaf' pid 3700 (use --force if not)
+        ("git svn fetch git-svn"        , "svn/refs/remotes/git-svn/index.lock"        ), # fatal: Unable to create '/sg/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/git-svn/index.lock': File exists.
+        ("git svn fetch origin trunk"   , "svn/refs/remotes/origin/trunk/index.lock"   ), # fatal: Unable to create '/sg/src-serve-root/svn.apache.org/asf/xmlbeans/.git/svn/refs/remotes/origin/trunk/index.lock': File exists
+        ("svn config"                   , "svn/.metadata.lock"                         ), # error: could not lock config file .git/svn/.metadata: File exists config svn-remote.svn.branches-maxRev 125551: command returned error: 255
     ]
 
+    # Check if known frequent lock files exist
     for command, lock_file in list_of_command_and_lock_file_path_tuples:
 
         lock_file_path = f"{local_repo_path}/{lock_file}"
-
         if os.path.exists(lock_file_path):
+            found_lock_files.add(lock_file_path)
+
+
+    # Search for any other lock files
+    files_to_search_for  = [
+        "index.lock"
+    ]
+
+    for file_to_search_for in files_to_search_for:
+
+        # Run the search
+        for root, dirs, files in os.walk(local_repo_path):
+            if file_to_search_for in files:
+                found_lock_files.add(os.path.join(root, file_to_search_for ))
+
+
+    for found_lock_file in found_lock_files:
+
+        try:
+
+            lock_file_content = ""
 
             try:
 
-                lock_file_content = ""
+                with open(found_lock_file, "r") as lock_file_object:
+                    lock_file_content = lock_file_object.read()
 
-                try:
+            except UnicodeDecodeError as exception:
+                lock_file_content = exception
 
-                    with open(lock_file_path, "r") as lock_file_object:
-                        lock_file_content = lock_file_object.read()
+            log(ctx, f"Process failed to start due to a lock file in the repo at {found_lock_file}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
-                except UnicodeDecodeError as exception:
-                    lock_file_content = exception
+            cmd_rm_lock_file = ["rm", "-f", found_lock_file]
+            cmd.run_subprocess(ctx, cmd_rm_lock_file, quiet=True, name="cmd_rm_lock_file")
 
-                log(ctx, f"{repo_key}; Process failed to start due to a lock file in the repo at {lock_file_path}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
+            lock_file_deleted = True
 
-                cmd_rm_lock_file = ["rm", "-f", lock_file_path]
-                cmd.run_subprocess(ctx, cmd_rm_lock_file, quiet=True, name="cmd_rm_lock_file")
+        except subprocess.CalledProcessError as exception:
+            log(ctx, f"Failed to delete lock file at {found_lock_file} with exception: {type(exception)}, {exception.args}, {exception}", "error")
 
-                return_value = True
+        except FileNotFoundError:
+            log(ctx, f"Lock file found at {found_lock_file}, but didn't exist at the time of deletion", "error")
 
-            except subprocess.CalledProcessError as exception:
-                log(ctx, f"{repo_key}; Failed to delete lock file at {lock_file_path} with exception: {type(exception)}, {exception.args}, {exception}", "error")
-
-    return return_value
+    return lock_file_deleted

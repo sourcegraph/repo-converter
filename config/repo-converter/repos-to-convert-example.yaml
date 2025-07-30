@@ -1,0 +1,31 @@
+# Rename to repos-to-convert.yaml
+
+global:
+  disable_tls_verification: false
+  type: svn
+  # username: username
+  # password: password
+
+https://svn.apache.org/repos/asf:
+  repos:
+    - ambari
+    - cocoon
+    - curator/site
+    - hadoop/common
+    - httpcomponents
+    - httpd
+    - lucene
+    - lucene/dev
+
+pysvn:
+  url: https://svn.code.sf.net/p/pysvn
+  log_window_size: 1000
+  repos:
+  - code:
+      git_default_branch: trunk
+      trunk: trunk/pysvn
+      branches: branches
+      tags:
+      - tags/pysvn/Extension
+      - tags/pysvn/ReleaseEngineering
+      - tags/pysvn/WorkBench

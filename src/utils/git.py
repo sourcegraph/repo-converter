@@ -23,13 +23,13 @@ def _get_and_validate_local_repo_path(
 
     if not local_repo_path:
         if not quiet:
-            log(ctx, f"{repo_key}; No local repo path provided to function", "error")
+            log(ctx, f"No local repo path provided to function", "error")
         return None
 
     # Validate the repo path exists
     if not os.path.exists(local_repo_path):
         if not quiet:
-            log(ctx, f"{repo_key}; Path {local_repo_path} provided to function doesn't exist", "warning")
+            log(ctx, f"Path {local_repo_path} provided to function doesn't exist", "warning")
         return None
 
     # Validate the repo path is a valid git repo
@@ -45,7 +45,7 @@ def _get_and_validate_local_repo_path(
     valid_repo_path = cmd.run_subprocess(ctx, cmd_git_validate_repo_path, quiet=True, name="cmd_git_validate_repo_path").get("output")
     if not valid_repo_path:
         if not quiet:
-            log(ctx, f"{repo_key}; Not a valid repo path: {local_repo_path}", "debug")
+            log(ctx, f"Not a valid repo path: {local_repo_path}", "debug")
         return None
     else:
         # log(ctx, f"Valid repo path: {local_repo_path}", "debug")
@@ -58,7 +58,7 @@ def _get_and_validate_local_repo_path(
         # Validate the repo path + sub_dir exists
         if not os.path.exists(local_repo_path):
             if not quiet:
-                log(ctx, f"{repo_key}; Path {local_repo_path} needed for function doesn't exist", "warning")
+                log(ctx, f"Path {local_repo_path} needed for function doesn't exist", "warning")
             return None
 
     return local_repo_path
@@ -79,12 +79,12 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
 
     local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:
-        log(ctx, f"{repo_key}; Repo missing local_repo_path", "error")
+        log(ctx, f"Repo missing local_repo_path", "error")
         return
 
     packed_refs_file_path = _get_and_validate_local_repo_path(ctx, ".git/packed-refs")
     if not packed_refs_file_path:
-        log(ctx, f"{repo_key}; Repo missing .git/packed-refs", "error")
+        log(ctx, f"Repo missing .git/packed-refs", "error")
         return
 
     # Get the local repo path
@@ -124,7 +124,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
 
         except Exception as exception:
 
-            log(ctx, f"{repo_key}; Exception while cleaning branches and tags: {exception}", "error")
+            log(ctx, f"Exception while cleaning branches and tags: {exception}", "error")
             continue
 
         # If the path is a local tag, then delete it
@@ -177,7 +177,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
 
         else:
 
-            log(ctx, f"{repo_key}; Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
+            log(ctx, f"Error while cleaning branches and tags, not sure how to handle line {input_lines[i]} in {packed_refs_file_path}", "error")
             output_list_of_strings_and_line_number_tuples.append([str(input_lines[i]), i])
 
     # Sort by the path in the tuple
@@ -199,6 +199,7 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     # Reset the default branch
     cmd.run_subprocess(ctx, cmd_git_repo_set_default_branch, quiet=True, name="cmd_git_repo_set_default_branch")
 
+
 def get_count_of_commits_in_repo(ctx: Context) -> int:
     """
     Count and return the total number of commits in the git repo, across all branches
@@ -209,7 +210,7 @@ def get_count_of_commits_in_repo(ctx: Context) -> int:
         return
 
     cmd_git_count_commits = ["git", "-C", local_repo_path, "rev-list", "--all", "--count"]
-    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits", ignore_stderr=True)
+    cmd_git_count_commits_result = cmd.run_subprocess(ctx, cmd_git_count_commits, quiet=True, name="cmd_git_count_commits", stderr="ignore")
 
     if cmd_git_count_commits_result["return_code"] == 0:
         count_commits = ''.join(cmd_git_count_commits_result["output"]) if isinstance(cmd_git_count_commits_result["output"], list) else cmd_git_count_commits_result["output"]
@@ -377,6 +378,7 @@ def get_latest_commit_metadata(ctx: Context, commit_metadata_field_list: list[st
         pass
 
     return commit_metadata_return_list
+
 
 def git_global_config(ctx: Context) -> None:
     """

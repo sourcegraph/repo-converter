@@ -72,7 +72,6 @@ Last Changed Date: 2024-10-23 13:00:39 +0000 (Wed...    <- The date of the last 
         - The `--log-window-size` is too large, and the request times out / gets dropped at after 10 minutes of processing time
         - The `--log-window-size` is too small, which multiplies the number of requests required to convert the repo, and every new request has its own possibility of timing out
 
-5. The `_calculate_batch_revisions`, then `_git_svn_fetch` functions are only ever called after the `_check_if_repo_already_up_to_date` function concludes that the local git repo is behind the remote svn server, based on the "Last Changed Rev" response to the `svn info` command above
-- Therefore, any `git svn fetch` execution which doesn't return any lines of output is considered a failure, even if the return_code is 0
+5. `git svn fetch` is only called after determining that the local clone is out of date, so any `git svn fetch` execution which doesn't return any lines of output is considered a failure, even if the return_code is 0
 - Therefore, we cannot trust the return code as an indicator of task success
 - We must determine task success based on data in the local git repo, and the lines in stdout from the `git svn fetch` command

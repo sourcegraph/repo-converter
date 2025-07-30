@@ -47,7 +47,7 @@ def load_env_vars() -> dict:
     env_vars["MAX_RETRIES"]                             = int(environ.get("MAX_RETRIES"                             , 3 ))
     env_vars["REPO_CONVERTER_INTERVAL_SECONDS"]         = int(environ.get("REPO_CONVERTER_INTERVAL_SECONDS"         , 3600 ))
     # Paths inside the container, don't change unless also changing in compose file volume mapping
-    env_vars["REPOS_TO_CONVERT"]                        = str(environ.get("REPOS_TO_CONVERT"                        , "/sg/repos-to-convert.yaml" ))
+    env_vars["REPOS_TO_CONVERT"]                        = str(environ.get("REPOS_TO_CONVERT"                        , "/sg/config/repos-to-convert.yaml" ))
     env_vars["SRC_SERVE_ROOT"]                          = str(environ.get("SRC_SERVE_ROOT"                          , "/sg/src-serve-root" ))
     env_vars["STATUS_MONITOR_INTERVAL"]                 = int(environ.get("STATUS_MONITOR_INTERVAL"                 , 60 ))
     env_vars["TRUNCATED_OUTPUT_MAX_LINE_LENGTH"]        = int(environ.get("TRUNCATED_OUTPUT_MAX_LINE_LENGTH"        , 200 ))

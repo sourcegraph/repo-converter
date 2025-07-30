@@ -1,6 +1,9 @@
-#!/usr/bin/env python3
-# TFVC repository handling
+# # !/usr/bin/env python3
+# # TFVC repository handling
 
+# # Import repo-converter modules
+# from utils.context import Context
+# from utils.log import log
 # from .base import Repo
 
 # class TFVCRepo(Repo):
@@ -18,26 +21,20 @@
 #         raise NotImplementedError("TFVC update not implemented yet")
 
 
-# Import repo-converter modules
-from utils.context import Context
-from utils.log import log
+# def clone_tfs_repos(ctx: Context) -> None:
 
+#     log(ctx, "Cloning TFS repos function not implemented yet", "error")
 
-def clone_tfs_repos(ctx: Context) -> None:
+#     # Declare an empty dict for TFS repos to extract them from the repos_dict
+#     tfs_repos_dict = {}
 
-    log(ctx, "Cloning TFS repos function not implemented yet", "error")
+#     # Loop through the repos_dict, find the type: tfs repos, then add them to the dict of TFS repos
+#     for repo_key in repos_dict.keys():
 
-    # # Declare an empty dict for TFS repos to extract them from the repos_dict
-    # tfs_repos_dict = {}
+#         repo_type = repos_dict[repo_key].get('type','').lower()
 
-    # # Loop through the repos_dict, find the type: tfs repos, then add them to the dict of TFS repos
-    # for repo_key in repos_dict.keys():
+#         if repo_type == 'tfs' or repo_type == 'tfvc':
 
-    #     repo_type = repos_dict[repo_key].get('type','').lower()
+#             tfs_repos_dict[repo_key] = repos_dict[repo_key]
 
-    #     if repo_type == 'tfs' or repo_type == 'tfvc':
-
-    #         tfs_repos_dict[repo_key] = repos_dict[repo_key]
-
-
-    # log(ctx, f"Cloning TFS repos: {str(tfs_repos_dict)}", "info")
+#     log(ctx, f"Cloning TFS repos: {str(tfs_repos_dict)}", "info")

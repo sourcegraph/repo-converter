@@ -9,7 +9,6 @@ from utils import lockfiles
 # Import Python standard modules
 from datetime import datetime, timedelta
 from typing import Union, Optional, Dict, Any, List
-import json
 import os
 import subprocess
 import textwrap
@@ -48,9 +47,9 @@ def get_pid_uptime(pid: int = 1) -> Optional[timedelta]:
     return pid_uptime
 
 
-def get_psutil_metrics(ctx: Context, process: psutil.Process) -> Dict:
+def _get_process_metadata(ctx: Context, process: psutil.Process) -> Dict:
     """
-    Reformat data returned by psutils.as_dict()
+    Read and reformat the data returned by psutils.as_dict()
     """
 
     psutils_metrics_dict = {}
@@ -118,7 +117,12 @@ def log_process_status(
         Logs process status information via the logging system
     """
 
-    # log(ctx, f"log_process_status: subprocess_dict: {json.dumps(subprocess_dict, indent = 4, sort_keys=True, default=str)}; subprocess_psutils_dict: {json.dumps(subprocess_psutils_dict, indent = 4, sort_keys=True, default=str)}", "debug")
+    log_process_status_dict = {
+        "subprocess_dict": subprocess_dict,
+        "subprocess_psutils_dict": subprocess_psutils_dict,
+    }
+
+    # log(ctx, "log_process_status", "debug", log_process_status_dict)
 
     # Take shallow copies of the dicts, so we can modify top level keys here to reduce duplicates in log output, without affecting the dict in the calling function; if we need to modify nested objects, then we'll need to switch to deep copies
     subprocess_dict_input = subprocess_dict.copy()
@@ -218,6 +222,313 @@ def log_process_status(
     log(ctx, status_message, log_level, structured_log_dict)
 
 
+def run_subprocess(
+        ctx:        Context,
+        args:       Union[str, List[str]],
+        password:   Optional[str]           = "",
+        quiet:      Optional[bool]          = False,
+        name:       Optional[str]           = "",
+        stderr:     Optional[str]           = "stdout",
+        expect:     Union[tuple[str,str], List[tuple[str,str]], None] = "",
+    ) -> Dict[str, Any]:
+    """
+    Middleware function to
+    - Take a CLI command as an args string or list of strings
+    - Execute it as a subprocess
+    - Wait for the subprocess to complete
+    - Gather the needed command output and metadata
+    - Handle generic process errors
+
+    Args:
+        ctx: Context object
+        args: Command arguments as string or list
+        password: Password to be prefilled into stdin stream buffer
+        quiet: Suppress non-error logging
+        name: Optional command name to make logging events easier to find
+        stderr:
+            "stdout" (default), stderr stream is redirected to stdout stream
+            "ignore", stderr stream is redirected to /dev/null
+            "stderr", stderr stream is stored at return_dict["stderr"]
+        expect:
+            (prompt:str, response:str), if prompt is found in the stdout stream, then insert response into stdin stream
+
+    Notes:
+        Use log_process_status() in this function, to format and print process stats
+    """
+
+    # Dict for psutils to fill with .as_dict() function
+    subprocess_psutils_dict            = {}
+
+    # Dict for anything other functions need to consume,
+    # which isn't set in subprocess_psutils_dict
+    subprocess_dict                         = {}
+    subprocess_dict["name"]                 = name          # For command logging
+    subprocess_dict["output"]               = []            # For consumption by the calling function
+    subprocess_dict["pid"]                  = None          # In case psutils doesn't get a pid in subprocess_psutils_dict
+    subprocess_dict["return_code"]          = None          # Integer exit code
+    subprocess_dict["status_message_reason"]= None          # Reason for process failure
+    subprocess_dict["status_message"]       = "starting"    # starting / started / finished
+    subprocess_dict["success"]              = None          # true / false; if false, the reason field should have a value
+    subprocess_dict["truncated_output"]     = None          # For logging
+
+    # Normalize args as a string for log output
+    if isinstance(args, list):
+        subprocess_dict["args"] = " ".join(args)
+    elif isinstance(args, str):
+        subprocess_dict["args"] = args
+
+    # Generate a correlation ID for this subprocess run
+    subprocess_span = str(uuid.uuid4())[:8]
+    subprocess_dict["span"] = subprocess_span
+
+    ## Handle stderr
+    if "ignore" in stderr:
+        stderr_int = subprocess.DEVNULL
+    # If we want to separate it out into its own output
+    elif "stderr" in stderr:
+        stderr_int = subprocess.PIPE
+    else:
+        # Redirect stderr to stdout for simplicity
+        stderr_int = subprocess.STDOUT
+
+
+
+    # Set the needed Popen args, which are different if expect is provided
+    bufsize = -1
+    shell   = False
+
+    if expect:
+        # args    = " ".join(args)
+        bufsize = 1
+        # shell   = True
+
+
+    # Which log level to emit log events at,
+    # so we can increase the log_level depending on process success / fail / quiet
+    # so events are only logged if this level his higher than the LOG_LEVEL the container is running at
+    subprocess_dict["log_level"] = "debug"
+
+    # Log a starting message
+    subprocess_dict["start_time"] = datetime.now()
+    # if not quiet:
+    #     log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+
+    # Try to run the subprocess, and catch subprocess exceptions
+    try:
+
+        # Create the process object and start it
+        # Do not raise an exception on process failure
+        # TODO: Disable text = True, and handle stdin / out / err pipes as byte streams, so that stdout can be checked without waiting for a newline
+        sub_process = psutil.Popen(
+            args    = args,
+            bufsize = bufsize,
+            shell   = shell,
+            stderr  = stderr_int,
+            stdin   = subprocess.PIPE,
+            stdout  = subprocess.PIPE,
+            text    = True,
+        )
+
+        subprocess_dict["status_message"] = "started"
+
+        # Try to read process metadata, and catch exceptions when the process finishes faster than its metadata can be read
+        try:
+
+            # Immediately capture basic process info,
+            # in case the process exits faster than psutils can get the full .as_dict()
+            # before it can finish, or SIGCHLD can reap it
+            subprocess_dict["pid"] = sub_process.pid
+
+            # Try to get full process attributes from the OS
+            # The .as_dict() function can take longer to run than some subprocesses,
+            # so it may fail, trying to read metadata for procs which no longer exist in the OS
+            # I really wish psutils had a way around this, to gather the data as it's created in .Popen
+            with sub_process.oneshot():
+
+                subprocess_psutils_dict = _get_process_metadata(ctx, sub_process)
+
+            # psutil doesn't have a process group ID attribute, need to get it from the OS
+            subprocess_dict["pgid"] = os.getpgid(subprocess_dict["pid"])
+
+        # Process finished before we could get detailed info
+        except (psutil.NoSuchProcess, ProcessLookupError, FileNotFoundError) as exception:
+
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "before getting process metadata"
+
+            if not quiet:
+                subprocess_dict["log_level"] = "info"
+
+        # Log a started message
+        # Either started, with psutil dict,
+        # or finished before getting process metadata, with pid
+        if not quiet:
+            log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+
+        std_err_list = []
+        std_err_string = ""
+        std_out_list = []
+        std_out_string = ""
+
+        if expect:
+            pass
+            # # On exit of this with block, standard file descriptors are closed, and the process is waited / returncode attribute set.
+            # with sub_process:
+
+            #     log(ctx, "with sub_process")
+
+            #     if sub_process.stderr:
+
+            #         log(ctx, "if sub_process.stderr")
+
+            #         for std_err_line in sub_process.stderr:
+
+            #             log(ctx, f"for std_err_line {std_err_line} in sub_process.stderr {sub_process.stderr}")
+
+            #             # Remove whitespaces, and skip empty lines
+            #             std_err_line = std_err_line.strip()
+            #             if not std_err_line:
+            #                 continue
+
+            #             std_err_list.append(std_err_line)
+            #             log(ctx, f"std_err_list {std_err_list}.append(std_err_line {std_err_line})")
+
+            #             # Loop through the list of tuples passed in to the expect parameter
+            #             for prompt, response in expect:
+
+            #                 log(ctx, f"for prompt {prompt}, response {response} in expect {expect}")
+
+            #                 # If the first part of the tuple is found in the output line
+            #                 if prompt in std_err_line:
+
+            #                     log(ctx, f"prompt {prompt} is in std_err_line {std_err_line}")
+
+            #                     # Send the second part into stdin
+            #                     sub_process.stdin.write(f"{response}\n")
+
+            #                     # And flush the buffer
+            #                     sub_process.stdin.flush()
+
+            #                 else:
+            #                     log(ctx, f"prompt {prompt} is NOT in std_err_line {std_err_line}")
+
+
+            #     for std_out_line in sub_process.stdout:
+
+            #         log(ctx, f"std_out_line: {std_out_line}")
+
+            #         # Remove whitespaces, and skip empty lines
+            #         std_out_line = std_out_line.strip()
+            #         if not std_out_line:
+            #             continue
+
+            #         std_out_list.append(std_out_line)
+            #         log(ctx, f"std_out_list: {std_out_list}")
+
+            #         # Loop through the list of tuples passed in to the expect parameter
+            #         for prompt, response in expect:
+
+            #             log(ctx, f"for prompt {prompt}, response {response} in expect {expect}")
+
+            #             # If the first part of the tuple is found in the output line
+            #             if prompt in std_out_line:
+
+            #                 log(ctx, f"prompt {prompt} is in std_out_line {std_out_line}")
+
+            #                 # Send the second part into stdin
+            #                 sub_process.stdin.write(f"{response}\n")
+
+            #                 # And flush the buffer
+            #                 sub_process.stdin.flush()
+
+            #             else:
+            #                 log(ctx, f"prompt {prompt} is NOT in std_out_line {std_out_line}")
+
+
+        elif password:
+
+            # If password is provided to this function,
+            # feed the password string into the subprocess' stdin pipe;
+            # password could be an empty or arbitrary string as a workaround if a process needed it
+            # communicate() also waits for the process to finish
+            std_out_string, std_err_string = sub_process.communicate(password)
+
+        else:
+
+            # communicate() waits for the process to finish
+            std_out_string, std_err_string = sub_process.communicate()
+
+
+        # Get the process' stdout and/or stderr
+        # Have to do this inside the try / except block, in case the output isn't valid
+        std_out_list                            += std_out_string.splitlines()
+        subprocess_dict["output"]               = std_out_list
+        subprocess_dict["output_line_count"]    = len(std_out_list)
+        # Truncate the output for logging
+        subprocess_dict["truncated_output"]     = truncate_output(ctx, std_out_list)
+
+        if "stderr" in stderr:
+            std_err_list                            += std_err_string.splitlines()
+            subprocess_dict["stderr"]               = std_err_list
+            subprocess_dict["stderr_line_count"]    = len(std_err_list)
+            subprocess_dict["truncated_stderr"]     = truncate_output(ctx, std_err_list)
+
+        # If the process exited successfully, set the status_message now
+        # Have to do this inside the try / except block, in case the sub_process object doesn't have a .returncode attribute
+        subprocess_dict["return_code"] = sub_process.returncode
+
+        if subprocess_dict["return_code"] == 0:
+
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "succeeded"
+            subprocess_dict["success"] = True
+
+        else:
+
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "failed"
+            subprocess_dict["success"] = False
+            if not quiet:
+                subprocess_dict["log_level"] = "error"
+
+    # Catching the CalledProcessError exception,
+    # only to catch in case that the subprocess' sub_process _itself_ raised an exception
+    # not necessarily any below processes the subprocess createdsubprocess_dict["command"]
+    except subprocess.CalledProcessError as exception:
+
+        subprocess_dict["status_message"] = "finished"
+        subprocess_dict["status_message_reason"] = f"raised an exception: {type(exception)}, {exception.args}, {exception}"
+
+        subprocess_dict["success"] = False
+        if not quiet:
+            subprocess_dict["log_level"] = "error"
+
+    # Get end time and calculate run time
+    subprocess_dict["end_time"] = datetime.now()
+    execution_time_seconds = (subprocess_dict["end_time"] - subprocess_dict["start_time"]).total_seconds()
+    subprocess_dict["execution_time_seconds"] = execution_time_seconds
+    subprocess_dict["execution_time"] = timedelta(seconds=execution_time_seconds)
+
+    # If the command failed, check if it was due to a lock file being left behind by a previous execution dying
+    if not subprocess_dict["success"]:
+
+        # Only check lock files for git or svn commands
+        if any([
+            "git" in subprocess_dict["args"],
+            "svn" in subprocess_dict["args"]
+        ]) and lockfiles.clear_lock_files(ctx):
+
+            # Change the log_level so the failed process doesn't log as an error
+            subprocess_dict["log_level"] = "warning"
+            subprocess_dict["status_message"] = "finished"
+            subprocess_dict["status_message_reason"] = "failed due to a lock file"
+
+    if not (quiet and subprocess_dict["log_level"] == "debug"):
+        log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
+
+    return subprocess_dict
+
+
 def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
     """
     Find and clean up zombie child processes by waiting on them.
@@ -292,7 +603,7 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             process_to_wait_for = psutil.Process(process_pid_to_wait_for)
             with process_to_wait_for.oneshot():
 
-                subprocess_psutils_dict = get_psutil_metrics(ctx, process_to_wait_for)
+                subprocess_psutils_dict = _get_process_metadata(ctx, process_to_wait_for)
 
                 # This rarely fires, ex. if cleaning up processes at the beginning of a script execution and the process finished during the interval
                 if process_to_wait_for.status() == psutil.STATUS_ZOMBIE:
@@ -321,8 +632,12 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
                 # command
                 # url
                 # process.id
+                # latest line of stdout / stderr
 
             subprocess_dict["status_message"] = "still running"
+
+            # Get latest output
+            subprocess_dict["status_message_reason"] = f""
 
         except Exception as exception:
             subprocess_dict["status_message"] = "raised an exception while waiting"
@@ -332,193 +647,6 @@ def status_update_and_cleanup_zombie_processes(ctx: Context) -> None:
             subprocess_dict["pid"] = process_pid_to_wait_for
 
         log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
-
-
-def run_subprocess(
-        ctx: Context,
-        args: Union[str, List[str]],
-        password: Optional[str] = None,
-        quiet: Optional[bool] = False,
-        name: Optional[str] = None,
-        ignore_stderr: bool = False,
-    ) -> Dict[str, Any]:
-    """
-    Middleware function to
-    - Take a CLI command as an args string or list of strings
-    - Execute it as a subprocess
-    - Wait for the subprocess to complete
-    - Gather the needed command output and metadata
-    - Handle generic process errors
-
-    Args:
-        ctx: Context object
-        args: Command arguments as string or list
-        password: Optional password for stdin
-        echo_password: Whether to echo password
-        quiet: Suppress non-error logging
-        Name: Optional command name to make logging events easier to find
-
-    Notes:
-        Use log_process_status() in this function, to format and print process stats
-    """
-
-    # Dict for psutils to fill with .as_dict() function
-    subprocess_psutils_dict            = {}
-
-    # Dict for anything other functions need to consume,
-    # which isn't set in subprocess_psutils_dict
-    subprocess_dict                         = {}
-    subprocess_dict["name"]                 = name          # For command logging
-    subprocess_dict["output"]               = []            # For consumption by the calling function
-    subprocess_dict["pid"]                  = None          # In case psutils doesn't get a pid in subprocess_psutils_dict
-    subprocess_dict["return_code"]          = None          # Integer exit code
-    subprocess_dict["status_message_reason"]= None          # Reason for process failure
-    subprocess_dict["status_message"]       = "starting"    # starting / started / finished
-    subprocess_dict["success"]              = None          # true / false; if false, the reason field should have a value
-    subprocess_dict["truncated_output"]     = None          # For logging
-
-    # Normalize args as a string for log output
-    if isinstance(args, list):
-        subprocess_dict["args"] = " ".join(args)
-    elif isinstance(args, str):
-        subprocess_dict["args"] = args
-
-    # Generate a correlation ID for this subprocess run
-    subprocess_span = str(uuid.uuid4())[:8]
-    subprocess_dict["span"] = subprocess_span
-
-    # Redirect stderr to stdout for simplicity
-    stderr = subprocess.STDOUT
-    # Unless we want to ignore it
-    if ignore_stderr:
-        stderr=subprocess.DEVNULL
-
-    # Which log level to emit log events at,
-    # so we can increase the log_level depending on process success / fail / quiet
-    # so events are only logged if this level his higher than the LOG_LEVEL the container is running at
-    subprocess_dict["log_level"] = "debug"
-
-    # Log a starting message
-    subprocess_dict["start_time"] = datetime.now()
-    # if not quiet:
-    #     log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
-
-    # Try to run the subprocess, and catch subprocess exceptions
-    try:
-
-        # Create the process object and start it
-        sub_process = psutil.Popen(
-            args        = args,
-            preexec_fn  = os.setsid, # Create new process group for better cleanup
-            stderr      = stderr,
-            stdin       = subprocess.PIPE,
-            stdout      = subprocess.PIPE,
-            text        = True,
-        )
-
-        subprocess_dict["status_message"] = "started " # Including trailing space to even out columns in output
-
-        # Try to read process metadata, and catch exceptions when the process finishes faster than its metadata can be read
-        try:
-
-            # Immediately capture basic process info,
-            # in case the process exits faster than psutils can get the full .as_dict()
-            # before it can finish, or SIGCHLD can reap it
-            subprocess_dict["pid"] = sub_process.pid
-
-            # Try to get full process attributes from the OS
-            # The .as_dict() function can take longer to run than some subprocesses,
-            # so it may fail, trying to read metadata for procs which no longer exist in the OS
-            # I really wish psutils had a way around this, to gather the data as it's created in .Popen
-            with sub_process.oneshot():
-
-                subprocess_psutils_dict = get_psutil_metrics(ctx, sub_process)
-
-            # psutil doesn't have a process group ID attribute, need to get it from the OS
-            subprocess_dict["pgid"] = os.getpgid(subprocess_dict["pid"])
-
-        # Process finished before we could get detailed info
-        except (psutil.NoSuchProcess, ProcessLookupError, FileNotFoundError) as exception:
-
-            subprocess_dict["status_message"] = "finished"
-            subprocess_dict["status_message_reason"] = "before getting process metadata"
-
-            if not quiet:
-                subprocess_dict["log_level"] = "info"
-
-        # Log a started message
-        # Either started, with psutil dict,
-        # or finished before getting process metadata, with pid
-        if not quiet:
-            log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
-
-        # If password is provided to this function,
-        # feed the password string into the subprocess' stdin pipe;
-        # password could be an empty or arbitrary string as a workaround if a process needed it
-        # communicate() also waits for the process to finish
-        output = sub_process.communicate(password)
-
-        # Get the process' stdout and/or stderr
-        # Have to do this inside the try / except block, in case the output isn't valid
-        subprocess_dict["output"] = output[0].splitlines()
-        subprocess_dict["output_line_count"] = len(subprocess_dict["output"])
-
-        # Truncate the output for logging
-        subprocess_dict["truncated_output"] = truncate_output(ctx, subprocess_dict["output"])
-
-        # If the process exited successfully, set the status_message now
-        # Have to do this inside the try / except block, in case the sub_process object doesn't have a .returncode attribute
-        subprocess_dict["return_code"] = sub_process.returncode
-        if subprocess_dict["return_code"] == 0:
-
-            subprocess_dict["status_message"] = "finished"
-            subprocess_dict["status_message_reason"] = "succeeded"
-            subprocess_dict["success"] = True
-
-        else:
-
-            subprocess_dict["status_message"] = "finished"
-            subprocess_dict["status_message_reason"] = "failed"
-            subprocess_dict["success"] = False
-            if not quiet:
-                subprocess_dict["log_level"] = "error"
-
-    # Catching the CalledProcessError exception,
-    # only to catch in case that the subprocess' sub_process _itself_ raised an exception
-    # not necessarily any below processes the subprocess createdsubprocess_dict["command"]
-    except subprocess.CalledProcessError as exception:
-
-        subprocess_dict["status_message"] = "finished"
-        subprocess_dict["status_message_reason"] = f"raised an exception: {type(exception)}, {exception.args}, {exception}"
-
-        subprocess_dict["success"] = False
-        if not quiet:
-            subprocess_dict["log_level"] = "error"
-
-    # Get end time and calculate run time
-    subprocess_dict["end_time"] = datetime.now()
-    execution_time_seconds = (subprocess_dict["end_time"] - subprocess_dict["start_time"]).total_seconds()
-    subprocess_dict["execution_time_seconds"] = execution_time_seconds
-    subprocess_dict["execution_time"] = timedelta(seconds=execution_time_seconds)
-
-    # If the command failed, check if it was due to a lock file being left behind by a previous execution dying
-    if not subprocess_dict["success"]:
-
-        # Only check lock files for git or svn commands
-        if any([
-            "git" in subprocess_dict["args"],
-            "svn" in subprocess_dict["args"]
-        ]) and lockfiles.clear_lock_files(ctx):
-
-            # Change the log_level so the failed process doesn't log as an error
-            subprocess_dict["log_level"] = "warning"
-            subprocess_dict["status_message"] = "finished"
-            subprocess_dict["status_message_reason"] = "failed due to a lock file"
-
-    if not (quiet and subprocess_dict["log_level"] == "debug"):
-        log_process_status(ctx, subprocess_psutils_dict, subprocess_dict)
-
-    return subprocess_dict
 
 
 def truncate_output(ctx, output: List[str]) -> List[str]:

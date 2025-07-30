@@ -2,8 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    description: Headless service that provides a stable network identity for the
-      repo-converter stateful set.
+    description: Headless service that provides a stable network identity for the src serve-git container in the repo-converter stateful set
   labels:
     app.kubernetes.io/component: repo-converter
     app: repo-converter

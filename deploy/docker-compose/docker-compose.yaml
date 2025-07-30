@@ -4,26 +4,25 @@
 services:
 
   cloud-agent:
-    command: ["-config=/sg/cloud-agent-config.yaml"]
+    command: ["-config=/sg/config/config.yaml"]
     container_name: cloud-agent
     image: index.docker.io/sourcegraph/src-tunnel-agent:latest
     networks:
       - default
     restart: always
     volumes:
-      - ../../config/cloud-agent-service-account-key.json:/sg/cloud-agent-service-account-key.json:ro
-      - ../../config/cloud-agent-config.yaml:/sg/cloud-agent-config.yaml:ro
+      - ../../config/cloud-agent/:/sg/config:ro
 
   repo-converter:
     container_name: repo-converter
-    image: ghcr.io/sourcegraph/repo-converter:latest
+    image: ghcr.io/sourcegraph/repo-converter:v0.5.0
     # environment:
       # - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
       # - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
     restart: always
     volumes:
-      - ../../config/repos-to-convert.yaml:/sg/repos-to-convert.yaml:ro
-      - ../../src-serve-root/:/sg/src-serve-root
+      - ../../config/repo-converter:/sg/config:ro
+      - ../../../src-serve-root/:/sg/src-serve-root
 
   src-serve-git:
     command: "serve-git -addr :443 /sg/src-serve-root"
@@ -34,7 +33,7 @@ services:
       - default
     restart: always
     volumes:
-      - ../../src-serve-root/:/sg/src-serve-root:ro
+      - ../../../src-serve-root/:/sg/src-serve-root:ro
 
 networks:
   default:

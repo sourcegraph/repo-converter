@@ -37,6 +37,7 @@ RUN apt-get update && \
         python3 \
         python3-dev \
         python3-pip \
+        python3-svn \
         python3-wheel \
         subversion \
         systemctl \
@@ -78,6 +79,10 @@ LABEL \
     org.opencontainers.image.url="https://github.com/sourcegraph/repo-converter/pkgs/container/repo-converter" \
     org.opencontainers.image.vendor="Sourcegraph"
 
+# Create the user, with a home directory
+RUN groupadd sourcegraph --gid 10002 && \
+     useradd sourcegraph --uid 10001 --gid sourcegraph --create-home --home-dir /home/sourcegraph
+
 # Copy the source code into the image
 # The contents of this dir will change most builds
 COPY src/ src/
@@ -85,10 +90,6 @@ COPY src/ src/
 # Copy the dotenv file into the image
 # The contents of this file changes every build
 COPY build/.env build/.env
-
-# Create the user, with a home directory
-RUN groupadd sourcegraph --gid 10002 && \
-     useradd sourcegraph --uid 10001 --gid sourcegraph --create-home --home-dir /home/sourcegraph
 
 # Give ownership of the whole /sg dir and all its contents to the new user
 RUN chown -R sourcegraph:sourcegraph /sg

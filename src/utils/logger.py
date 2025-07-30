@@ -72,6 +72,7 @@ def _custom_json_renderer(logger, method_name, event_dict):
         "date",
         "time",
         "cycle",
+        "repo_key",
 
         # Important data
         "message",

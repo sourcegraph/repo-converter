@@ -27,82 +27,76 @@ def start(ctx: Context) -> None:
     Main entry point between main module and repo conversion jobs, with concurrency management
     """
 
-    # Reset the job dict, again, so it doesn't get passed on to other log events
-    ctx.reset_job()
-
-    # Log a start event
-    # log(ctx, f"Starting convert_repos.start", "debug")
-
     # Loop through the repos_dict
     for repo_key in ctx.repos.keys():
 
+        # Reset the job so it doesn't get passed to other log events
+        ctx.reset_job()
+
         # Get repo's configuration dict
         repo_config = ctx.repos[repo_key]
-        server_name = repo_config["max-concurrent-conversions-server-name"]
-        # Find the repo type
-        repo_type = repo_config.get("type", "").lower()
+        server_name = repo_config["server_name"]
+        repo_type   = repo_config.get("type", "").lower()
 
         # Generate a job ID, to link all events for each repo conversion job together in the logs
-        job_trace = str(uuid.uuid4())[:8]
+        job_trace   = str(uuid.uuid4())[:8]
 
-        # Set log context / structured data
-        # Overwrite fresh for each job
-        # Each conversion_wrapper child process gets its own copy of the context
-        ctx.job.update(
-            {
-                "trace": job_trace,
-                "config": {
-                    "repo_key": repo_key,
-                    "repo_type": repo_type,
-                    "server_name": server_name,
-                }
+        job = {
+            "trace": job_trace,
+            "config": {
+                "repo_key": repo_key,
+                "repo_type": repo_type,
+                "server_name": server_name,
             }
-        )
+        }
 
-        # Log initial status
-        log(ctx, f"{repo_key}; Starting repo conversion job", "debug")
+        log_job = {"job": job}
 
         # Try to acquire concurrency slot
         # This will block and wait till a slot is available
-        if not ctx.concurrency_manager.acquire_job_slot(ctx):
-            log(ctx, f"{repo_key}; Could not acquire concurrency slot, skipping", "debug", log_concurrency_status=True)
-            continue
+        if not ctx.concurrency_manager.acquire_job_slot(ctx, job):
+            log(ctx, f"Could not acquire concurrency slot, skipping", "debug", log_job, log_concurrency_status=True)
+            return
 
         # Create a wrapper function that handles semaphore cleanup
-        def conversion_wrapper(ctx):
+        def conversion_job(ctx: Context, job: dict) -> None:
+
+            # Start a new process session for these child procs
+            os.setsid()
+
+            # Now save job dict to context, as it shouldn't interfere with the contexts of log events outside of this job
+            ctx.job.update(job)
+
+            # Log initial status
+            log(ctx, f"Starting repo conversion job", "debug", log_job)
 
             try:
 
                 # TODO: Add other repo types as they are implemented
-                if repo_type in ("svn", "subversion"):
+                if repo_type in ("svn"):
 
                     # Start the conversion process
                     svn.convert(ctx)
 
+                else:
+                    log(ctx, f"Repo type not implemented: {repo_type}", "error", log_job)
+
             finally:
 
                 # Always release the semaphore when done, regardless of success or fail
-                ctx.concurrency_manager.release_job_slot(ctx)
+                ctx.concurrency_manager.release_job_slot(ctx, job)
 
                 # log_concurrency_status=True causes an error inside this wrapper function
-                log(ctx, f"{repo_key}; Finishing repo conversion job in pid={os.getpid()}", "info")
+                log(ctx, f"Finishing repo conversion job", "info")
 
         # Start the process
         # Do not store any reference to the process, otherwise it may cling on as a zombie,
         # and we have enough other process checking / cleanup infra to handle these
         multiprocessing.Process(
-            target=conversion_wrapper,
+            target=conversion_job,
             name=f"convert_{repo_type}_{repo_key}",
-            args=[ctx]
+            args=[ctx, job]
         ).start()
 
-        # Reset the job dict, after it's been copied to the new process,
-        # so it doesn't get passed on to other log events
+        # Reset the job so it doesn't get passed to other log events
         ctx.reset_job()
-
-
-    # Reset the job dict, again, so it doesn't get passed on to other log events
-    ctx.reset_job()
-
-    # Log final status
-    # log(ctx, f"Finishing convert_repos.start", "debug")

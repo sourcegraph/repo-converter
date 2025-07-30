@@ -101,34 +101,34 @@ def terminate_multiprocessing_jobs_on_shutdown(ctx: Context, timeout: int = 30) 
 
     log(ctx, f"Terminating {len(ctx.active_repo_conversion_processes)} active multiprocessing jobs", "info")
 
-    for process, repo_key, server_hostname in ctx.active_repo_conversion_processes[:]:  # Copy list to avoid modification during iteration
+    for process, repo_key, server_name in ctx.active_repo_conversion_processes[:]:  # Copy list to avoid modification during iteration
         try:
             if process.is_alive():
-                log(ctx, f"{repo_key}; Sending SIGTERM to multiprocessing job", "info")
+                log(ctx, f"Sending SIGTERM to multiprocessing job", "info")
                 process.terminate()  # Send SIGTERM
 
                 # Wait for graceful termination
                 process.join(timeout=timeout)
 
                 if process.is_alive():
-                    log(ctx, f"{repo_key}; Force killing unresponsive multiprocessing job", "warning")
+                    log(ctx, f"Force killing unresponsive multiprocessing job", "warning")
                     process.kill()  # Force kill with SIGKILL
                     process.join(timeout=5)  # Brief wait after kill
 
                 if not process.is_alive():
-                    log(ctx, f"{repo_key}; Successfully terminated multiprocessing job", "info")
+                    log(ctx, f"Successfully terminated multiprocessing job", "info")
 
                     # Remove job from list
-                    ctx.active_repo_conversion_processes.remove((process, repo_key, server_hostname))
+                    ctx.active_repo_conversion_processes.remove((process, repo_key, server_name))
 
                 else:
-                    log(ctx, f"{repo_key}; Failed to terminate multiprocessing job", "error")
+                    log(ctx, f"Failed to terminate multiprocessing job", "error")
 
         except ProcessLookupError:
 
-            log(ctx, f"{repo_key}; Multiprocessing job already terminated", "debug")
+            log(ctx, f"Multiprocessing job already terminated", "debug")
             # Remove from list since it's already gone
-            ctx.active_repo_conversion_processes.remove((process, repo_key, server_hostname))
+            ctx.active_repo_conversion_processes.remove((process, repo_key, server_name))
 
         except Exception as e:
-            log(ctx, f"{repo_key}; Error terminating multiprocessing job: {e}", "error")
+            log(ctx, f"Error terminating multiprocessing job: {e}", "error")
