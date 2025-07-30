@@ -65,7 +65,6 @@ Deploying via containers allows for easier upgrades, troubleshooting, monitoring
     - Note the port 443, even when used with http://
 7. Use the repo-converter to convert SVN, ~~TFVC, or Git repos,~~ to Git format, which will store them in the `../src-serve-root` directory, or use any other means to get the repos into the directory
 
-
 ## Configuration
 
 ### Environment Variables
