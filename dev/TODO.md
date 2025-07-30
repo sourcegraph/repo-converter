@@ -291,6 +291,11 @@
 
 - Switch most git commands in the git module from git cli to GitPython
 
+- Count lines of code
+    ```shell
+    cloc --exclude-lang=JSON,CSV,Text --exclude-dir=.venv,notes,examples,logs --quiet --by-file-by-lang .
+    ```
+
 ## Expansion
 
 - Implement TODOs strewn around the code
@@ -377,3 +382,77 @@
             ```shell
             svnsync --non-interactive --sync-username "kevin" --sync-password "kevin" --source-username "kevin@example.com" --source-password "XXXXXX" sync svn://localhost:3690
             ```
+
+
+## Old Doc
+
+```yaml
+xmlbeans:
+# Usage: This key is used as the converted Git repo's name
+# Required: Yes
+# Format: String of YAML / git / filepath / URL-safe characters [A-Za-z0-9_-.]
+# Default if unspecified: Invalid
+
+  type:                 SVN
+  # Usage: The type of repo to be converted, which determines the code path, binaries, and options used
+  # Required: Yes
+  # Format: String
+  # Options: SVN, TFVC
+  # Default if unspecified: Invalid
+
+  url:   https://svn.apache.org/repos/asf/xmlbeans
+  # Usage: The root of the Subversion repo to be converted to a Git repo, thus the root of the Git repo
+  # Required: Yes
+  # Format: URL
+  # Default if unspecified: Invalid
+
+  code-host-name:       svn.apache.org
+  git-org-name:         asf
+  # Usage: The Sourcegraph UI shows users the repo path as code-host-name/git-org-name/repo-name for ease of navigation, and the repos are stored on disk in the same tree structure
+  # Required: Yes; this hasn't been tested without it, but it's highly encouraged for easier user navigation
+  # Format: String of filepath / URL-safe characters [A-Za-z0-9_-.]
+  # Default if unspecified: Empty
+
+  username:             super_secret_username
+  password:             super_secret_password
+  # Usage: Username and password to authenticate to the code host
+  # Required: If code host requires authentication
+  # Format: String
+  # Default if unspecified: Empty
+
+  git-default-branch:   main
+  # Usage: Sets the name of the default branch in the resulting git repo; this is the branch that Sourcegraph users will see first, and will be indexed by default
+  # Required: No
+  # Format: String, git branch name
+  # Default if unspecified: main
+
+  layout:               standard
+  trunk:                trunk
+  branches:             branches
+  tags:                 tags
+  # Usage: Match these to your Subversion repo's directory layout.
+  # Use `layout: standard` by default when trunk, branches, and tags are all top level directories in the repo root
+  # Or, specify the relative paths to these directories from the repo root
+  # These values are just passed to the subversion CLI as command args
+  # Required: Either layout or trunk, branches, tags
+  # Formats:
+    # trunk: String
+    # branches: String, or list of strings
+    # tags: String, or list of strings
+  # Default if unspecified: layout:standard
+
+  git-ignore-file-path: /path/mounted/inside/container/to/.gitignore
+  authors-file-path:    /path/mounted/inside/container/to/authors-file-path
+  authors-prog-path:    /path/mounted/inside/container/to/authors-prog-path
+  # Usage: If you need to use .gitignore, an author's file, or an author's program in the repo conversion, then mount them as a volume to the container, and provide the in-container paths here
+  # Required: No
+  # Format: String, file path
+  # Default if unspecified: empty
+
+  bare-clone:           true
+  # Usage: If you need to keep a checked out working copy of the latest commit on disk for debugging purposes, set this to false
+  # Required: No
+  # Format: String
+  # Options: true, false
+  # Default if unspecified: true
+```

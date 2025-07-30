@@ -2,12 +2,13 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations:
-    description: service for svn to git conversion.
+    description: repo-converter
   labels:
     app.kubernetes.io/component: repo-converter
     app: repo-converter
     deploy: sourcegraph
   name: repo-converter
+
 spec:
   serviceName: "repo-converter"
   replicas: 1
@@ -23,31 +24,26 @@ spec:
     spec:
       containers:
       - name: repo-converter
-        image: ghcr.io/sourcegraph/implementation-bridge-repo-converter:v0.0.9
-        env:
-        - name: SRC_SERVE_ROOT
-          value: "/data/repos"
-        - name: REPOS_TO_CONVERT
-          value: "/data/repos/repos-to-convert.yaml"
+        image: ghcr.io/sourcegraph/repo-converter:v0.5.0
+        # env:
         # - name: REPO_CONVERTER_INTERVAL_SECONDS
-        #   value: "60"
+        #   value: "60" # Default 3600
         # - name: LOG_LEVEL
-        #   value: "DEBUG" # DEBUG INFO WARNING ERROR CRITICAL
+        #   value: "DEBUG" # DEBUG INFO WARNING ERROR CRITICAL # Default INFO
         volumeMounts:
-        - name: data
-          mountPath: /data
+        - name: src-serve-root
+          mountPath: /sg/src-serve-root
         - name: repos-to-convert
-          mountPath: /data/repos/repos-to-convert.yaml
-          subPath: repos-to-convert.yaml
+          mountPath: /sg/config/repos-to-convert.yaml
           readOnly: true
       - name: src-serve-git
         image:  index.docker.io/sourcegraph/src-cli:latest
-        command: ["src", "serve-git", "-addr", ":3434", "/data/repos"]
+        command: ["src", "serve-git", "-addr", ":3434", "/sg/src-serve-root"]
         ports:
         - containerPort: 3434
         volumeMounts:
-        - name: data
-          mountPath: /data
+        - name: src-serve-root
+          mountPath: /sg/src-serve-root
       volumes:
       - name: repos-to-convert
         secret:
@@ -58,9 +54,9 @@ spec:
         app.kubernetes.io/component: repo-converter
         app: repo-converter
         deploy: sourcegraph
-      name: data
+      name: src-serve-root
     spec:
       accessModes: ["ReadWriteOnce"]
       resources:
         requests:
-          storage: 10Gi  # Adjust size as needed
+          storage: 100Gi  # Adjust size as needed

@@ -119,7 +119,6 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
         # Source repo config
         "username"                  : repo_config.get("username",                   None),
         "password"                  : repo_config.get("password",                   None),
-        "layout"                    : repo_config.get("layout",                     None),
         "trunk"                     : repo_config.get("trunk",                      None),
         "branches"                  : repo_config.get("branches",                   None),
         "tags"                      : repo_config.get("tags",                       None),
@@ -153,7 +152,6 @@ def _build_cli_commands(ctx: Context) -> dict:
     branches                            = job_config.get("branches")
     disable_tls_verification            = job_config.get("disable_tls_verification")
     git_default_branch                  = job_config.get("git_default_branch")
-    layout                              = job_config.get("layout")
     local_repo_path                     = job_config.get("local_repo_path")
     repo_url                            = job_config.get("repo_url")
     tags                                = job_config.get("tags")
@@ -210,15 +208,8 @@ def _build_cli_commands(ctx: Context) -> dict:
                 cmd_git_svn_init        += ["--branches", branch]
 
     # Default to the standard layout
-    if (
-        layout or
-        not any([trunk, tags, branches])
-    ):
+    if not any([trunk, tags, branches]):
         cmd_git_svn_init                += ["--stdlayout"]
-        # Warn the user if they provided an invalid value for the layout
-        if layout and layout not in ("standard", "std"):
-            log(ctx, f"Layout shortcut provided with incorrect value {layout}, only standard is supported for the shortcut, continuing assuming standard, otherwise provide --trunk, --tags, and --branches", "warning")
-
 
     return {
         'cmd_git_default_branch':           cmd_git_default_branch,

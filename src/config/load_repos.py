@@ -102,7 +102,6 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
     repos_to_convert_fields[ "repos"                        ] = (str, list      )
     repos_to_convert_fields[ "username"                     ] = (str,           )
     repos_to_convert_fields[ "password"                     ] = (str, "secret"  )
-    repos_to_convert_fields[ "layout"                       ] = (str, list      )
     repos_to_convert_fields[ "trunk"                        ] = (str,           )
     repos_to_convert_fields[ "branches"                     ] = (str, list      )
     repos_to_convert_fields[ "tags"                         ] = (str, list      )
