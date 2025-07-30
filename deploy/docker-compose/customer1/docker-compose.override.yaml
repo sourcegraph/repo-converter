@@ -6,7 +6,7 @@
 services:
 
   repo-converter:
-    image: ghcr.io/sourcegraph/repo-converter:latest
+    image: ghcr.io/sourcegraph/repo-converter:v0.5.0
     environment:
       - LOG_LEVEL=DEBUG
       - REPO_CONVERTER_INTERVAL_SECONDS=600
