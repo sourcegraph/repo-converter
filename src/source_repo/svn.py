@@ -818,8 +818,9 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         pop_keys = [
             "errors",
             "reason",
+            "remaining_output",
             "success",
-            "warnings"
+            "warnings",
         ]
         for key in pop_keys:
             try:
