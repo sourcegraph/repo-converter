@@ -45,7 +45,7 @@ declare -a image_tags=(
 # Fill in env vars
 BUILD_BRANCH="$(git rev-parse --abbrev-ref HEAD | sed 's/[^a-zA-Z0-9]/-/g' )" # Somehow turned out to be HEAD on a tag build???
 BUILD_COMMIT="$(git rev-parse --short HEAD)"
-BUILD_COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
+BUILD_COMMIT_MESSAGE="$(git log -1 --pretty=%s)"
 BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 BUILD_TAG="$(git tag --points-at HEAD)"
 LATEST_TAG="latest"
