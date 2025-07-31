@@ -14,7 +14,7 @@
 from source_repo import svn
 from utils.concurrency_manager import ConcurrencyManager
 from utils.context import Context
-from utils.log import log
+from utils.logging import log
 
 # Import Python standard modules
 import multiprocessing

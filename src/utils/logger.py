@@ -18,7 +18,7 @@ import structlog
 import json
 
 
-def configure_logger(log_level: str) -> None:
+def configure(log_level: str) -> None:
     """
     Configure structured logging with JSON Lines output format using structlog
     """

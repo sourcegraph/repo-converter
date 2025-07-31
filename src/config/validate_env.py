@@ -5,8 +5,7 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.log import log
-
+from utils.logging import log
 
 def validate_env_vars(ctx: Context) -> None:
     """Validate inputs here, now that the logger is instantiated, instead of throughout the code"""
@@ -15,10 +14,10 @@ def validate_env_vars(ctx: Context) -> None:
 
     # Validate concurrency limits
     if ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"] <= 0:
-        raise ValueError("MAX_CONCURRENT_CONVERSIONS_PER_SERVER must be greater than 0")
+        log(ctx, "MAX_CONCURRENT_CONVERSIONS_PER_SERVER must be greater than 0", "critical")
 
     if ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"] <= 0:
-        raise ValueError("MAX_CONCURRENT_CONVERSIONS_GLOBAL must be greater than 0")
+        log(ctx, "MAX_CONCURRENT_CONVERSIONS_GLOBAL must be greater than 0", "critical")
 
     if ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_PER_SERVER"] > ctx.env_vars["MAX_CONCURRENT_CONVERSIONS_GLOBAL"]:
 

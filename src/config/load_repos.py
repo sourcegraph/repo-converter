@@ -4,10 +4,9 @@
 # Import repo-converter modules
 from utils import secret
 from utils.context import Context
-from utils.log import log
+from utils.logging import log
 
 # Import Python standard modules
-from sys import exit
 from urllib.parse import urlparse
 
 # Import third party modules
@@ -29,20 +28,14 @@ def load_from_file(ctx: Context) -> None:
             # This should return a dict
             repos = yaml.safe_load(repos_to_convert_file)
 
-    except IsADirectoryError:
+    except IsADirectoryError as e:
+        log(ctx, f"File not found at {repos_to_convert_file_path}, but found a directory, likely created by the Docker mount. Please stop the container, delete the directory, and create the yaml file.", "critical", exception=e)
 
-        log(ctx, f"File not found at {repos_to_convert_file_path}, but found a directory, likely created by the Docker mount. Please stop the container, delete the directory, and create the yaml file.", "critical")
-        exit(1)
+    except FileNotFoundError as e:
+        log(ctx, f"File not found at {repos_to_convert_file_path}", "critical", exception=e)
 
-    except FileNotFoundError:
-
-        log(ctx, f"File not found at {repos_to_convert_file_path}", "critical")
-        exit(2)
-
-    except (AttributeError, yaml.scanner.ScannerError) as exception: # type: ignore
-
-        log(ctx, f"YAML syntax error in {repos_to_convert_file_path}, please lint it. Exception: {type(exception)}, {exception.args}, {exception}", "critical")
-        exit(3)
+    except (AttributeError, yaml.scanner.ScannerError) as e: # type: ignore
+        log(ctx, f"YAML syntax error in {repos_to_convert_file_path}, please lint it", "critical", exception=e)
 
     repos = check_types(ctx, repos)
     repos = reformat_repos_dict(ctx, repos)
@@ -439,7 +432,7 @@ def validate_inputs(ctx: Context, repos_input: dict) -> dict:
                         break
 
                 except Exception as e:
-                    log(ctx, f"urlparse failed to parse URL {url}: {e}", "warning")
+                    log(ctx, f"urlparse failed to parse URL {url}", "warning", exception=e)
 
         # Fallback to code-host-name if provided
         if not server_name:
