@@ -4,7 +4,7 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.log import log
+from utils.logging import log
 from utils import cmd
 
 # Import Python standard modules
@@ -38,15 +38,14 @@ def start(ctx: Context) -> None:
 
                 log(ctx, "Concurrency status", "debug", log_concurrency_status=True)
 
-            except (BrokenPipeError, ConnectionResetError) as exception:
+            except (BrokenPipeError, ConnectionResetError) as e:
+
                 # These errors occur during shutdown when manager connections are closed
-                log(ctx, f"Connection error in concurrency monitor (likely during shutdown): {exception}", "debug")
+                log(ctx, f"Connection error in concurrency monitor (likely during shutdown)", "debug", exception=e)
                 break
 
-            except Exception as exception:
-                log(ctx, f"Error in concurrency monitor: {exception}", "error")
-
-                raise exception
+            except Exception as e:
+                log(ctx, f"Exception in concurrency monitor", "error", exception=e)
 
             time.sleep(interval)
 

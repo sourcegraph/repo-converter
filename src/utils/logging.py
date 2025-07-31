@@ -7,9 +7,11 @@ from utils.context import Context
 
 # Import Python standard modules
 from datetime import datetime
+from sys import exit
 import inspect
 import os
 import time
+import traceback
 
 # Import third party modules
 import structlog
@@ -23,6 +25,7 @@ def log(
         correlation_id: str = "",
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
+        exception = None
         ) -> None:
     """
     Enhanced logging function with structured data support.
@@ -46,10 +49,12 @@ def log(
     # Build structured data payload
     structured_payload = _build_structured_payload(
         ctx,
+        event_log_level_name,
         structured_data,
         correlation_id,
         log_env_vars,
         log_concurrency_status,
+        exception
     )
 
     # Apply redaction to the entire payload
@@ -58,13 +63,19 @@ def log(
     # Log using structlog's logging commands, where the command is the log level's name
     getattr(logger, event_log_level_name.lower())(message, **redacted_payload)
 
+    # Exit the container for critical log events
+    if "CRITICAL" in event_log_level_name:
+        exit(1)
+
 
 def _build_structured_payload(
         ctx: Context,
+        event_log_level_name: str,
         structured_data: dict = {},
         correlation_id: str = "",
         log_env_vars: bool = False,
         log_concurrency_status: bool = False,
+        exception = None
     ) -> dict:
     """Build the complete structured data payload for logging"""
 
@@ -102,7 +113,10 @@ def _build_structured_payload(
                 except TypeError:
                     pass
 
-    if ctx.env_vars.get("LOG_LEVEL") == "DEBUG":
+    if (
+        ctx.env_vars.get("LOG_LEVEL") == "DEBUG" or
+        event_log_level_name in ["CRITICAL", "ERROR", "WARNING"]
+    ):
 
         pid = os.getpid()
 
@@ -175,6 +189,9 @@ def _build_structured_payload(
     # Add concurrency status if instructed
     if log_concurrency_status:
         payload["concurrency"] = ctx.concurrency_manager.get_status(ctx)
+
+    if exception:
+        payload["exception"] = _get_exception_data(exception)
 
     # Remove any null values
     payload = _remove_null_values(payload)
@@ -258,6 +275,44 @@ def _format_uptime(uptime_seconds: float) -> str:
     parts.append(f"{seconds}s")
 
     return " ".join(parts)
+
+
+def _get_exception_data(exception) -> dict:
+    """
+    Parse attributes from the provided exception, and return them as a dict to be printed in structured logs
+    """
+
+    return_dict = {}
+
+    if exception:
+
+        return_dict["type"]         = type(exception)
+        return_dict["args"]         = breakup_lists_and_strings(exception.args)
+
+        traceback_original          = traceback.format_exception(exception)
+        return_dict["traceback"]    = breakup_lists_and_strings(traceback_original)
+
+    return return_dict
+
+
+def breakup_lists_and_strings(input) -> list[str]:
+    """
+    Parse individual attributes from exceptions
+    Take in either a string or a list of strings
+    Break up strings with newlines
+    Return a list of strings
+    """
+
+    return_list = []
+
+    if isinstance(input, str):
+        input = list([input])
+
+    if isinstance(input, list):
+        for line in input:
+            return_list += line.splitlines()
+
+    return return_list
 
 
 def _remove_null_values(payload: dict) -> dict:

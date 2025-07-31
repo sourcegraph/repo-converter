@@ -181,31 +181,46 @@
     - Add a timeout in run_subprocess() for hanging svn info ~~and svn log~~ commands, if data isn't transferring
         - Does the svn cli not have a timeout built in for this command?
 
-- PID layers, from `docker exec -it repo-converter top`
-    - This output was captured 14 hours into converting a repo that's up to 2 GB on disk so far, with 6 years of history left to catch up on
-    - This is after removing our batch processing bubble-wrap, and just lettin'er buck
+- Process tree
+    - Copied from the output of `docker exec -it repo-converter top`
     ```
-        PID    PPID nTH S   CODE   USED   SWAP    RES  %MEM nMaj nMin nDRT  OOMa OOMs  %CPU     TIME+ COMMAND
-          1       0   2 S   2.7m  37.4m   1.5m  35.9m   0.5  991 8.7m    0     0  668   0.0   2:44.22 /usr/bin/python3 /sg/repo-converter/src/main.py
-         85       1   1 S   2.7m  40.8m  11.6m  29.2m   0.4    0  20k    0     0  669   0.0   0:05.82  `- /usr/bin/python3 /sg/repo-converter/src/main.py
-        330      85   1 S   2.7m   1.4m   0.2m   1.2m   0.0    0  364    0     0  666   0.0   0:00.00      `- git -C /sg/src-serve-root/org/repo svn fetch --quiet --username user --log-window-size 100
-        331     330   1 S   1.6m 115.6m  17.8m  97.8m   1.2   56 534m    0     0  674  13.6  66:17.92          `- /usr/bin/perl /usr/lib/git-core/git-svn fetch --quiet --username user --log-window-size 100
-        376     331   1 S   2.7m   1.1g   0.1m   1.1g  14.6  18k 1.4m    0     0  744   0.3   1:18.22              `- git cat-file --batch
-      34015     331   1 S   2.7m  10.0m   0.0m  10.0m   0.1   17 889k    0     0  667   2.0   4:36.38              `- git hash-object -w --stdin-paths --no-filters
-    1850259     331   1 S   2.7m   5.1m   0.0m   5.1m   0.1    0  499    0     0  666   0.0   0:00.00              `- git update-index -z --index-info
+    top - 03:39:24 up 6 days,  4:37,  0 users,  load average: 0.89, 1.60, 1.83
+    Tasks:  14 total,   1 running,  13 sleeping,   0 stopped,   0 zombie
+    %Cpu(s):  8.7 us, 10.7 sy,  0.0 ni, 80.2 id,  0.2 wa,  0.0 hi,  0.3 si,  0.0 st
+    GiB Mem :      7.8 total,      2.0 free,      1.2 used,      4.5 buff/cache
+    GiB Swap:      2.0 total,      1.9 free,      0.1 used.      6.3 avail Mem
+
+        SID    PGRP     PID    PPID  VIRT    RES    SHR  %MEM OOMs  %CPU     TIME+ COMMAND
+          1       1       1       0  0.1g   0.0g   0.0g   0.4  668   0.0   0:02.41 /usr/bin/python3 /sg/repo-converter/src/main.py
+          1       1       7       1  0.5g   0.0g   0.0g   0.2  668   0.0   0:00.45  `- /usr/bin/python3 /sg/repo-converter/src/main.py
+         81      81      81       1  0.1g   0.0g   0.0g   0.3  668   0.0   0:00.40  `- /usr/bin/python3 /sg/repo-converter/src/main.py
+         81      81     527      81  0.0g   0.0g   0.0g   0.0  666   0.0   0:00.00      `- git -C /sg/src-serve-root/repo1 svn fetch --quiet --username user --log-window-size 100
+         81      81     529     527  0.0g   0.0g   0.0g   0.5  668   0.3   2:52.51          `- /usr/bin/perl /usr/lib/git-core/git-svn fetch --quiet --username user --log-window-size 100
+         81      81     880     529  2.1g   0.2g   0.1g   2.6  680   0.0   0:02.23              `- git cat-file --batch
+         81      81    6267     529  0.0g   0.0g   0.0g   0.1  667   0.0   0:09.38              `- git hash-object -w --stdin-paths --no-filters
+         81      81  305238     529  0.0g   0.0g   0.0g   0.1  666   0.0   0:00.00              `- git update-index -z --index-info
+        144     144     144       1  0.1g   0.0g   0.0g   0.4  668   0.0   0:00.92  `- /usr/bin/python3 /sg/repo-converter/src/main.py
+        144     144     478     144  0.0g   0.0g   0.0g   0.0  666   0.0   0:00.00      `- git -C /sg/src-serve-root/repo2 -c http.sslVerify=false svn fetch --quiet --username user --log-window-size 100
+        144     144     479     478  0.2g   0.1g   0.0g   1.8  676  12.3   7:21.52          `- /usr/bin/perl /usr/lib/git-core/git-svn fetch --quiet --username user --log-window-size 100
+        144     144     709     479  0.0g   0.0g   0.0g   0.4  668   0.0   0:02.79              `- git cat-file --batch
+        144     144    1015     479  0.0g   0.0g   0.0g   0.1  666   0.0   0:08.89              `- git hash-object -w --stdin-paths --no-filters
     ```
     - PID 1
         - Docker container entrypoint
-    - PID 85
-        - Spawned by `multiprocessing.Process().start()` in `convert_repos.start()`
-    - PID 330
-        - Spawned by `psutil.Popen()` in `cmd.run_subprocess()`
+    - PID 7
+        - Probably the `status_monitor.start` function
+    - PIDs 81 and 144
+        - Notice that the SID (Session ID) and PGRP (Process Group) match the PID 81 and 144 numbers, i.e. this process is its session and group leader, as a result of the `os.setsid()` call in `fork_conversion_processes.py`, this makes it much easier to find PGRP values in the container's logs to track which processes are getting cleaned up as they finish
+        - Spawned by `multiprocessing.Process().start()` in `fork_conversion_processes.start()`
+    - PIDs 527 and 478
         - `git svn fetch` command, called from `_git_svn_fetch()` in `svn.convert()`
-    - PID 331
+        - Spawned by `psutil.Popen()` in `cmd.run_subprocess()`
+    - PIDs 529 and 479
         - `git-svn` perl script, which runs the `git svn fetch` workload in [sub fetch, in SVN.pm](https://github.com/git/git/blob/v2.50.1/perl/Git/SVN.pm#L2052)
-        - This script is quite naive, no retries, always exits 0, even on failures
-    - PID 376
+        - This perl script is quite naive, no retries, always exits 0, even on failures
+    - PIDs 880 and 709
         - Long-running `git cat-file` process, which stores converted content in memory
+        - This process usually has a higher than average OOMs (OOMkill score)
         - It seems quite likely that this process doesn't free up memory after each commit, so memory requirements for this process alone would be some large portion of a repo's size
         - The minimum memory requirements for this process would be the contents of the largest commit in the repo's history, otherwise the conversion would never progress beyond this commit
         - This process' CPU state is usually Sleeping, because it spends almost all of its time receiving content from the subversion server
@@ -385,6 +400,8 @@
 
 
 ## Old Doc
+
+- Need to clean this up, and put it somewhere
 
 ```yaml
 xmlbeans:

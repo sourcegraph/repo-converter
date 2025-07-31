@@ -5,7 +5,7 @@
 # Import repo-converter modules
 from utils import cmd
 from utils.context import Context
-from utils.log import log
+from utils.logging import log
 
 # Import Python standard modules
 import os
@@ -70,8 +70,8 @@ def clear_lock_files(ctx: Context) -> bool:
                 with open(found_lock_file, "r") as lock_file_object:
                     lock_file_content = lock_file_object.read()
 
-            except UnicodeDecodeError as exception:
-                lock_file_content = exception
+            except UnicodeDecodeError as e:
+                lock_file_content = e
 
             log(ctx, f"Process failed to start due to a lock file in the repo at {found_lock_file}, but no other process is running with {command} for this repo; deleting the lock file so it'll try again on the next run; lock file content: {lock_file_content}", "warning")
 
@@ -80,8 +80,8 @@ def clear_lock_files(ctx: Context) -> bool:
 
             lock_file_deleted = True
 
-        except subprocess.CalledProcessError as exception:
-            log(ctx, f"Failed to delete lock file at {found_lock_file} with exception: {type(exception)}, {exception.args}, {exception}", "error")
+        except subprocess.CalledProcessError as e:
+            log(ctx, f"Failed to delete lock file at {found_lock_file} with exception", "error", exception=e)
 
         except FileNotFoundError:
             log(ctx, f"Lock file found at {found_lock_file}, but didn't exist at the time of deletion", "error")

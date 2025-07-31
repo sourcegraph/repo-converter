@@ -2,7 +2,7 @@
 # Utility functions to handle signals
 
 # Import repo-converter modules
-from utils.log import log
+from utils.logging import log
 from utils.context import Context
 from utils import cmd
 
@@ -21,9 +21,9 @@ def register_signal_handler(ctx: Context):
 
         # log(ctx, f"Registered signal handlers","debug")
 
-    except Exception as exception:
+    except Exception as e:
 
-        log(ctx, f"Registering signal handlers failed with exception: {type(exception)}, {exception.args}, {exception}","critical")
+        log(ctx, f"Registering signal handlers failed with exception","critical", exception=e)
 
 
 def signal_handler(ctx: Context, incoming_signal, frame) -> None:
@@ -43,14 +43,14 @@ def signal_handler(ctx: Context, incoming_signal, frame) -> None:
         log(ctx, "No process group to terminate", "debug")
 
     except OSError as e:
-        log(ctx, f"Error terminating process group: {e}", "error")
+        log(ctx, f"Exception terminating process group", "error", exception=e)
 
     # Terminate any active multiprocessing jobs
     try:
         terminate_multiprocessing_jobs_on_shutdown(ctx, timeout=15)  # Shorter timeout during shutdown
 
     except Exception as e:
-        log(ctx, f"Error during multiprocessing job termination: {e}", "error")
+        log(ctx, f"Exception during multiprocessing job termination", "error", exception=e)
 
     # Clean up any remaining zombie processes
     cmd.status_update_and_cleanup_zombie_processes(ctx)
@@ -89,7 +89,7 @@ def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
             break
 
         except Exception as e:
-            log(ctx, f"Error in SIGCHLD handler: {e}", "debug")
+            log(ctx, f"Exception in SIGCHLD handler", "debug", exception=e)
             break
 
 
@@ -131,4 +131,4 @@ def terminate_multiprocessing_jobs_on_shutdown(ctx: Context, timeout: int = 30) 
             ctx.active_repo_conversion_processes.remove((process, repo_key, server_name))
 
         except Exception as e:
-            log(ctx, f"Error terminating multiprocessing job: {e}", "error")
+            log(ctx, f"Exception terminating multiprocessing job", "error", exception=e)

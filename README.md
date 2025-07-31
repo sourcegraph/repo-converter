@@ -11,6 +11,14 @@ This repo was created for Sourcegraph Implementation Engineering deployments, an
 - Other version control systems are left up to the customer to convert to Git
 - This project builds a framework to convert repos from other VCSes to Git
 
+## Versioning
+
+- This project uses semantic versioning, where x.y.z is major.minor.patch
+- The minor version is incremented if a breaking change has been made, usually to either:
+    - Configuration files
+    - Environment variables
+    - Storage locations on the host
+
 ## Deployment
 
 For Sourcegraph Cloud customers, they'll need to run the repo-converter, src serve-git, and the Sourcegraph Cloud Private Access Agent on a container platform with connectivity to both their Sourcegraph Cloud instance, and their code hosts. This can be done quite securely, as the src serve-git API endpoint does not need any ports exposed outside of the container network Running src serve-git and the agent together on the same container network allows the agent to use the container platform's local DNS service to reach src serve-git, and prevents src serve-git's unauthenticated HTTP endpoint from needing to be opened outside of the container network.

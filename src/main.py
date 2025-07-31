@@ -5,7 +5,7 @@
 from config import load_env, load_repos, validate_env
 from utils import concurrency_manager, fork_conversion_processes, git, logger, signal_handler, status_monitor
 from utils.context import Context
-from utils.log import log
+from utils.logging import log
 
 # Import Python standard modules
 # import sysconfig
@@ -24,7 +24,7 @@ def main():
         )
 
     # Configure logging
-    logger.configure_logger(ctx.env_vars["LOG_LEVEL"])
+    logger.configure(ctx.env_vars["LOG_LEVEL"])
 
     # Validate env vars, now that we have logging available
     validate_env.validate_env_vars(ctx)

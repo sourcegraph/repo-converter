@@ -3,8 +3,8 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.log import log, set_job_result
-from utils import cmd, git, lockfiles
+from utils.logging import log
+from utils import cmd, git, lockfiles, logging
 
 # Import Python standard modules
 from datetime import datetime
@@ -300,15 +300,15 @@ def _check_if_conversion_is_already_running_in_another_process(
                             log_failure_message += f"with command: {args}; "
 
             if log_failure_message:
-                set_job_result(ctx, "skipped", log_failure_message, False)
+                logging.set_job_result(ctx, "skipped", log_failure_message, False)
                 log(ctx, f"Skipping repo conversion job", "info")
                 return True
             else:
                 # No processes running, can proceed, break out of the max_retries loop
                 break
 
-        except Exception as exception:
-            log(ctx, f"Failed check {i} of {max_retries} if fetching process is already running. Exception: {type(exception)}: {exception}", "warning")
+        except Exception as e:
+            log(ctx, f"Failed check {i} of {max_retries} if fetching process is already running", "warning", exception=e)
 
     return False
 
@@ -324,6 +324,10 @@ def _initialize_pysvn(ctx: Context) -> pysvn.Client:
     username                    = job_config.get("username")
     password                    = job_config.get("password")
     pysvn_client                = pysvn.Client()
+
+    # Set the exception style for more verbose output
+    # https://pysvn.sourceforge.io/Docs/pysvn_prog_ref.html#pysvn_clienterror
+    pysvn_client.exception_style = 1
 
 
     # Handle the untrusted TLS certificate prompt
@@ -397,8 +401,9 @@ def _test_connection_and_credentials(
     repo_url            = job_config.get("repo_url")
 
     # Variables to track execution and break out of the retry loop
-    tries_attempted     = 1
+    svn_info            = {}
     svn_info_success    = False
+    tries_attempted     = 1
 
     while True:
 
@@ -460,11 +465,23 @@ def _test_connection_and_credentials(
                 ):
                     svn_info_success = True
 
-        except:
-            log_failure_message = "pysvn exception"
-            set_job_result(ctx, "skipped", log_failure_message, False)
-            log(ctx, log_failure_message, "error", {"svn_info": svn_info})
-            raise
+        except pysvn.ClientError as e:
+
+            # Handle the pysvn module's custom exception type
+            if hasattr(e, "args") and len(e.args) >= 2:
+
+                errors_list = []
+
+                for message, code in e.args[1]:
+                    errors_list.append(f"{code}: {message}")
+
+                svn_info["errors"] = errors_list
+
+            else:
+                svn_info["errors"] = logging.breakup_lists_and_strings(str(e))
+
+        except Exception as e:
+            log(ctx, "pysvn exception", "error", {"svn_info": svn_info}, exception=e)
 
 
         # If the command exited successfully, return here
@@ -473,13 +490,16 @@ def _test_connection_and_credentials(
             if tries_attempted > 1:
                 log(ctx, f"Successfully connected to repo remote after {tries_attempted} tries", "warning")
 
+                if svn_info.get("errors"):
+                    svn_info.pop("errors")
+
             return True
 
         # If we've hit the max_retries limit, return here
         elif tries_attempted >= max_retries:
 
             log_failure_message = f"svn info failed to connect to repo remote, reached max retries {max_retries}"
-            set_job_result(ctx, "skipped", log_failure_message, False)
+            logging.set_job_result(ctx, "skipped", log_failure_message, False)
             log(ctx, f"{log_failure_message}", "error", {"svn_info": svn_info})
 
             return False
@@ -536,20 +556,20 @@ def _check_if_repo_exists_locally(ctx: Context, event: str = "") -> bool:
 
         if urls_match and has_commits:
 
-            set_job_result(ctx, "fetching", "valid repo found on disk, with matching URL, and some commits")
+            logging.set_job_result(ctx, "fetching", "valid repo found on disk, with matching URL, and some commits")
             return True
 
         else:
-            set_job_result(ctx, "creating", "valid repo not found on disk")
+            logging.set_job_result(ctx, "creating", "valid repo not found on disk")
 
     elif "end" in event:
 
         if urls_match and has_commits:
-            set_job_result(ctx, f"{job_result_action} succeeded", "valid repo found on disk after fetch, with matching URL, and some commits")
+            logging.set_job_result(ctx, f"{job_result_action} succeeded", "valid repo found on disk after fetch, with matching URL, and some commits")
             return True
 
         else:
-            set_job_result(ctx, f"{job_result_action} failed", "repo not valid after fetch", False)
+            logging.set_job_result(ctx, f"{job_result_action} failed", "repo not valid after fetch", False)
 
     else:
         if urls_match and has_commits:
@@ -767,11 +787,11 @@ def _check_if_repo_up_to_date(ctx: Context) -> bool:
         last_changed_rev            and
         git_latest_commit_rev_begin == last_changed_rev
     ):
-        set_job_result(ctx, "skipped", "repo up to date", True)
+        logging.set_job_result(ctx, "skipped", "repo up to date", True)
         return True
 
     else:
-        set_job_result(ctx, "fetching", "repo out of date")
+        logging.set_job_result(ctx, "fetching", "repo out of date")
         return False
 
 
@@ -1076,7 +1096,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
         success     = True
         log_level   = "info"
 
-    set_job_result(ctx, action, reason, success)
+    logging.set_job_result(ctx, action, reason, success)
     log(ctx, f"{reason}", log_level, structured_log_dict)
 
     return success
@@ -1131,7 +1151,7 @@ def _remove_non_errors_from_git_svn_fetch_output(ctx: Context, git_svn_fetch_out
 
     for ignore_line in ignore_lines:
 
-        compiled_regex              = re.compile(ignore_line)
+        compiled_regex              = re.compile(ignore_line, re.IGNORECASE)
         ignore_lines_compiled_regexes.append((ignore_line, compiled_regex))
 
     # Remove the ignored lines, and empty lines from the output list
@@ -1224,7 +1244,7 @@ def _find_errors_in_svn_output(ctx: Context, svn_output: list = []) -> list:
     for error_category, patterns in error_message_regex_patterns_dict.items():
         for pattern in patterns:
             regex_pattern = rf".*{pattern}.*"
-            compiled_regex = re.compile(regex_pattern)
+            compiled_regex = re.compile(regex_pattern, re.IGNORECASE)
             compiled_patterns.append((error_category, compiled_regex))
 
     # Single pass through output lines - O(lines x patterns)

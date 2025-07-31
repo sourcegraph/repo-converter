@@ -5,7 +5,7 @@
 # Import repo-converter modules
 from utils import cmd
 from utils.context import Context
-from utils.log import log
+from utils.logging import log
 
 # Import standard libraries
 import os
@@ -122,9 +122,9 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
 
             continue
 
-        except Exception as exception:
+        except Exception as e:
 
-            log(ctx, f"Exception while cleaning branches and tags: {exception}", "error")
+            log(ctx, f"Exception while cleaning branches and tags", "error", exception=e)
             continue
 
         # If the path is a local tag, then delete it

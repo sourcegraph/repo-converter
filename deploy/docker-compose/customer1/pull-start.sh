@@ -10,13 +10,50 @@
 
 ## Get script args
 
-# If an f is passed into the script args, then try to fix the ownership and permissions of files in the src-serve-git directory
-if [[ "$1" == *"f"* ]]
-then
-    fix_perms="true"
-else
-    fix_perms="false"
-fi
+# If an -f is passed into the script args, then try to fix the ownership and permissions of files in the src-serve-git directory
+fix_perms="false"
+
+# If a -dt or --docker-tag is passed in, then use it in the Docker Compose up command for the repo-converter
+# DOCKER_TAG="latest"
+DOCKER_TAG="stable"
+
+# Create the arg to allow disabling git reset and pull
+NO_GIT=""
+
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -f|--fix-perms)
+      fix_perms="true"
+      shift # past argument
+      ;;
+    -l|--latest)
+      DOCKER_TAG="latest"
+      shift # past argument
+      ;;
+    -s|--stable)
+      DOCKER_TAG="stable"
+      shift # past argument
+      ;;
+    -n|--no-git)
+      NO_GIT="true"
+      shift # past argument
+      ;;
+    -dt|--docker-tag)
+      DOCKER_TAG="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+  esac
+done
+
+set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
+
 
 ## Setup
 # Define file paths
@@ -111,16 +148,34 @@ fi
 log "On branch before git pull:"
 $git_branch_cmd
 
+## Formulate Git and Docker commands
+git_commands="\
+    $git_cmd reset --hard   &&\
+    $git_cmd pull --force   &&\
+"
+
+if [[ -n "$NO_GIT" ]]
+then
+    git_commands=""
+fi
+
+
+export DOCKER_TAG=$DOCKER_TAG
+docker_commands="\
+    $docker_cmd pull &&\
+    DOCKER_TAG=$DOCKER_TAG CURRENT_UID_GID=$CURRENT_UID_GID $docker_cmd up -d --remove-orphans
+"
+
+command="\
+    $git_commands       \
+    $docker_commands    \
+    "
+
+
 log "Docker compose file: $docker_compose_full_file_path"
 log "docker ps before:"
 $docker_cmd ps
 
-command="\
-    $git_cmd reset --hard                                                &&\
-    $git_cmd pull --force                                                &&\
-    $docker_cmd pull                                                     &&\
-    CURRENT_UID_GID=$CURRENT_UID_GID $docker_cmd up -d --remove-orphans    \
-    "
 
 log "Running command in a sub shell:"
 # awk command to print the command nicely with newlines

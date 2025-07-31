@@ -6,7 +6,8 @@
 
 # Import repo-converter modules
 from utils.context import Context
-from utils.log import log, set_job_result
+from utils.logging import log
+from utils import logging
 
 # Import Python standard modules
 from datetime import datetime
@@ -91,7 +92,7 @@ class ConcurrencyManager:
                 for active_job_trace, active_job_repo, active_job_timestamp in self.active_jobs[server_name]:
 
                     if active_job_repo == this_job_repo:
-                        set_job_result(ctx, "skipped", "Repo job already in progress", False)
+                        logging.set_job_result(ctx, "skipped", "Repo job already in progress", False)
                         log(ctx, f"Skipping; Repo job already in progress; started at: {active_job_timestamp}; trace: {active_job_trace}; running for: {int(time.time() - active_job_timestamp)} seconds", "info", log_job)
                         return False
 
@@ -293,12 +294,12 @@ class ConcurrencyManager:
                         status["active_jobs"][server_name] = status_active_jobs_list
 
                 except Exception as e:
-                    log(ctx, f"Error processing active jobs for {server_name}: {e}", "warning")
+                    log(ctx, f"Error processing active jobs for {server_name}", "warning", exception=e)
                 finally:
                     self.active_jobs_lock.release()
 
         except Exception as e:
-            log(ctx, f"Error in get_status() processing servers: {e}", "warning")
+            log(ctx, f"Error in get_status() processing servers", "warning", exception=e)
         finally:
             self.per_server_semaphores_lock.release()
 
@@ -339,7 +340,7 @@ class ConcurrencyManager:
                     status["queued_jobs"][server_name] = status_queued_jobs_list
 
         except Exception as e:
-            log(ctx, f"Error in get_status() processing queued jobs: {e}", "warning")
+            log(ctx, f"Error in get_status() processing queued jobs", "warning", exception=e)
         finally:
             self.queued_jobs_lock.release()
 
@@ -398,4 +399,4 @@ class ConcurrencyManager:
             # log(ctx, f"Released job slot", "debug", log_job)
 
         except ValueError as e:
-            log(ctx, f"Error releasing job slot: {e}", "error", log_job)
+            log(ctx, f"Error releasing job slot", "error", log_job, exception=e)
