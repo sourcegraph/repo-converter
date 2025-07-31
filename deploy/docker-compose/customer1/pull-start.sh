@@ -165,6 +165,8 @@ then
     git_commands=""
 fi
 
+
+export DOCKER_TAG=$DOCKER_TAG
 docker_commands="\
     $docker_cmd pull &&\
     DOCKER_TAG=$DOCKER_TAG CURRENT_UID_GID=$CURRENT_UID_GID $docker_cmd up -d --remove-orphans
