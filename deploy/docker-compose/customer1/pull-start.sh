@@ -148,12 +148,6 @@ fi
 log "On branch before git pull:"
 $git_branch_cmd
 
-log "Docker compose file: $docker_compose_full_file_path"
-log "docker ps before:"
-$docker_cmd ps
-
-
-
 ## Formulate Git and Docker commands
 git_commands="\
     $git_cmd reset --hard   &&\
@@ -176,6 +170,11 @@ command="\
     $git_commands       \
     $docker_commands    \
     "
+
+
+log "Docker compose file: $docker_compose_full_file_path"
+log "docker ps before:"
+$docker_cmd ps
 
 
 log "Running command in a sub shell:"
