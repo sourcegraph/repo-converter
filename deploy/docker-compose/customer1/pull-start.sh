@@ -15,7 +15,8 @@ fix_perms="false"
 
 # If a -dt or --docker-tag is passed in, then use it in the Docker Compose up command for the repo-converter
 # DOCKER_TAG="latest"
-DOCKER_TAG="stable"
+# DOCKER_TAG="stable"
+DOCKER_TAG="v0.5.2"
 
 # Create the arg to allow disabling git reset and pull
 NO_GIT=""

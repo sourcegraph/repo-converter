@@ -15,7 +15,7 @@ services:
 
   repo-converter:
     container_name: repo-converter
-    image: ghcr.io/sourcegraph/repo-converter:v0.5.1
+    image: ghcr.io/sourcegraph/repo-converter:v0.5.2
     # environment:
       # - REPO_CONVERTER_INTERVAL_SECONDS=60 # Default is 3600 seconds (1 hour)
       # - LOG_LEVEL=DEBUG # DEBUG INFO WARNING ERROR CRITICAL # Default is INFO
