@@ -24,7 +24,7 @@ import time
 import pysvn
 
 # dicts for:
-    # ctx, including job subdict, for both configs and logging
+    # ctx, including job dict for passing configs, and to show job configs in logs
     # commands, separate from ctx, as they do not need to be shared / logged
     # Pass information around in these dicts ^, not other return values / dicts / strings / etc.
 
@@ -40,7 +40,7 @@ import pysvn
 
 def convert(ctx: Context) -> None:
     """
-    Entrypoint / main logic / orchestration function
+    Entrypoint / main logic / orchestration function for SVN repo conversion jobs
     """
 
     # Extract repo conversion job config values from the repos list in ctx,
@@ -54,16 +54,12 @@ def convert(ctx: Context) -> None:
     if _check_if_conversion_is_already_running_in_another_process(ctx, commands):
         return
 
-    # Initialize the client for the pysvn module
-    # Currently only used in _test_connection_and_credentials
-    pysvn_client = _initialize_pysvn(ctx)
-
     # Test connection to the SVN server
     # Trust TLS cert if needed
     # Login if needed
     # Get svn info
-    ### EXTERNAL COMMAND: svn info ###
-    if not _test_connection_and_credentials(ctx, pysvn_client):
+    ### EXTERNAL COMMAND: svn info
+    if not _get_svn_info(ctx):
         return
 
     # Check if the local repo exists and is valid
@@ -83,18 +79,17 @@ def convert(ctx: Context) -> None:
     # Check if the local repo is already up to date
     if _check_if_repo_up_to_date(ctx):
 
-        # If the repo already exists, and is already up to date, then exit early
-        ### EXTERNAL COMMAND: svn log ###
-        _cleanup(ctx)
-        log(ctx, f"Skipping git svn fetch; repo up to date", "info")
+        # If the repo already exists, and is already up to date, then return early
+        git.garbage_collection(ctx)
+        git.cleanup_branches_and_tags(ctx)
+        log(ctx, "Repo already up to date, skipping fetch", "info")
         return
 
-    # Execute the fetch
-    ### EXTERNAL COMMAND: git svn fetch ###
-    _git_svn_fetch(ctx, commands)
+    else:
 
-    # Cleanup before exit
-    _cleanup(ctx)
+        # Execute the fetch
+        ### EXTERNAL COMMAND: git svn fetch
+        _git_svn_fetch(ctx, commands)
 
 
 def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
@@ -103,10 +98,10 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
     """
 
     # Get the repo key from the job context
-    repo_key = ctx.job.get("config",{}).get("repo_key")
+    repo_key = ctx.job.get("config", {}).get("repo_key")
 
     # Short name for repo config dict
-    repo_config = ctx.repos.get(repo_key)
+    repo_config = ctx.repos.get(repo_key, {})
 
     # Get config parameters read from repos-to-clone.yaml, and set defaults if they're not provided
     # TODO: Move this to a centralized config spec file, including setting defaults
@@ -126,12 +121,11 @@ def _extract_repo_config_and_set_default_values(ctx: Context) -> None:
         "max_retries"               : repo_config.get("max_retries",                3   ),
         "authors_file_path"         : repo_config.get("authors_file_path",          None),
         "authors_prog_path"         : repo_config.get("authors_prog_path",          None),
-        "disable_tls_verification"  : repo_config.get("disable_tls_verification",   False),
+        "disable_tls_verification"  : repo_config.get("disable_tls_verification",   None),
         "git_ignore_file_path"      : repo_config.get("git_ignore_file_path",       None),
 
         # Git destination config
         "local_repo_path"           : repo_config.get("local_repo_path",            None),
-        "bare_clone"                : repo_config.get("bare_clone",                 True),
         "git_default_branch"        : repo_config.get("git_default_branch",         "trunk"),
     }
 
@@ -219,22 +213,19 @@ def _build_cli_commands(ctx: Context) -> dict:
     }
 
 
-def _check_if_conversion_is_already_running_in_another_process(
-        ctx: Context,
-        commands: dict
-    ) -> bool:
+def _check_if_conversion_is_already_running_in_another_process(ctx: Context, commands: dict) -> bool:
     """
     Check if any repo conversion-related processes are currently running in the container
 
     Return True if yes, to avoid multiple concurrent conversion jobs on the same repo
 
     TODO: This function may no longer be needed due to the new semaphore handling,
-    or this logic could be vastly simplified (ex. _test_connection_and_credentials),
+    or this logic could be vastly simplified (ex. _get_svn_info),
     and moved to the acquire_job_slot function, as it may be applicable to other repo types
     """
 
     # Get config values
-    job_config      = ctx.job.get("config",{})
+    job_config      = ctx.job.get("config", {})
     local_repo_path = job_config.get("local_repo_path")
     max_retries     = job_config.get("max_retries")
     repo_key        = job_config.get("repo_key")
@@ -379,10 +370,7 @@ def _initialize_pysvn(ctx: Context) -> pysvn.Client:
     return pysvn_client
 
 
-def _test_connection_and_credentials(
-        ctx: Context,
-        pysvn_client: pysvn.Client
-    ) -> bool:
+def _get_svn_info(ctx: Context) -> bool:
     """
     Run the svn info command to test:
     - Network connectivity to the SVN server
@@ -404,6 +392,9 @@ def _test_connection_and_credentials(
     svn_info            = {}
     svn_info_success    = False
     tries_attempted     = 1
+
+    # Initialize the client for the pysvn module
+    pysvn_client = _initialize_pysvn(ctx)
 
     while True:
 
@@ -526,7 +517,6 @@ def _check_if_repo_exists_locally(ctx: Context, event: str = "") -> bool:
     job_config          = ctx.job.get("config",{})
     job_result_action   = ctx.job.get("result",{}).get("action",{})
     remote_url          = job_config.get("repo_url")
-    repo_key            = job_config.get("repo_key")
 
     # Check if the svn-remote.svn.url matches the expected SVN remote repo code root URL
     local_config_url    = git.get_config(ctx, "svn-remote.svn.url", quiet=True)
@@ -585,7 +575,6 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
 
     # Get config values
     job_config          = ctx.job.get("config",{})
-    bare_clone          = job_config.get("bare_clone")
     local_repo_path     = job_config.get("local_repo_path")
     password            = job_config.get("password")
     cmd_git_svn_init    = commands["cmd_git_svn_init"]
@@ -594,7 +583,8 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
     if os.path.exists(local_repo_path):
         log(ctx, f"Repo path {local_repo_path} exists on disk, but is not a valid repo; deleting", "warning")
 
-        # OSError: [Errno 23] Too many open files in system: '079426a942f0583e6906f1f2fd31e703ce366d'
+        # Podman VM issue
+        # OSError: [Errno 23] Too many open files in system
         # shutil.rmtree(local_repo_path)
 
         cmd_rm_rf = ["rm", "-rf", local_repo_path]
@@ -610,8 +600,7 @@ def _initialize_git_repo(ctx: Context, commands: dict) -> None:
     cmd.run_subprocess(ctx, cmd_git_svn_init, password, quiet=True, name="cmd_git_svn_init")
 
     # Configure the bare clone
-    if bare_clone:
-        git.set_config(ctx, "core.bare", "true")
+    git.set_config(ctx, "core.bare", "true")
 
 
 def _configure_git_repo(ctx: Context, commands: dict) -> None:
@@ -795,26 +784,10 @@ def _check_if_repo_up_to_date(ctx: Context) -> bool:
         return False
 
 
-def _cleanup(ctx: Context) -> None:
-    """
-    Groups up any other functions needed to clean up before exit
-    """
-
-    # Get dir size of converted git repo
-    _get_local_git_repo_stats(ctx, "end")
-
-    # Run git garbage collection and cleanup branches, even if repo is already up to date
-    # Order is important, garbage_collection must run before cleanup_branches_and_tags
-    git.garbage_collection(ctx)
-    git.cleanup_branches_and_tags(ctx)
-
-
 def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
     """
     Execute the git svn fetch operation
     """
-
-    log(ctx, f"Repo out of date, fetching", "info")
 
     # Do while loop for retries
     tries_attempted = 1
@@ -853,9 +826,12 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
 
         # Try setting the log window size to see if it helps with network timeout stability
         cmd_git_svn_fetch += ["--log-window-size", str(log_window_size)]
+        ctx.job["config"].update({"cmd_git_svn_fetch": cmd_git_svn_fetch})
 
-        # Start the fetch
-        log(ctx, f"Fetching with {' '.join(cmd_git_svn_fetch)}", "debug")
+        # Log the repo out of date message, with the command in the job config
+        # Only executing this once to reduce noise on retries, but executing it inside the loop to get the --log-window-size arg
+        if tries_attempted == 1:
+            log(ctx, f"Repo out of date, fetching", "info")
 
         # Run the fetch command, capture the output
         git_svn_fetch_result = cmd.run_subprocess(ctx, cmd_git_svn_fetch, password, name=f"cmd_git_svn_fetch_{tries_attempted}")
@@ -864,17 +840,21 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
         # Run gc + fix branches, after each try, to:
         # Make branches visible
         # Update the HEAD ref to the latest commit on the default branch
-        # It's a little duplicative with _cleanup(), but that's okay
         git.garbage_collection(ctx)
         git.cleanup_branches_and_tags(ctx)
 
         # If successful, break the while true loop here
         if _check_git_svn_fetch_success(ctx, git_svn_fetch_result):
-            return True
+
+            _get_local_git_repo_stats(ctx, "end")
+            log(ctx, "Repo fetch succeeded", "info")
+            return
 
         # If we've hit the max_retries limit, break the while true loop with an error here
         elif tries_attempted >= max_retries:
-            return False
+            _get_local_git_repo_stats(ctx, "end")
+            log(ctx, f"Repo fetch failed, and hit max retries limit of {max_retries}", "error")
+            return
 
         # Otherwise, prepare for retry
         else:
@@ -895,7 +875,7 @@ def _git_svn_fetch(ctx: Context, commands: dict) -> bool:
             retry_delay_seconds = (random.randrange(1, 5) * tries_attempted)
 
             # Log the failure
-            log(ctx, f"retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "debug")
+            log(ctx, f"Repo fetch failed, retrying {tries_attempted} of max {max_retries} times, with a semi-random delay of {retry_delay_seconds} seconds", "warning")
 
             # Sleep the delay
             time.sleep(retry_delay_seconds)
@@ -923,7 +903,7 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
             - rev_batch_end is included in a git commit body
 
         Partial success:
-            - Does git svn fetch commit converted commits to the local repo in a partial success state?
+            - Does git svn fetch commit any converted commits to the local repo in a partial success state? Yes, it does.
             - Some commits were synced
             - Some errors were present
 
@@ -975,7 +955,6 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
     current_git_commit_count                = current_job_stats_local_git_repo_stats.get("git_commit_count", 0)
     if not current_git_commit_count:
         current_git_commit_count = 0
-
 
 
     ## This try commit counts

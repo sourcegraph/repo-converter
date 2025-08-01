@@ -103,7 +103,6 @@ def check_types_recursive(ctx: Context, input_value, input_key="", recursed=Fals
     repos_to_convert_fields[ "authors_prog_path"            ] = (str,           )
     repos_to_convert_fields[ "disable_tls_verification"     ] = (bool, str      )
     repos_to_convert_fields[ "git_ignore_file_path"         ] = (str,           )
-    repos_to_convert_fields[ "bare_clone"                   ] = (bool,          )
     repos_to_convert_fields[ "git_default_branch"           ] = (str,           )
 
 

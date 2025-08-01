@@ -19,10 +19,6 @@ def clear_lock_files(ctx: Context) -> bool:
 
     # Get the local repo path
     local_repo_path = ctx.job.get("config", {}).get("local_repo_path","")
-    repo_key        = ctx.job.get("config", {}).get("repo_key","")
-
-    if not local_repo_path:
-        log(ctx, f"No local_repo_path", "error")
 
     # Use a set for found_lock_files, for deduplication in case the find command finds an existing lock file
     found_lock_files    = set()

@@ -10,16 +10,14 @@ from utils.logging import log
 # Import standard libraries
 import os
 
-def _get_and_validate_local_repo_path(
-        ctx: Context,
-        sub_dir: str = "",
-        quiet: bool = False
-    ) -> str:
+def _get_and_validate_local_repo_path(ctx: Context, sub_dir: str = "", quiet: bool = False) -> str:
+    """
+    Extract repo path from job, and verify if it exists on disk
+    """
 
     # Get the local repo path
     job_config      = ctx.job.get("config",{})
     local_repo_path = job_config.get("local_repo_path")
-    repo_key        = job_config.get("repo_key")
 
     if not local_repo_path:
         if not quiet:
@@ -39,7 +37,6 @@ def _get_and_validate_local_repo_path(
         local_repo_path,
         "rev-parse",
         "--is-inside-work-tree",
-        # "--is-inside-git-dir",
     ]
 
     valid_repo_path = cmd.run_subprocess(ctx, cmd_git_validate_repo_path, quiet=True, name="cmd_git_validate_repo_path").get("output")
@@ -75,7 +72,6 @@ def cleanup_branches_and_tags(ctx: Context) -> None:
     """
 
     job_config  = ctx.job.get("config",{})
-    repo_key    = job_config.get("repo_key")
 
     local_repo_path = _get_and_validate_local_repo_path(ctx)
     if not local_repo_path:

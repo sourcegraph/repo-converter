@@ -52,15 +52,6 @@ class ConcurrencyManager:
         self.queued_jobs = self.manager.dict()  # server_name -> list of (queued_job_trace, queued_job_repo, queued_job_timestamp)
         self.queued_jobs_lock = multiprocessing.Lock()
 
-        # Log this, without log_concurrency_status=True, as that creates a race condition
-        # structured_data_to_log = {
-        #     "concurrency": {
-        #         "MAX_CONCURRENT_CONVERSIONS_GLOBAL": self.global_limit,
-        #         "MAX_CONCURRENT_CONVERSIONS_PER_SERVER": self.per_server_limit
-        #     }
-        # }
-        # log(ctx, f"Initialized concurrency manager", "debug", structured_data_to_log)
-
 
     def acquire_job_slot(self, ctx: Context, job: dict) -> bool:
         """
@@ -93,7 +84,7 @@ class ConcurrencyManager:
 
                     if active_job_repo == this_job_repo:
                         logging.set_job_result(ctx, "skipped", "Repo job already in progress", False)
-                        log(ctx, f"Skipping; Repo job already in progress; started at: {active_job_timestamp}; trace: {active_job_trace}; running for: {int(time.time() - active_job_timestamp)} seconds", "info", log_job)
+                        log(ctx, f"Repo job already in progress, skipping; job {active_job_trace} started at {active_job_timestamp}, has been running for {int(time.time() - active_job_timestamp)} seconds", "info", log_job)
                         return False
 
         ## Add this job to the dict of waiting jobs, just in case the blocking semaphore acquire takes a while
@@ -187,7 +178,6 @@ class ConcurrencyManager:
         # Get job information from context
         log_job             = {"job": job}
         this_job_config     = job.get("config",{})
-        this_job_repo       = this_job_config.get("repo_key","")
         server_name         = this_job_config.get("server_name","")
 
         # Wait for the lock to be free
@@ -351,13 +341,9 @@ class ConcurrencyManager:
 
 
     def release_job_slot(self, ctx: Context, job: dict) -> None:
-        """Release both global and server-specific semaphores."""
-
-        # # Get job information from context
-        # this_job_trace  = ctx.job.get("trace","")
-        # this_job_config = ctx.job.get("config",{})
-        # this_job_repo   = this_job_config.get("repo_key","")
-        # server_name     = this_job_config.get("server_name","")
+        """
+        Release both global and server-specific semaphores.
+        """
 
         # Get job information from context
         log_job             = {"job": job}

@@ -2,16 +2,20 @@
 # Utility functions to handle signals
 
 # Import repo-converter modules
-from utils.logging import log
-from utils.context import Context
 from utils import cmd
+from utils.context import Context
+from utils.logging import log
 
 # Import Python standard modules
 import os
 import signal
+import sys
 
 
 def register_signal_handler(ctx: Context):
+    """
+    Registration of signal handlers
+    """
 
     try:
 
@@ -19,49 +23,56 @@ def register_signal_handler(ctx: Context):
         signal.signal(signal.SIGTERM, lambda sig, frame: signal_handler(ctx, sig, frame))
         signal.signal(signal.SIGCHLD, lambda sig, frame: sigchld_handler(ctx, sig, frame))
 
-        # log(ctx, f"Registered signal handlers","debug")
-
     except Exception as e:
 
         log(ctx, f"Registering signal handlers failed with exception","critical", exception=e)
 
 
 def signal_handler(ctx: Context, incoming_signal, frame) -> None:
+    """
+    Handle SIGINT and SIGTERM for the current process
+
+    Logging may create exceptions if trying to log an event after stopping the Python interpreter for this process
+    """
 
     signal_name = signal.Signals(incoming_signal).name
+    pgrp        = os.getpgrp()
 
-    log(ctx, f"Received signal {signal_name} ({incoming_signal}), initiating graceful shutdown", "info")
+    log(ctx, f"Received signal {signal_name} ({incoming_signal}), initiating graceful shutdown, sending SIGTERM to process group {pgrp}", "warning")
 
-    # Kill all child processes in our process group
-    try:
 
-        # Send SIGTERM to all processes in our group
-        os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
-        log(ctx, "Sent SIGTERM to process group", "info")
+    # Clean up any remaining zombie processes
+    cmd.status_update_and_cleanup_zombie_processes(ctx)
 
-    except ProcessLookupError:
-        log(ctx, "No process group to terminate", "debug")
-
-    except OSError as e:
-        log(ctx, f"Exception terminating process group", "error", exception=e)
 
     # Terminate any active multiprocessing jobs
     try:
         terminate_multiprocessing_jobs_on_shutdown(ctx, timeout=15)  # Shorter timeout during shutdown
 
     except Exception as e:
-        log(ctx, f"Exception during multiprocessing job termination", "error", exception=e)
+        log(ctx, "Exception during multiprocessing job termination", "error", exception=e)
 
-    # Clean up any remaining zombie processes
-    cmd.status_update_and_cleanup_zombie_processes(ctx)
+
+    # Kill all child processes in our process group
+    try:
+
+        # Send SIGTERM to all processes in our group
+        os.killpg(pgrp, signal.SIGTERM)
+
+    except ProcessLookupError:
+        log(ctx, "No process group to terminate", "debug")
+
+    except OSError as e:
+        log(ctx, "Exception terminating process group", "error", exception=e)
 
     # Exit gracefully
-    log(ctx, f"Graceful shutdown complete for signal {signal_name}", "info")
-    exit(0)
+    sys.exit(0)
 
 
 def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
-    """Handle SIGCHLD to immediately reap zombie children"""
+    """
+    Handle SIGCHLD to immediately reap zombie children
+    """
 
     # Reap all available zombie children without blocking
     while True:
@@ -81,6 +92,7 @@ def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
             # Only log if child exited with non-zero status or was killed by signal
             if os.WIFEXITED(status) and os.WEXITSTATUS(status) != 0:
                 log(ctx, f"SIGCHLD handler reaped child PID {pid} with exit code {os.WEXITSTATUS(status)}", "debug")
+
             elif os.WIFSIGNALED(status):
                 log(ctx, f"SIGCHLD handler reaped child PID {pid} killed by signal {os.WTERMSIG(status)}", "debug")
 
@@ -94,7 +106,9 @@ def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
 
 
 def terminate_multiprocessing_jobs_on_shutdown(ctx: Context, timeout: int = 30) -> None:
-    """Terminate all active multiprocessing jobs gracefully."""
+    """
+    Terminate all active multiprocessing jobs gracefully.
+    """
 
     if not hasattr(ctx, 'active_repo_conversion_processes'):
         return

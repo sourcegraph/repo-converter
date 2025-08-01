@@ -23,7 +23,7 @@ def load_env_vars() -> dict:
     dotenv_path="/sg/repo-converter/build/.env"
     load_dotenv(dotenv_path=dotenv_path, override=False)
 
-    # Create empty env_vars dict to return at function exit
+    # Create empty env_vars dict to return
     env_vars = {}
 
     # Try to read the variables from the container's environment

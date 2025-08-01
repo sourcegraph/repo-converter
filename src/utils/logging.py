@@ -7,9 +7,9 @@ from utils.context import Context
 
 # Import Python standard modules
 from datetime import datetime
-from sys import exit
 import inspect
 import os
+import sys
 import time
 import traceback
 
@@ -65,7 +65,7 @@ def log(
 
     # Exit the container for critical log events
     if "CRITICAL" in event_log_level_name:
-        exit(1)
+        sys.exit(1)
 
 
 def _build_structured_payload(
@@ -90,7 +90,6 @@ def _build_structured_payload(
         "cycle": ctx.cycle,
         "date": now.date().isoformat(),
         "time": now.time().isoformat(),
-        "timestamp": "%.4f" % current_timestamp, # Round to 4 digits, keeping trailing 0s, if any
 
     }
 
@@ -168,6 +167,7 @@ def _build_structured_payload(
 
         # If job data was passed in via structured_data, then use it
         # Note: this could get confusing if overlapping
+        # TODO: Is this still used?
         structured_data_job = structured_data.get("job",{})
         if structured_data_job:
             payload.update({"job": dict(structured_data_job)})
@@ -338,10 +338,19 @@ def set_job_result(ctx: Context, action: str = "", reason: str = "", success: bo
     Set the result subdict for job logs
     """
 
-    ctx.job["result"].update(
-        {
-            "action": action,
-            "reason": reason,
-            "success": success
-        }
-    )
+    # Loop through the list of function args
+    variables_and_values = [
+        ("action", action),
+        ("reason", reason),
+        ("success", success),
+    ]
+
+    # Pop them out of the result dict
+    for variable, value in variables_and_values:
+
+        if ctx.job["result"].get(variable):
+            ctx.job["result"].pop(variable)
+
+        # If a value was passed in, then set it
+        if value:
+            ctx.job["result"].update({variable: value})
