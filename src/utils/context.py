@@ -31,11 +31,13 @@ class Context:
 
     ## Static / empty
 
+
+    # TODO: Implement child process tracking?
     # Child process tracking for convert_repos.py module's function calls
-    active_repo_conversion_processes = []
+    # active_repo_conversion_processes = []
 
     # Child process tracking for cmd.py module's external commands
-    child_procs = {}
+    # child_procs = {}
 
     # Run count
     cycle = 0
@@ -85,10 +87,10 @@ class Context:
     ## Set on container startup
 
     # Container metadata (set per-instance in __init__)
-    container_id = None
-    env_vars = None
-    resuid = None
-    start_datetime = None
+    container_id    = None
+    env_vars        = None
+    resuid          = None
+    start_datetime  = None
     start_timestamp = None
 
     # Track concurrency state in the context object

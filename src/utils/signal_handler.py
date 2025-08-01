@@ -35,9 +35,22 @@ def signal_handler(ctx: Context, incoming_signal, frame) -> None:
     Logging may create exceptions if trying to log an event after stopping the Python interpreter for this process
     """
 
-    signal_name = signal.Signals(incoming_signal).name
+    pid         = os.getpid()
     pgrp        = os.getpgrp()
 
+    # If this process is not the process group leader,
+    # then do not handle these signals,
+    # to avoid multiple processes in the same pgrp sending duplicate signals to the group
+    if pid != pgrp:
+        return
+
+    # Ignore subsequent signals to prevent recursive signal handling,
+    # as sending os.killpg would otherwise send the same signal back to this process again
+    signal.signal(signal.SIGINT,  signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+    # Log shut down event
+    signal_name = signal.Signals(incoming_signal).name
     log(ctx, f"Received signal {signal_name} ({incoming_signal}), initiating graceful shutdown, sending SIGTERM to process group {pgrp}", "warning")
 
 
@@ -47,17 +60,22 @@ def signal_handler(ctx: Context, incoming_signal, frame) -> None:
 
     # Terminate any active multiprocessing jobs
     try:
-        terminate_multiprocessing_jobs_on_shutdown(ctx, timeout=15)  # Shorter timeout during shutdown
+        terminate_multiprocessing_jobs_on_shutdown(ctx, timeout=30)
 
     except Exception as e:
         log(ctx, "Exception during multiprocessing job termination", "error", exception=e)
 
 
-    # Kill all child processes in our process group
+    # Kill all child processes in our own process group
     try:
 
         # Send SIGTERM to all processes in our group
         os.killpg(pgrp, signal.SIGTERM)
+
+        # Wait on all children of this process to exit
+        sigchld_handler(ctx, pid=0)
+
+        # TODO: If PID == 1, then wait for all other processes to finish, then exit
 
     except ProcessLookupError:
         log(ctx, "No process group to terminate", "debug")
@@ -69,19 +87,21 @@ def signal_handler(ctx: Context, incoming_signal, frame) -> None:
     sys.exit(0)
 
 
-def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
+def sigchld_handler(ctx: Context, incoming_signal = None, frame = None, pid: int = -1) -> None:
     """
-    Handle SIGCHLD to immediately reap zombie children
+    Handle SIGCHLD to clean up completed child processes
+
+    Prevents zombie processes by cleaning up completed child processes immediately
     """
 
-    # Reap all available zombie children without blocking
+    # Wait on all child pids, without blocking
     while True:
 
         try:
 
             # WNOHANG means don't block if no children are ready
             # -1 means wait for any child process
-            pid, status = os.waitpid(-1, os.WNOHANG)
+            pid, status = os.waitpid(pid, os.WNOHANG)
 
             # If pid is 0, no more children are ready
             if pid == 0:
@@ -107,7 +127,9 @@ def sigchld_handler(ctx: Context, incoming_signal, frame) -> None:
 
 def terminate_multiprocessing_jobs_on_shutdown(ctx: Context, timeout: int = 30) -> None:
     """
-    Terminate all active multiprocessing jobs gracefully.
+    Terminate all active multiprocessing jobs gracefully
+
+    TODO: Implement process tracking in ctx.active_repo_conversion_processes
     """
 
     if not hasattr(ctx, 'active_repo_conversion_processes'):

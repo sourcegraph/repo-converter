@@ -1054,29 +1054,29 @@ def _check_git_svn_fetch_success(ctx: Context, git_svn_fetch_result: dict) -> bo
         ctx.job["result"]["warnings"]   = warnings
     action                              = "git svn fetch"
     reason                              = ""
-    structured_log_dict                 = {"process": git_svn_fetch_result}
 
     ## Make final success / fail call
     if len(errors) > 0:
 
         reason      += "git svn fetch failed with errors"
         success     = False
-        log_level   = "error"
+        # log_level   = "error"
 
     elif len(warnings) > 0:
 
         reason      += "git svn fetch passed with warnings"
         success     = True
-        log_level   = "warning"
+        # log_level   = "warning"
 
     else:
 
         reason      += "git svn fetch completed successfully"
         success     = True
-        log_level   = "info"
+        # log_level   = "info"
 
     logging.set_job_result(ctx, action, reason, success)
-    log(ctx, f"{reason}", log_level, structured_log_dict)
+    # structured_log_dict                 = {"process": git_svn_fetch_result}
+    # log(ctx, f"{reason}", log_level, structured_log_dict)
 
     return success
 

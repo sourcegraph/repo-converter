@@ -386,3 +386,8 @@ class ConcurrencyManager:
 
         except ValueError as e:
             log(ctx, f"Error releasing job slot", "error", log_job, exception=e)
+
+        except FileNotFoundError as e:
+            # This exception usually happens on container shut down
+            # log(ctx, f"Error releasing job slot, PID 1 is likely stopped", "error", log_job, exception=e)
+            pass
