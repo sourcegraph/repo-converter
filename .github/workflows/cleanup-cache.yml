@@ -33,7 +33,7 @@ jobs:
     steps:
 
       - name: Cleanup package versions
-        uses: actions/delete-package-versions@v5
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
         with:
           # Setting defaults for the scheduled runs
           # https://stackoverflow.com/a/73495922
